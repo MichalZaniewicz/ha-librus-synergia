@@ -1,0 +1,33 @@
+blueprint:
+  name: "Librus: New Grade Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - with a
+    one-line summary whenever a new grade appears via the
+    `librus_synergia_new_grade` event.
+
+
+    Inside your chosen action, use `{{ grade_summary }}` for the ready-made
+    summary, or reference the individual fields directly, e.g.
+    `{{ trigger.event.data.subject }}` or `{{ trigger.event.data.value }}`.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_grade_notification.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: The action to run for each new grade.
+      selector:
+        action: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_grade
+
+actions:
+  - variables:
+      grade_summary: >-
+        Nowa ocena: {{ trigger.event.data.value }}
+        {{ '(' + trigger.event.data.subject + ')' if trigger.event.data.subject else '' }}
+  - !input notify_action
+
+mode: queued
+max: 10

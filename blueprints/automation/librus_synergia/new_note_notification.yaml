@@ -1,0 +1,37 @@
+blueprint:
+  name: "Librus: New Behaviour Notice Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - with a
+    one-line summary whenever a new behaviour notice ("uwaga") appears via
+    the `librus_synergia_new_note` event.
+
+
+    Inside your chosen action, use `{{ note_summary }}` for the ready-made
+    summary, or reference the individual fields directly, e.g.
+    `{{ trigger.event.data.teacher }}` or `{{ trigger.event.data.text }}`.
+    `{{ trigger.event.data.positive }}` is the raw 0/1/2 marker Librus uses
+    for positive/neutral/negative - unconfirmed which is which until a real
+    notice of each kind has been seen, so it's passed through as-is rather
+    than translated here.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_note_notification.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: The action to run for each new behaviour notice.
+      selector:
+        action: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_note
+
+actions:
+  - variables:
+      note_summary: >-
+        Nowa uwaga{{ ' od ' + trigger.event.data.teacher if trigger.event.data.teacher else '' }}:
+        {{ trigger.event.data.text }}
+  - !input notify_action
+
+mode: queued
+max: 10

@@ -269,11 +269,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         messages: list[MessageData],
     ) -> None:
         entry_id = self.config_entry.entry_id if self.config_entry else None
+        # Resolved names are included alongside the raw ids so an automation
+        # (e.g. a notification blueprint) can use {{ trigger.event.data.
+        # subject }} directly, without its own lookup against the sensor
+        # attributes just to say which subject/teacher a grade or note was
+        # about.
         self._known_grade_ids = self._fire_for_new_ids(
             EVENT_NEW_GRADE,
             entry_id,
             self._known_grade_ids,
-            {g.id: {"subject_id": g.subject_id, "value": g.value} for g in grades},
+            {
+                g.id: {
+                    "subject_id": g.subject_id,
+                    "subject": self._cached_subjects.get(g.subject_id, str(g.subject_id))
+                    if g.subject_id is not None
+                    else None,
+                    "value": g.value,
+                }
+                for g in grades
+            },
         )
         self._known_notice_ids = self._fire_for_new_ids(
             EVENT_NEW_ANNOUNCEMENT,
@@ -285,7 +299,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             EVENT_NEW_NOTE,
             entry_id,
             self._known_note_ids,
-            {n.id: {"positive": n.positive} for n in notes},
+            {
+                n.id: {
+                    "positive": n.positive,
+                    "teacher": self._cached_teachers.get(n.teacher_id, str(n.teacher_id))
+                    if n.teacher_id is not None
+                    else None,
+                    "text": n.text,
+                }
+                for n in notes
+            },
         )
         self._known_message_ids = self._fire_for_new_ids(
             EVENT_NEW_MESSAGE,

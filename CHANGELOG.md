@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- **New:** an original inline brand icon (a generic notebook design, not
+  Librus's own logo) - the integration page no longer shows HA's generic
+  fallback placeholder.
+- **New:** four ready-to-import automation blueprints (new grade, new
+  behaviour notice, new announcement, new message notifications) under
+  `blueprints/automation/librus_synergia/`.
+- `librus_synergia_new_grade` and `librus_synergia_new_note` events now
+  include the resolved subject/teacher name alongside the raw id, so an
+  automation doesn't need its own lookup.
+
 ## 0.2.0
 
 - **New:** Wiadomości (private messages) support - an unread-inbox-count

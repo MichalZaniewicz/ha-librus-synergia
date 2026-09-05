@@ -50,9 +50,31 @@ Each child/student is a separate login and a separate integration entry.
 | `calendar` Timetable | Lesson plan, including known cancellations/substitutions |
 | `calendar` Agenda | Tests, trips, parent meetings and other school events |
 
-New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline).
+New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Four ready-made [blueprints](#automation-blueprints) wrap these for you.
 
 The poll interval (default 20 minutes) is configurable via the integration's **Configure** option.
+
+### Automation blueprints
+
+Four ready-to-import blueprints under
+[`blueprints/automation/librus_synergia/`](blueprints/automation/librus_synergia/) wrap
+the events above so you don't have to write the YAML yourself - each just asks for an
+*action* (e.g. "Send a notification"):
+
+| Blueprint | What it does |
+| --- | --- |
+| [New Grade Notification](blueprints/automation/librus_synergia/new_grade_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_grade` fires. |
+| [New Behaviour Notice Notification](blueprints/automation/librus_synergia/new_note_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_note` fires. |
+| [New Announcement Notification](blueprints/automation/librus_synergia/new_announcement_notification.yaml) | Runs your action with the title whenever `librus_synergia_new_announcement` fires. |
+| [New Message Notification](blueprints/automation/librus_synergia/new_message_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_message` fires. |
+
+[![Open your Home Assistant instance and show the blueprint import dialog with the new-grade-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_grade_notification.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with the new-note-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_note_notification.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with the new-announcement-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_announcement_notification.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with the new-message-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_message_notification.yaml)
+
+Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
+Blueprint, and paste a blueprint's GitHub URL.
 
 ## Known limitations / unverified details
 
