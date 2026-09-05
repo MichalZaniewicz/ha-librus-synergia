@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
 from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
-from .librus_api.models import HomeworkEventData, LessonData, LibrusData
+from .librus_api.models import FreeDayData, HomeworkEventData, LessonData, LibrusData
 
 
 async def async_setup_entry(
@@ -26,6 +26,7 @@ async def async_setup_entry(
         [
             LibrusTimetableCalendar(coordinator, entry),
             LibrusAgendaCalendar(coordinator, entry),
+            LibrusFreeDaysCalendar(coordinator, entry),
         ]
     )
 
@@ -83,11 +84,36 @@ def _homework_to_event(item: HomeworkEventData, data: LibrusData) -> CalendarEve
     else:
         summary = content[:80] or subject_name or "Wydarzenie"
 
+    # HomeWorks/Categories confirmed live (e.g. "Sprawdzian", "Wycieczka",
+    # "Konkurs") - prefix it when known, since it's the single most useful
+    # bit of context for scanning a list of agenda events at a glance.
+    category_name = (
+        data.homework_categories.get(item.category_id) if item.category_id is not None else None
+    )
+    if category_name:
+        summary = f"[{category_name}] {summary}"
+
     return CalendarEvent(
         start=day,
         end=day + timedelta(days=1),
         summary=summary,
         description=content or None,
+    )
+
+
+def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
+    try:
+        start = date.fromisoformat(item.date_from[:10])
+        end = date.fromisoformat(item.date_to[:10])
+    except ValueError:
+        return None
+    return CalendarEvent(
+        start=start,
+        # CalendarEvent's `end` for an all-day event is EXCLUSIVE (the day
+        # after the last free day), matching _homework_to_event's
+        # single-day convention above.
+        end=end + timedelta(days=1),
+        summary=item.name or "Dzień wolny",
     )
 
 
@@ -192,5 +218,50 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         for item in self.coordinator.data.homeworks:
             event = _homework_to_event(item, self.coordinator.data)
             if event is not None and start <= event.start <= end:
+                events.append(event)
+        return events
+
+
+class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
+    """School holidays/breaks for the whole year, from `SchoolFreeDays` +
+    `ClassFreeDays` (confirmed live - both real endpoints, same shape).
+
+    Small, whole-year dataset refreshed on the coordinator's normal 24h
+    reference-data cadence - no per-range on-demand fetching needed, unlike
+    the timetable calendar.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "free_days"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_free_days"
+        self._attr_device_info = librus_device_info(entry)
+
+    @property
+    def event(self) -> CalendarEvent | None:
+        if self.coordinator.data is None:
+            return None
+        today = dt_util.now().date()
+        upcoming = [
+            event
+            for item in self.coordinator.data.free_days
+            if (event := _free_day_to_event(item)) is not None and event.end > today
+        ]
+        return min(upcoming, key=lambda event: event.start) if upcoming else None
+
+    async def async_get_events(
+        self, hass: HomeAssistant, start_date: datetime, end_date: datetime
+    ) -> list[CalendarEvent]:
+        if self.coordinator.data is None:
+            return []
+        start, end = start_date.date(), end_date.date()
+        events: list[CalendarEvent] = []
+        for item in self.coordinator.data.free_days:
+            event = _free_day_to_event(item)
+            # Overlap check, not containment - a multi-day break can start
+            # before the requested window and/or end after it.
+            if event is not None and event.start <= end and event.end > start:
                 events.append(event)
         return events

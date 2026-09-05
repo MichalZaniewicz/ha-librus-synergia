@@ -19,10 +19,14 @@ def _parse_grade_value(value: str) -> float | None:
     """Convert a Librus grade string ("5+", "4-", "3", "bz"...) to a number.
 
     The "+"/"-" modifiers (+0.5 / -0.25) follow the convention used by most
-    third-party Polish gradebook average calculators; non-numeric marks
-    (unprepared, absent, etc.) return None and are excluded from any
-    average. UNVERIFIED against a real account's actual grade strings - see
-    scripts/manual_smoke_test.py.
+    third-party Polish gradebook average calculators. CONFIRMED live
+    (2026-09-05) via the `Grades/Types` reference endpoint that every
+    non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
+    `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
+    returning None here and is excluded from the average - the numeric
+    +/- MODIFIER convention itself is still a third-party inference, not
+    something Librus documents, since no real numeric grade has been
+    issued on the test account yet to check the exact value it produces.
     """
     value = value.strip()
     if not value:
@@ -98,6 +102,8 @@ async def async_setup_entry(
             LibrusUnreadAnnouncementsSensor(coordinator, entry),
             LibrusBehaviourNoticesSensor(coordinator, entry),
             LibrusUnreadMessagesSensor(coordinator, entry),
+            LibrusSchoolSensor(coordinator, entry),
+            LibrusClassSensor(coordinator, entry),
         ]
     )
 
@@ -386,4 +392,68 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
                 }
                 for m in self.coordinator.data.messages[:10]
             ]
+        }
+
+
+class LibrusSchoolSensor(LibrusSensorBase):
+    """The student's school - state is the school name, attributes carry
+    address/contact/head-teacher/bell-schedule details. Near-static
+    (refreshed on the same 24h cadence as subjects/teachers/classrooms)."""
+
+    _attr_translation_key = "school"
+    _attr_icon = "mdi:school"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school")
+
+    @property
+    def native_value(self) -> str | None:
+        if self.coordinator.data is None or self.coordinator.data.school is None:
+            return None
+        return self.coordinator.data.school.name or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None or self.coordinator.data.school is None:
+            return None
+        school = self.coordinator.data.school
+        return {
+            "town": school.town,
+            "street": school.street,
+            "building_number": school.building_number,
+            "post_code": school.post_code,
+            "head_teacher": school.head_teacher_name,
+            "email": school.email,
+            "phone_number": school.phone_number,
+        }
+
+
+class LibrusClassSensor(LibrusSensorBase):
+    """The student's class - state is the short class name (e.g. "7d"),
+    attributes carry the homeroom teacher and semester boundary dates."""
+
+    _attr_translation_key = "school_class"
+    _attr_icon = "mdi:google-classroom"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school_class")
+
+    @property
+    def native_value(self) -> str | None:
+        if self.coordinator.data is None or self.coordinator.data.school_class is None:
+            return None
+        return self.coordinator.data.school_class.display_name or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None or self.coordinator.data.school_class is None:
+            return None
+        data = self.coordinator.data
+        cls = data.school_class
+        tutor = data.teachers.get(cls.tutor_id) if cls.tutor_id is not None else None
+        return {
+            "homeroom_teacher": tutor,
+            "school_year_start": cls.begin_school_year,
+            "first_semester_end": cls.end_first_semester,
+            "school_year_end": cls.end_school_year,
         }

@@ -109,6 +109,19 @@ ENDPOINT_CLASSROOMS = "Classrooms"
 # upstream for unknown reliability reasons - probe live before trusting it.
 ENDPOINT_HOMEWORK_ASSIGNMENTS = "HomeWorkAssignments"
 
+# CONFIRMED live (2026-09-05), all real and reachable via a normal
+# parent/student login - see scripts/manual_smoke_test.py. TeacherFreeDays
+# and Substitutions were ALSO tried and both 403 for this account type
+# (likely staff/teacher-only permissions) - not included here.
+ENDPOINT_SCHOOLS = "Schools"
+ENDPOINT_CLASSES = "Classes"
+ENDPOINT_VIRTUAL_CLASSES = "VirtualClasses"
+ENDPOINT_SCHOOL_FREE_DAYS = "SchoolFreeDays"
+ENDPOINT_CLASS_FREE_DAYS = "ClassFreeDays"
+ENDPOINT_HOMEWORK_CATEGORIES = "HomeWorks/Categories"
+ENDPOINT_PARENT_TEACHER_CONFERENCES = "ParentTeacherConferences"
+ENDPOINT_GRADE_TYPES = "Grades/Types"
+
 # Wiadomości (private messages) is a SEPARATE subsystem on its own domain,
 # reachable only after bootstrapping a dedicated session cookie on top of
 # the main Synergia one (reverse-engineered from `emsi/librus_pyapi`, MIT).

@@ -23,12 +23,13 @@ def _entity_id(hass, entry, key: str) -> str | None:
 _TOMORROW = (dt_util.now().date() + timedelta(days=1)).isoformat()
 
 
-async def test_both_calendars_are_created(hass) -> None:
+async def test_all_calendars_are_created(hass) -> None:
     client = build_mock_client()
     entry = await setup_integration(hass, client)
 
     assert _entity_id(hass, entry, "timetable") is not None
     assert _entity_id(hass, entry, "agenda") is not None
+    assert _entity_id(hass, entry, "free_days") is not None
 
 
 async def test_agenda_calendar_next_event_from_homeworks(hass) -> None:
@@ -51,6 +52,50 @@ async def test_agenda_calendar_next_event_from_homeworks(hass) -> None:
     state = hass.states.get(entity_id)
     assert state.state == "off"  # tomorrow, not happening right now
     assert "Zebranie z rodzicami" in state.attributes["message"]
+
+
+async def test_agenda_event_prefixed_with_category_name(hass) -> None:
+    """CONFIRMED live: HomeWorks/Categories resolves category ids to names
+    like "Sprawdzian" - the agenda summary should surface that up front."""
+    client = build_mock_client(
+        async_get_homeworks={
+            "HomeWorks": [
+                {
+                    "Id": 1,
+                    "Content": "Dział 5",
+                    "Date": _TOMORROW,
+                    "Category": {"Id": 9368},
+                    "Subject": {"Id": 42005},
+                }
+            ]
+        },
+        async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
+        async_get_homework_categories={"Categories": [{"Id": 9368, "Name": "Sprawdzian"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "agenda"))
+    assert state.attributes["message"].startswith("[Sprawdzian]")
+    assert "Matematyka" in state.attributes["message"]
+
+
+async def test_free_days_calendar_event(hass) -> None:
+    client = build_mock_client(
+        async_get_school_free_days={
+            "SchoolFreeDays": [
+                {
+                    "Id": 1,
+                    "Name": "Ferie zimowe",
+                    "DateFrom": _TOMORROW,
+                    "DateTo": _TOMORROW,
+                }
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "free_days"))
+    assert state.attributes["message"] == "Ferie zimowe"
 
 
 async def test_timetable_calendar_resolves_subject_and_teacher_names(hass) -> None:

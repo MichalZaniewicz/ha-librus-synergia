@@ -36,6 +36,8 @@ from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError
 from .librus_api.models import (
     AttendanceData,
     AttendanceTypeData,
+    ClassData,
+    FreeDayData,
     GradeCategoryData,
     GradeData,
     HomeworkEventData,
@@ -45,6 +47,7 @@ from .librus_api.models import (
     MeData,
     MessageData,
     NoteData,
+    SchoolData,
     SchoolNoticeData,
 )
 
@@ -76,6 +79,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_subjects: dict[int, str] = {}
         self._cached_teachers: dict[int, str] = {}
         self._cached_classrooms: dict[int, str] = {}
+        self._cached_school: SchoolData | None = None
+        self._cached_class: ClassData | None = None
+        self._cached_homework_categories: dict[int, str] = {}
+        self._cached_free_days: list[FreeDayData] = []
 
         # The lucky number is normally published once a day; skip refetching
         # it before LUCKY_NUMBER_PUBLISH_HOUR once today's value is cached.
@@ -177,6 +184,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             messages_available=self._messages_available,
             unread_message_count=unread_count,
             messages=messages,
+            school=self._cached_school,
+            school_class=self._cached_class,
+            free_days=self._cached_free_days,
+            homework_categories=self._cached_homework_categories,
         )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
@@ -199,11 +210,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return self._cached_lucky_number
 
     async def _async_refresh_reference_data(self) -> None:
-        """Refresh subject/teacher/classroom name lookups at most once a day.
+        """Refresh near-static reference data at most once a day: subject/
+        teacher/classroom name lookups, school/class identity, homework
+        agenda categories, and the free-days calendar.
 
-        These three endpoint names are UNVERIFIED (see
-        scripts/manual_smoke_test.py) - a failure here is non-fatal and
-        entities fall back to showing the raw numeric id instead of a name.
+        The Subjects/Teachers/Classrooms endpoint names were UNVERIFIED when
+        first written but are now CONFIRMED live, same as everything else
+        fetched here (2026-09-05) - a failure is still treated as non-fatal
+        for all of it, since none of this is core data (grades/attendance/
+        timetable keep working without it; entities just fall back to a raw
+        numeric id, or a missing school/class sensor/calendar).
         """
         now = dt_util.utcnow()
         if (
@@ -212,22 +228,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             return
         try:
-            subjects_payload, teachers_payload, classrooms_payload = await asyncio.gather(
+            (
+                subjects_payload,
+                teachers_payload,
+                classrooms_payload,
+                schools_payload,
+                classes_payload,
+                homework_categories_payload,
+                school_free_days_payload,
+                class_free_days_payload,
+            ) = await asyncio.gather(
                 self._client.async_get_subjects(),
                 self._client.async_get_teachers(),
                 self._client.async_get_classrooms(),
+                self._client.async_get_schools(),
+                self._client.async_get_classes(),
+                self._client.async_get_homework_categories(),
+                self._client.async_get_school_free_days(),
+                self._client.async_get_class_free_days(),
             )
         except LibrusError:
             _LOGGER.warning(
-                "Could not refresh subject/teacher/classroom names (endpoint "
-                "names are unverified for this school) - entities will show "
-                "raw numeric ids instead of names",
+                "Could not refresh reference data (subjects/teachers/"
+                "classrooms/school/class/categories/free days) - affected "
+                "entities will show raw ids or go stale until the next "
+                "successful refresh",
                 exc_info=True,
             )
             return
         self._cached_subjects = _parse_id_name_map(subjects_payload, ("Subjects",))
         self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
+        self._cached_school = _parse_school(schools_payload)
+        self._cached_class = _parse_class(classes_payload)
+        self._cached_homework_categories = _parse_id_name_map(
+            homework_categories_payload, ("Categories",)
+        )
+        self._cached_free_days = _parse_free_days(
+            school_free_days_payload, "SchoolFreeDays"
+        ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
         self._reference_data_fetched_at = now
 
     async def _async_get_messages(self) -> tuple[int, list[MessageData]]:
@@ -639,6 +678,64 @@ def _parse_messages(
             )
         )
     return unread_count, messages
+
+
+def _parse_school(payload: dict[str, Any]) -> SchoolData | None:
+    school = payload.get("School")
+    if not isinstance(school, dict):
+        return None
+    head_first = school.get("NameHeadTeacher") or ""
+    head_last = school.get("SurnameHeadTeacher") or ""
+    head_name = f"{head_first} {head_last}".strip() or None
+    return SchoolData(
+        name=school.get("Name", ""),
+        town=school.get("Town"),
+        street=school.get("Street"),
+        building_number=school.get("BuildingNumber"),
+        post_code=school.get("PostCode"),
+        head_teacher_name=head_name,
+        email=school.get("Email"),
+        phone_number=school.get("PhoneNumber"),
+    )
+
+
+def _parse_class(payload: dict[str, Any]) -> ClassData | None:
+    cls = payload.get("Class")
+    if not isinstance(cls, dict):
+        return None
+    tutor = cls.get("ClassTutor") or {}
+    return ClassData(
+        number=cls.get("Number"),
+        symbol=cls.get("Symbol", ""),
+        tutor_id=tutor.get("Id"),
+        begin_school_year=cls.get("BeginSchoolYear"),
+        end_first_semester=cls.get("EndFirstSemester"),
+        end_school_year=cls.get("EndSchoolYear"),
+    )
+
+
+def _parse_free_days(payload: dict[str, Any], root_key: str) -> list[FreeDayData]:
+    items = payload.get(root_key)
+    if not isinstance(items, list):
+        return []
+    free_days: list[FreeDayData] = []
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or item.get("Id") is None
+            or not item.get("DateFrom")
+            or not item.get("DateTo")
+        ):
+            continue
+        free_days.append(
+            FreeDayData(
+                id=int(item["Id"]),
+                name=item.get("Name", ""),
+                date_from=item["DateFrom"],
+                date_to=item["DateTo"],
+            )
+        )
+    return free_days
 
 
 def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> dict[int, str]:

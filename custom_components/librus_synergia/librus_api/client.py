@@ -25,18 +25,26 @@ from .const import (
     DATA_BASE_URL,
     ENDPOINT_ATTENDANCE_TYPES,
     ENDPOINT_ATTENDANCES,
+    ENDPOINT_CLASSES,
     ENDPOINT_CLASSROOMS,
+    ENDPOINT_CLASS_FREE_DAYS,
     ENDPOINT_GRADE_CATEGORIES,
+    ENDPOINT_GRADE_TYPES,
     ENDPOINT_GRADES,
     ENDPOINT_HOMEWORK_ASSIGNMENTS,
+    ENDPOINT_HOMEWORK_CATEGORIES,
     ENDPOINT_HOMEWORKS,
     ENDPOINT_LUCKY_NUMBERS,
     ENDPOINT_ME,
     ENDPOINT_NOTES,
+    ENDPOINT_PARENT_TEACHER_CONFERENCES,
+    ENDPOINT_SCHOOL_FREE_DAYS,
     ENDPOINT_SCHOOL_NOTICES,
+    ENDPOINT_SCHOOLS,
     ENDPOINT_SUBJECTS,
     ENDPOINT_TEACHERS,
     ENDPOINT_TIMETABLES,
+    ENDPOINT_VIRTUAL_CLASSES,
     LOGIN_HEADERS,
     MAX_OAUTH_REDIRECTS,
     MESSAGES_ACCESS_DENIED_MARKER,
@@ -315,6 +323,34 @@ class LibrusApiClient:
         """UNVERIFIED - see const.py's note on ENDPOINT_HOMEWORK_ASSIGNMENTS
         and scripts/manual_smoke_test.py."""
         return await self._async_request(ENDPOINT_HOMEWORK_ASSIGNMENTS)
+
+    async def async_get_schools(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_SCHOOLS)
+
+    async def async_get_classes(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_CLASSES)
+
+    async def async_get_virtual_classes(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_VIRTUAL_CLASSES)
+
+    async def async_get_school_free_days(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_SCHOOL_FREE_DAYS)
+
+    async def async_get_class_free_days(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_CLASS_FREE_DAYS)
+
+    async def async_get_homework_categories(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_HOMEWORK_CATEGORIES)
+
+    async def async_get_parent_teacher_conferences(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_PARENT_TEACHER_CONFERENCES)
+
+    async def async_get_grade_types(self) -> dict[str, Any]:
+        """Reference data confirming every valid `Grade` value string Librus
+        uses (numeric 1-6 with +/- modifiers, plus non-numeric status marks
+        like "bz"/"np"/"zw") - not currently consumed anywhere, kept for
+        diagnostics/future use now that it's confirmed real."""
+        return await self._async_request(ENDPOINT_GRADE_TYPES)
 
     # ------------------------------------------------------------------
     # Wiadomości (messages) - a separate subsystem, own domain/session.

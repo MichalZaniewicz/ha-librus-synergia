@@ -1,6 +1,6 @@
 # Librus Synergia (unofficial) for Home Assistant
 
-A HACS-installable Home Assistant integration for [Librus Synergia](https://synergia.librus.pl/) - the Polish school e-register - pulling grades, attendance, behaviour notices, timetable, agenda and announcements in as sensors and calendars.
+A HACS-installable Home Assistant integration for [Librus Synergia](https://synergia.librus.pl/) - the Polish school e-register - pulling grades, attendance, behaviour notices, timetable, agenda, announcements, messages, and school/class info in as sensors and calendars.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration)
 
@@ -47,8 +47,11 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` Unread announcements | Count, with recent titles |
 | `sensor` Behaviour notices | Count, with a short recent-items attribute |
 | `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones. Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
+| `sensor` School | Name, town/street, head teacher, contact details |
+| `sensor` Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `calendar` Timetable | Lesson plan, including known cancellations/substitutions |
-| `calendar` Agenda | Tests, trips, parent meetings and other school events |
+| `calendar` Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
+| `calendar` Free days | The whole school year's holidays/breaks |
 
 New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Four ready-made [blueprints](#automation-blueprints) wrap these for you.
 
@@ -80,8 +83,9 @@ Blueprint, and paste a blueprint's GitHub URL.
 
 A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices at the time of writing) and are flagged in code comments where they matter:
 
-- **Grade value parsing** (`5+`, `4-`, `bz`, ...) uses the common Polish-gradebook `+0.5`/`-0.25` convention but hasn't been checked against real non-numeric grade marks yet (no grades existed on the test account, first week of the school year).
+- **Grade value parsing**: the `+0.5`/`-0.25` numeric modifier convention (`5+`, `4-`, ...) is a common third-party inference, not something Librus documents - the live `Grades/Types` reference endpoint confirms every *non-numeric* mark Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`, `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) is correctly excluded from the average, but the exact numeric value a `+`/`-` modifier should produce is still unverified (no grades existed on the test account, first week of the school year).
 - **`Notes[].Positive`**'s exact 0/1/2 enum (which value means positive/neutral/negative) is unconfirmed - no behaviour notices existed on the test account either.
+- `VirtualClasses` (split/group classes, e.g. language subgroups) and `ParentTeacherConferences` are confirmed real endpoints with client methods available, but not wired into any entity yet - the account had none of either to confirm field shapes against.
 - Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
 - Real homework assignments (as opposed to the general agenda feed above) come from a separate `HomeWorkAssignments` endpoint, confirmed live to be real and reachable - it just had nothing in it yet, so it isn't wired into any entity until there's real data to confirm its shape against.
 - A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.

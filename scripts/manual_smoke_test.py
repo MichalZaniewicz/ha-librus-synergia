@@ -89,6 +89,14 @@ async def main() -> int:
             ("Subjects", client.async_get_subjects()),
             ("Teachers/Users", client.async_get_teachers()),
             ("Classrooms", client.async_get_classrooms()),
+            ("Schools", client.async_get_schools()),
+            ("Classes", client.async_get_classes()),
+            ("VirtualClasses", client.async_get_virtual_classes()),
+            ("SchoolFreeDays", client.async_get_school_free_days()),
+            ("ClassFreeDays", client.async_get_class_free_days()),
+            ("HomeWorks/Categories", client.async_get_homework_categories()),
+            ("ParentTeacherConferences", client.async_get_parent_teacher_conferences()),
+            ("Grades/Types", client.async_get_grade_types()),
         ]
 
         for label, coro in endpoints:

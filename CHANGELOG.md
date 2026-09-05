@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+Pulled the complete feature list from szkolny.eu's own open-sourced app
+(`LibrusFeatures.kt`) and live-probed every plausible gap against the real
+account to close as many of them as possible without guessing at unseen
+response shapes.
+
+- **New:** School sensor (name, address, head teacher, contact details).
+- **New:** Class sensor (class name, homeroom teacher, semester/school-year
+  boundary dates).
+- **New:** Free days calendar - the whole school year's holidays/breaks
+  (`SchoolFreeDays` + `ClassFreeDays`).
+- Agenda calendar events are now prefixed with their category when known
+  (e.g. "[Sprawdzian] Matematyka: ...", via `HomeWorks/Categories`).
+- Confirmed live and closed: the `Grades/Types` reference endpoint verifies
+  every non-numeric grade mark Librus uses is correctly excluded from
+  averages (see README's "Known limitations").
+- `VirtualClasses` and `ParentTeacherConferences` client methods added but
+  not wired into any entity yet - both confirmed real, both empty on the
+  test account so far.
+
 ## 0.3.0
 
 - **New:** an original inline brand icon (a generic notebook design, not

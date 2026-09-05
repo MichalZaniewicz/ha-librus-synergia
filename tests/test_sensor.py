@@ -88,3 +88,40 @@ async def test_unread_messages_sensor_unavailable_when_school_has_no_module(hass
     entity_id = _entity_id(hass, entry, "unread_messages")
     assert entity_id is not None
     assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_school_and_class_sensors(hass) -> None:
+    client = build_mock_client(
+        async_get_schools={
+            "School": {
+                "Name": "Zespół Szkolno-Przedszkolny nr 21",
+                "Town": "Wrocław",
+                "Street": "ul. Kłodzka",
+                "NameHeadTeacher": "Edyta",
+                "SurnameHeadTeacher": "Krajewska",
+            }
+        },
+        async_get_classes={
+            "Class": {
+                "Number": 7,
+                "Symbol": "d",
+                "ClassTutor": {"Id": 1823984},
+                "EndFirstSemester": "2027-01-31",
+            }
+        },
+        async_get_teachers={
+            "Users": [{"Id": 1823984, "FirstName": "Amelia", "LastName": "Marciszak"}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    school_entity_id = _entity_id(hass, entry, "school")
+    school_state = hass.states.get(school_entity_id)
+    assert school_state.state == "Zespół Szkolno-Przedszkolny nr 21"
+    assert school_state.attributes["head_teacher"] == "Edyta Krajewska"
+
+    class_entity_id = _entity_id(hass, entry, "school_class")
+    class_state = hass.states.get(class_entity_id)
+    assert class_state.state == "7d"
+    assert class_state.attributes["homeroom_teacher"] == "Amelia Marciszak"
+    assert class_state.attributes["first_semester_end"] == "2027-01-31"

@@ -78,6 +78,16 @@ def build_mock_client(**overrides) -> AsyncMock:
     client.async_get_subjects.return_value = {"Subjects": []}
     client.async_get_teachers.return_value = {"Users": []}
     client.async_get_classrooms.return_value = {"Classrooms": []}
+    client.async_get_schools.return_value = {"School": {"Name": "Test School"}}
+    client.async_get_classes.return_value = {"Class": {"Number": 7, "Symbol": "d"}}
+    client.async_get_virtual_classes.return_value = {"VirtualClasses": []}
+    client.async_get_school_free_days.return_value = {"SchoolFreeDays": []}
+    client.async_get_class_free_days.return_value = {"ClassFreeDays": []}
+    client.async_get_homework_categories.return_value = {"Categories": []}
+    client.async_get_parent_teacher_conferences.return_value = {
+        "ParentTeacherConferences": []
+    }
+    client.async_get_grade_types.return_value = {"Types": []}
     client.async_bootstrap_messages.return_value = False
     for key, value in overrides.items():
         setattr(getattr(client, key), "return_value", value)

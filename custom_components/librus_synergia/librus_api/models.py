@@ -161,6 +161,51 @@ class MessageData:
 
 
 @dataclass(slots=True)
+class SchoolData:
+    """CONFIRMED live via the `Schools` endpoint."""
+
+    name: str
+    town: str | None
+    street: str | None
+    building_number: str | None
+    post_code: str | None
+    head_teacher_name: str | None
+    email: str | None
+    phone_number: str | None
+
+
+@dataclass(slots=True)
+class ClassData:
+    """CONFIRMED live via the `Classes` endpoint. `symbol` combined with
+    `number` gives the usual short class name (e.g. 7 + "d" -> "7d")."""
+
+    number: int | None
+    symbol: str
+    tutor_id: int | None
+    begin_school_year: str | None
+    end_first_semester: str | None
+    end_school_year: str | None
+
+    @property
+    def display_name(self) -> str:
+        if self.number is not None and self.symbol:
+            return f"{self.number}{self.symbol}"
+        return self.symbol or (str(self.number) if self.number is not None else "")
+
+
+@dataclass(slots=True)
+class FreeDayData:
+    """A school- or class-wide free day/break, from `SchoolFreeDays` or
+    `ClassFreeDays` (same shape, confirmed live for both - `ClassFreeDays`
+    was empty at the time but the endpoint and shape are real)."""
+
+    id: int
+    name: str
+    date_from: str
+    date_to: str
+
+
+@dataclass(slots=True)
 class LibrusData:
     """Everything the coordinator fetches in one update cycle."""
 
@@ -180,3 +225,7 @@ class LibrusData:
     messages_available: bool = False
     unread_message_count: int = 0
     messages: list[MessageData] = field(default_factory=list)
+    school: SchoolData | None = None
+    school_class: ClassData | None = None
+    free_days: list[FreeDayData] = field(default_factory=list)
+    homework_categories: dict[int, str] = field(default_factory=dict)

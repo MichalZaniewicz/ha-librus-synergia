@@ -50,11 +50,14 @@
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },
       "behaviour_notices": { "name": "Uwagi" },
-      "unread_messages": { "name": "Nieprzeczytane wiadomości" }
+      "unread_messages": { "name": "Nieprzeczytane wiadomości" },
+      "school": { "name": "Szkoła" },
+      "school_class": { "name": "Klasa" }
     },
     "calendar": {
       "timetable": { "name": "Plan lekcji" },
-      "agenda": { "name": "Terminarz" }
+      "agenda": { "name": "Terminarz" },
+      "free_days": { "name": "Dni wolne" }
     }
   }
 }
