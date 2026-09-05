@@ -260,11 +260,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
 
 def _parse_me(payload: dict[str, Any]) -> MeData:
-    account = (payload.get("Me") or {}).get("Account") or {}
+    me = payload.get("Me") or {}
+    account = me.get("Account") or {}
+    # CONFIRMED live: `Account` is the LOGIN's own identity, which for a
+    # child's account under a parent-managed portal is the PARENT's name
+    # (e.g. Account.FirstName/LastName was the parent, while `User` was the
+    # actual student) - `MeData` is meant to represent the student, so read
+    # the name from `User`, keeping only the id from `Account`.
+    student = me.get("User") or {}
     return MeData(
         account_id=account.get("Id"),
-        first_name=account.get("FirstName", ""),
-        last_name=account.get("LastName", ""),
+        first_name=student.get("FirstName", ""),
+        last_name=student.get("LastName", ""),
     )
 
 

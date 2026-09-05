@@ -89,10 +89,22 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
         unique_id = username.lower()
         try:
             me_payload = await client.async_get_me()
-            account = me_payload.get("Me", {}).get("Account", {})
-            name = f"{account.get('FirstName', '')} {account.get('LastName', '')}".strip()
-            if name:
-                title = name
+            me = me_payload.get("Me", {})
+            account = me.get("Account", {})
+            # `Account` is the LOGIN's own identity - for a child's login
+            # under a parent-managed portal this is the PARENT's name
+            # (confirmed live: Account was "Michał Zaniewicz", the parent,
+            # while `User` below was "Kacper Zaniewicz", the actual
+            # student) - the student ("User") is what the title/device name
+            # should show, not whoever's name is on the login itself.
+            student = me.get("User", {})
+            student_name = f"{student.get('FirstName', '')} {student.get('LastName', '')}".strip()
+            if student_name:
+                title = f"E-dziennik {student_name}"
+            else:
+                account_name = f"{account.get('FirstName', '')} {account.get('LastName', '')}".strip()
+                if account_name:
+                    title = f"E-dziennik {account_name}"
             account_id = account.get("Id")
             if account_id is not None:
                 unique_id = str(account_id)
