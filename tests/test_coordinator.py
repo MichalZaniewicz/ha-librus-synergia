@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import async_capture_events
@@ -35,6 +36,10 @@ GRADE_PAYLOAD = {
 def _make_coordinator(hass, client) -> LibrusDataUpdateCoordinator:
     entry = make_config_entry()
     entry.add_to_hass(hass)
+    # async_config_entry_first_refresh() asserts the entry is mid-setup -
+    # true when HA drives it via async_setup_entry, but this suite calls it
+    # directly on a bare MockConfigEntry, so fake that state ourselves.
+    entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
     return LibrusDataUpdateCoordinator(hass, entry, client, timedelta(minutes=20))
 
 

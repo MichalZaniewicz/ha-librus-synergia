@@ -4,6 +4,15 @@ A HACS-installable Home Assistant integration for [Librus Synergia](https://syne
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration)
 
+> [!TIP]
+> ⭐ **Enjoying this integration?** Every star is real motivation to keep building new features :)
+
+<!-- The badge lives OUTSIDE the alert on purpose: Home Assistant/HACS rewrites a GitHub alert
+into <ha-alert> and drops every child whose textContent is empty, which silently removes any
+<img> placed inside it. -->
+
+[![Star this repo](https://img.shields.io/github/stars/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&logo=github&label=STAR%20THIS%20REPO&labelColor=555555&color=ffc107)](https://github.com/MichalZaniewicz/ha-librus-synergia)
+
 ## Why this exists
 
 An integration for Librus already exists ([`LukMaverick/LibrusSynergiaHA`](https://github.com/LukMaverick/LibrusSynergiaHA), built on [`RustySnek/librus-apix`](https://github.com/RustySnek/librus-apix)), but it logs into the legacy HTML Synergia portal, which can demand a reCAPTCHA a human has to solve - unworkable for something meant to sync unattended in the background.
@@ -33,14 +42,15 @@ Each child/student is a separate login and a separate integration entry.
 |---|---|
 | `sensor` Overall grade average | Weighted average across every subject |
 | `sensor` *Subject* average (one per subject) | Discovered automatically from your account; attributes include latest grade, proposed/final semester grades |
-| `sensor` Attendance | Count, with a per-type breakdown attribute |
+| `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` Unread announcements | Count, with recent titles |
 | `sensor` Behaviour notices | Count, with a short recent-items attribute |
+| `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones. Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `calendar` Timetable | Lesson plan, including known cancellations/substitutions |
 | `calendar` Agenda | Tests, trips, parent meetings and other school events |
 
-New grades, announcements and behaviour notices also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline).
+New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline).
 
 The poll interval (default 20 minutes) is configurable via the integration's **Configure** option.
 
@@ -48,9 +58,10 @@ The poll interval (default 20 minutes) is configurable via the integration's **C
 
 A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices at the time of writing) and are flagged in code comments where they matter:
 
-- **Grade value parsing** (`5+`, `4-`, `bz`, ...) uses the common Polish-gradebook `+0.5`/`-0.25` convention but hasn't been checked against real non-numeric grade marks yet.
-- **`Notes[].Positive`**'s exact 0/1/2 enum (which value means positive/neutral/negative) is unconfirmed.
+- **Grade value parsing** (`5+`, `4-`, `bz`, ...) uses the common Polish-gradebook `+0.5`/`-0.25` convention but hasn't been checked against real non-numeric grade marks yet (no grades existed on the test account, first week of the school year).
+- **`Notes[].Positive`**'s exact 0/1/2 enum (which value means positive/neutral/negative) is unconfirmed - no behaviour notices existed on the test account either.
 - Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
+- Real homework assignments (as opposed to the general agenda feed above) come from a separate `HomeWorkAssignments` endpoint, confirmed live to be real and reachable - it just had nothing in it yet, so it isn't wired into any entity until there's real data to confirm its shape against.
 - A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.
 
 If you hit one of these, please open an issue with what you saw (redact personal data).
