@@ -1,15 +1,22 @@
 pytest
 pytest-asyncio
-aioresponses
-# Pin below aiohttp 3.11: aioresponses 0.7.9 doesn't support the
-# ClientResponse.__init__ signature change in newer aiohttp (missing
-# `stream_writer` kwarg) - confirmed 2026-09-05. Only affects this
-# standalone test venv, not the shipped integration (which declares no
-# aiohttp requirement at all - HA core provides it).
-aiohttp<3.11
 
 # Needed for the full HA-integrated suite (config flow, coordinator,
-# entities) - not yet used by tests/test_api_client.py, which only needs
-# aiohttp + aioresponses above and runs without a HA install.
+# entities) as well as test_api_client.py, which runs fine under either but
+# doesn't itself need this package.
+#
+# Requires Python 3.14: on 3.12/3.13, PyPI only offers this package up to
+# 0.13.109, which hard-pins homeassistant==2024.3.3 (predates
+# ConfigFlowResult/entry.runtime_data/etc. that this integration
+# deliberately uses) - and that old homeassistant's own pinned orjson
+# version doesn't build on newer Pythons anyway. On 3.14, this resolves to
+# a current release (0.13.363 as of 2026-09-05) paired with a current
+# homeassistant (2026.9.0), where acme/josepy are already mutually
+# compatible - no extra pins needed. See .github/workflows/test.yml.
 pytest-homeassistant-custom-component
 freezegun
+
+# Windows-only: zoneinfo has no system tz database to fall back to there
+# (unlike Linux/macOS), and pytest-homeassistant-custom-component's hass
+# fixture sets a fixed test timezone on every run.
+tzdata; sys_platform == "win32"

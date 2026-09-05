@@ -9,7 +9,24 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        # 3.14 only: PyPI's pytest-homeassistant-custom-component only
+        # offers a CURRENT, actively-tracked release (compatible with a
+        # recent homeassistant, which this integration's code targets) to
+        # 3.14+. On 3.12/3.13 the newest installable release is a stale
+        # 0.13.109 that hard-pins homeassistant==2024.3.3 (predates
+        # ConfigFlowResult/entry.runtime_data/etc.) and whose own pinned
+        # orjson version doesn't even build on newer Pythons.
+        # `pip install` itself confirmed clean (uv-provisioned local 3.14,
+        # zero extra pins needed - a fresh homeassistant 2026.9.0 pulls in
+        # mutually-compatible acme/josepy on its own). The actual test RUN
+        # could not be verified locally beyond that: homeassistant's own
+        # runner.py unconditionally imports the POSIX-only `fcntl` module,
+        # so pytest-homeassistant-custom-component's plugin can't even load
+        # on Windows at all, on any Python version - this is an OS-level
+        # wall unrelated to our code, and doesn't apply here since this
+        # workflow runs on ubuntu-latest. Watch the very first real run of
+        # this job for anything that slipped past local checking.
+        python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

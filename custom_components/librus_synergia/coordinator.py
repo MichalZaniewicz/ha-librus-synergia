@@ -13,6 +13,7 @@ single edge case.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -24,10 +25,17 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import EVENT_NEW_ANNOUNCEMENT, EVENT_NEW_GRADE, EVENT_NEW_NOTE, LUCKY_NUMBER_PUBLISH_HOUR
+from .const import (
+    EVENT_NEW_ANNOUNCEMENT,
+    EVENT_NEW_GRADE,
+    EVENT_NEW_MESSAGE,
+    EVENT_NEW_NOTE,
+    LUCKY_NUMBER_PUBLISH_HOUR,
+)
 from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError
 from .librus_api.models import (
     AttendanceData,
+    AttendanceTypeData,
     GradeCategoryData,
     GradeData,
     HomeworkEventData,
@@ -35,6 +43,7 @@ from .librus_api.models import (
     LibrusData,
     LuckyNumberData,
     MeData,
+    MessageData,
     NoteData,
     SchoolNoticeData,
 )
@@ -73,6 +82,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_lucky_number: LuckyNumberData | None = None
         self._lucky_number_fetched_date: date | None = None
 
+        # Wiadomości (messages) needs a one-time-per-login bootstrap (a
+        # separate session cookie on wiadomosci.librus.pl) - not every cycle,
+        # and not every school has this module enabled, so failure here is
+        # non-fatal (see _async_get_messages).
+        self._messages_bootstrapped = False
+        self._messages_available = False
+
         # New-item bus events. In-memory only, None = never populated (the
         # next cycle just seeds it instead of replaying history as "new" on
         # first install). A HA restart re-seeds quietly instead of persisting
@@ -84,6 +100,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # confirmed live - unlike every other endpoint's plain int ids.
         self._known_notice_ids: set[str] | None = None
         self._known_note_ids: set[int] | None = None
+        self._known_message_ids: set[str] | None = None
 
     @property
     def client(self) -> LibrusApiClient:
@@ -136,11 +153,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         lucky_number = await self._async_get_lucky_number(today)
         await self._async_refresh_reference_data()
+        unread_count, messages = await self._async_get_messages()
 
         grades = _parse_grades(grades_payload)
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
-        self._async_fire_new_item_events(grades, school_notices, notes)
+        self._async_fire_new_item_events(grades, school_notices, notes, messages)
 
         return LibrusData(
             me=_parse_me(me_payload),
@@ -156,6 +174,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             subjects=self._cached_subjects,
             teachers=self._cached_teachers,
             classrooms=self._cached_classrooms,
+            messages_available=self._messages_available,
+            unread_message_count=unread_count,
+            messages=messages,
         )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
@@ -209,8 +230,43 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
         self._reference_data_fetched_at = now
 
+    async def _async_get_messages(self) -> tuple[int, list[MessageData]]:
+        """Fetch unread count + a recent-messages preview from the separate
+        Wiadomości subsystem.
+
+        Bootstraps the dedicated session cookie once per login (not every
+        cycle). Some schools don't have this Librus module enabled at all -
+        that's a normal, non-fatal outcome (`async_bootstrap_messages`
+        returns False, checked via the "Brak dostępu" marker), not an error.
+        Any other failure here is also non-fatal - messages are a bonus
+        feature, not core data, and must never fail the whole update cycle.
+        """
+        if not self._messages_bootstrapped:
+            try:
+                self._messages_available = await self._client.async_bootstrap_messages()
+            except LibrusError:
+                _LOGGER.debug("Messages bootstrap failed (non-fatal)", exc_info=True)
+                self._messages_available = False
+            self._messages_bootstrapped = True
+        if not self._messages_available:
+            return 0, []
+
+        try:
+            unread_payload, list_payload = await asyncio.gather(
+                self._client.async_get_unread_messages_count(),
+                self._client.async_get_messages(limit=10),
+            )
+        except LibrusError:
+            _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
+            return 0, []
+        return _parse_messages(unread_payload, list_payload)
+
     def _async_fire_new_item_events(
-        self, grades: list[GradeData], notices: list[SchoolNoticeData], notes: list[NoteData]
+        self,
+        grades: list[GradeData],
+        notices: list[SchoolNoticeData],
+        notes: list[NoteData],
+        messages: list[MessageData],
     ) -> None:
         entry_id = self.config_entry.entry_id if self.config_entry else None
         self._known_grade_ids = self._fire_for_new_ids(
@@ -230,6 +286,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             entry_id,
             self._known_note_ids,
             {n.id: {"positive": n.positive} for n in notes},
+        )
+        self._known_message_ids = self._fire_for_new_ids(
+            EVENT_NEW_MESSAGE,
+            entry_id,
+            self._known_message_ids,
+            {m.id: {"sender": m.sender_name, "topic": m.topic} for m in messages},
         )
 
     def _fire_for_new_ids(
@@ -370,18 +432,22 @@ def _parse_attendances(payload: dict[str, Any]) -> list[AttendanceData]:
     return attendances
 
 
-def _parse_attendance_types(payload: dict[str, Any]) -> dict[int, str]:
+def _parse_attendance_types(payload: dict[str, Any]) -> dict[int, AttendanceTypeData]:
     # CONFIRMED live: the response root key is "Types" (matching the
-    # Attendances/Types endpoint path), not "AttendanceTypes".
+    # Attendances/Types endpoint path), not "AttendanceTypes". `IsPresenceKind`
+    # is real - see AttendanceTypeData's docstring.
     items = payload.get("Types")
     if not isinstance(items, list):
         return {}
-    result: dict[int, str] = {}
+    result: dict[int, AttendanceTypeData] = {}
     for item in items:
         if not isinstance(item, dict) or item.get("Id") is None:
             continue
+        item_id = int(item["Id"])
         name = item.get("Name") or item.get("Short") or item.get("Shortcut") or ""
-        result[int(item["Id"])] = name
+        result[item_id] = AttendanceTypeData(
+            id=item_id, name=name, is_presence_kind=bool(item.get("IsPresenceKind"))
+        )
     return result
 
 
@@ -500,6 +566,56 @@ def _parse_lucky_number(payload: dict[str, Any]) -> LuckyNumberData | None:
     except (TypeError, ValueError):
         return None
     return LuckyNumberData(day=raw.get("LuckyNumberDay"), number=number)
+
+
+def _decode_message_content(raw: str) -> str:
+    """The list endpoint's `content` field is base64-encoded plain text
+    (CONFIRMED live - decoding several real messages produced readable
+    Polish text). Falls back to the raw string if it ever isn't, rather
+    than raising and losing the whole messages feature over one bad entry.
+    """
+    try:
+        return base64.b64decode(raw).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return raw
+
+
+def _parse_messages(
+    unread_payload: dict[str, Any], list_payload: dict[str, Any]
+) -> tuple[int, list[MessageData]]:
+    # CONFIRMED live: unread count is a per-mailbox breakdown
+    # ({"data": {"inbox": N, "notes": N, "alerts": N, ...}}), not a flat
+    # number - only "inbox" (the main mailbox) is surfaced for now.
+    unread_count = 0
+    unread_data = unread_payload.get("data")
+    if isinstance(unread_data, dict):
+        try:
+            unread_count = int(unread_data.get("inbox") or 0)
+        except (TypeError, ValueError):
+            unread_count = 0
+
+    items = list_payload.get("data")
+    if not isinstance(items, list):
+        return unread_count, []
+    messages: list[MessageData] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("messageId") is None:
+            continue
+        sender_name = item.get("senderName") or (
+            f"{item.get('senderFirstName', '')} {item.get('senderLastName', '')}".strip()
+        )
+        messages.append(
+            MessageData(
+                id=str(item["messageId"]),
+                sender_name=sender_name,
+                topic=item.get("topic", ""),
+                content=_decode_message_content(item.get("content", "")),
+                send_date=item.get("sendDate"),
+                read_date=item.get("readDate"),
+                has_attachment=bool(item.get("isAnyFileAttached")),
+            )
+        )
+    return unread_count, messages
 
 
 def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> dict[int, str]:

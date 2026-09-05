@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import LibrusConfigEntry, librus_device_info
 from .const import ATTR_SUBJECT_ID
 from .coordinator import LibrusDataUpdateCoordinator
-from .librus_api.models import GradeCategoryData, GradeData
+from .librus_api.models import AttendanceTypeData, GradeCategoryData, GradeData, LibrusData
 
 
 def _parse_grade_value(value: str) -> float | None:
@@ -97,6 +97,7 @@ async def async_setup_entry(
             LibrusLuckyNumberSensor(coordinator, entry),
             LibrusUnreadAnnouncementsSensor(coordinator, entry),
             LibrusBehaviourNoticesSensor(coordinator, entry),
+            LibrusUnreadMessagesSensor(coordinator, entry),
         ]
     )
 
@@ -219,12 +220,24 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         }
 
 
+def _attendance_type(data: LibrusData, type_id: int | None) -> AttendanceTypeData | None:
+    return data.attendance_types.get(type_id) if type_id is not None else None
+
+
 class LibrusAttendanceSensor(LibrusSensorBase):
-    """Total recorded attendance entries, with a per-type breakdown."""
+    """Count of real absences - excludes "present"/"late"/"excused" marks.
+
+    CONFIRMED live: the overwhelming majority of attendance records are
+    ordinary "Obecność" (present) marks (`IsPresenceKind: true`), so a raw
+    total-record count mostly just tracks how many lessons happened, not
+    anything a parent cares about. This counts only types the school itself
+    classifies as NOT a presence kind (real absences, excused or not); the
+    full breakdown (including presence marks) is still in attributes.
+    """
 
     _attr_translation_key = "attendance"
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:calendar-check"
+    _attr_icon = "mdi:calendar-remove"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "attendance")
@@ -233,7 +246,12 @@ class LibrusAttendanceSensor(LibrusSensorBase):
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
-        return len(self.coordinator.data.attendances)
+        data = self.coordinator.data
+        return sum(
+            1
+            for a in data.attendances
+            if (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -242,11 +260,10 @@ class LibrusAttendanceSensor(LibrusSensorBase):
         data = self.coordinator.data
         breakdown: dict[str, int] = {}
         for attendance in data.attendances:
-            if attendance.type_id is None:
-                continue
-            name = data.attendance_types.get(attendance.type_id, str(attendance.type_id))
+            attendance_type = _attendance_type(data, attendance.type_id)
+            name = attendance_type.name if attendance_type is not None else str(attendance.type_id)
             breakdown[name] = breakdown.get(name, 0) + 1
-        return {"breakdown": breakdown}
+        return {"breakdown": breakdown, "total_records": len(data.attendances)}
 
 
 class LibrusLuckyNumberSensor(LibrusSensorBase):
@@ -317,5 +334,56 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
         return {
             "recent": [
                 {"date": n.date, "positive": n.positive, "text": n.text[:200]} for n in recent
+            ]
+        }
+
+
+class LibrusUnreadMessagesSensor(LibrusSensorBase):
+    """Unread count in the main Wiadomości inbox, with a preview list.
+
+    Reading this sensor never marks anything read in real Librus - the
+    coordinator only ever calls the message LIST/count endpoints, never a
+    single-message detail endpoint (see LibrusApiClient's Wiadomości
+    methods). `unknown` if this Librus install doesn't have the messages
+    module enabled at all (`messages_available=False`), rather than 0 -
+    those are different situations and shouldn't look the same.
+    """
+
+    _attr_translation_key = "unread_messages"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:email-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "unread_messages")
+
+    @property
+    def available(self) -> bool:
+        return (
+            super().available
+            and self.coordinator.data is not None
+            and self.coordinator.data.messages_available
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.unread_message_count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        return {
+            "recent": [
+                {
+                    "sender": m.sender_name,
+                    "topic": m.topic,
+                    "content": m.content[:200],
+                    "date": m.send_date,
+                    "unread": m.read_date is None,
+                    "has_attachment": m.has_attachment,
+                }
+                for m in self.coordinator.data.messages[:10]
             ]
         }

@@ -103,3 +103,18 @@ ENDPOINT_LUCKY_NUMBERS = "LuckyNumbers"
 ENDPOINT_SUBJECTS = "Subjects"
 ENDPOINT_TEACHERS = "Users"
 ENDPOINT_CLASSROOMS = "Classrooms"
+
+# UNVERIFIED - distinct from HomeWorks (the general agenda/events feed,
+# confirmed working). szkolny-android has this implemented then disabled
+# upstream for unknown reliability reasons - probe live before trusting it.
+ENDPOINT_HOMEWORK_ASSIGNMENTS = "HomeWorkAssignments"
+
+# Wiadomości (private messages) is a SEPARATE subsystem on its own domain,
+# reachable only after bootstrapping a dedicated session cookie on top of
+# the main Synergia one (reverse-engineered from `emsi/librus_pyapi`, MIT).
+MESSAGES_DOMAIN = "wiadomosci.librus.pl"
+MESSAGES_BOOTSTRAP_URL = "https://synergia.librus.pl/wiadomosci3"
+MESSAGES_BASE_URL = f"https://{MESSAGES_DOMAIN}/api"
+# Seen in the bootstrap response body when this Librus module isn't enabled
+# for the account - not every school turns it on.
+MESSAGES_ACCESS_DENIED_MARKER = "Brak dostępu"

@@ -5,9 +5,9 @@ custom_components/ so HA never loads it. Run against a real Librus account to
 verify the wire protocol (reverse-engineered from `emsi/librus_pyapi`, the
 currently-working flow after Librus's 2026-03-28 auth change - see
 librus_api/const.py's module docstring) and to close the remaining empirical
-gaps: exact Subjects/Teachers/Classrooms endpoint names, whether HomeWorks
-accepts a date range, what Notes[].Positive enumerates, and how grade values
-like "5+"/"4-"/"bz" should be parsed.
+gaps: what Notes[].Positive enumerates, how grade values like "5+"/"4-"/"bz"
+should be parsed, whether HomeWorkAssignments is distinct/usable, and the
+real Wiadomości (messages) response shapes.
 
 Usage (PowerShell):
     $env:LIBRUS_USERNAME = "..."
@@ -83,11 +83,12 @@ async def main() -> int:
             ("AttendanceTypes", client.async_get_attendance_types()),
             ("Timetables (this week)", client.async_get_timetable(week_start)),
             ("HomeWorks", client.async_get_homeworks()),
+            ("HomeWorkAssignments (UNVERIFIED)", client.async_get_homework_assignments()),
             ("SchoolNotices", client.async_get_school_notices()),
             ("LuckyNumbers", client.async_get_lucky_number()),
-            ("Subjects (UNVERIFIED endpoint name)", client.async_get_subjects()),
-            ("Teachers/Users (UNVERIFIED endpoint name)", client.async_get_teachers()),
-            ("Classrooms (UNVERIFIED endpoint name)", client.async_get_classrooms()),
+            ("Subjects", client.async_get_subjects()),
+            ("Teachers/Users", client.async_get_teachers()),
+            ("Classrooms", client.async_get_classrooms()),
         ]
 
         for label, coro in endpoints:
@@ -99,14 +100,36 @@ async def main() -> int:
                 continue
             _print_json(payload)
 
+        _print_section("Messages bootstrap (Wiadomości)")
+        try:
+            has_access = await client.async_bootstrap_messages()
+            print(f"Access: {has_access}")
+        except LibrusError as err:
+            print(f"FAILED: {type(err).__name__}: {err}")
+            has_access = False
+
+        if has_access:
+            for label, coro in [
+                ("Unread messages count", client.async_get_unread_messages_count()),
+                ("Messages (inbox, limit 10)", client.async_get_messages(limit=10)),
+            ]:
+                _print_section(label)
+                try:
+                    payload = await coro
+                except LibrusError as err:
+                    print(f"FAILED: {type(err).__name__}: {err}")
+                    continue
+                _print_json(payload)
+
         _print_section("Done")
         print(
             "Check above: Notes[].Positive values (which is positive/neutral/"
-            "negative), the Subjects/Teachers/Classrooms response shapes, a "
-            "few Grades[].Grade values (symbols like 5+/4-/bz), and whether "
-            "HomeWorks looks like it could take a date-range query. Update "
-            "librus_api/const.py and coordinator.py's parsers if anything "
-            "here differs from what they currently assume."
+            "negative), a few Grades[].Grade values (symbols like 5+/4-/bz), "
+            "whether HomeWorks/HomeWorkAssignments look distinct from each "
+            "other, and the Messages response field names. Update "
+            "librus_api/const.py, librus_api/models.py and coordinator.py's "
+            "parsers if anything here differs from what they currently "
+            "assume."
         )
     return 0
 

@@ -46,10 +46,11 @@
     "sensor": {
       "overall_average": { "name": "Średnia ocen" },
       "subject_average": { "name": "Średnia - {subject}" },
-      "attendance": { "name": "Frekwencja" },
+      "attendance": { "name": "Nieobecności" },
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },
-      "behaviour_notices": { "name": "Uwagi" }
+      "behaviour_notices": { "name": "Uwagi" },
+      "unread_messages": { "name": "Nieprzeczytane wiadomości" }
     },
     "calendar": {
       "timetable": { "name": "Plan lekcji" },

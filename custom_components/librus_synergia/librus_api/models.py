@@ -75,6 +75,20 @@ class AttendanceData:
 
 
 @dataclass(slots=True)
+class AttendanceTypeData:
+    """CONFIRMED live: `IsPresenceKind` is real and meaningful - e.g. Id 100
+    "Obecność" (present) and Id 2 "Spóźnienie" (late) are both presence-kind
+    (the student was there), while Id 1 "Nieobecność" (absence) and Id 3
+    "Nieobecność uspr." (excused absence) are not. This is what lets the
+    attendance sensor show real absences as its primary state instead of a
+    raw count of every record (which is mostly ordinary "present" marks)."""
+
+    id: int
+    name: str
+    is_presence_kind: bool
+
+
+@dataclass(slots=True)
 class LessonData:
     lesson_no: int | None
     hour_from: str | None
@@ -90,7 +104,11 @@ class LessonData:
 class HomeworkEventData:
     """An agenda/event entry from the `HomeWorks` endpoint - despite the
     name, this is Librus's general events feed (tests, trips, homework),
-    not the (disabled-upstream) `HomeWorkAssignments` endpoint."""
+    not the separate `HomeWorkAssignments` endpoint. CONFIRMED live
+    (2026-09-05) that `HomeWorkAssignments` is real and reachable (not
+    404/error) - it simply returned no entries for this account/week, so
+    it's not wired into `LibrusData` yet. Revisit once real assignments
+    exist to confirm its field names before trusting a parser for it."""
 
     id: int
     date: str | None
@@ -120,6 +138,29 @@ class LuckyNumberData:
 
 
 @dataclass(slots=True)
+class MessageData:
+    """A Wiadomości (private message) preview.
+
+    CONFIRMED live (2026-09-05): the list endpoint already returns the full
+    `content` (base64-encoded in the raw response, decoded to plain text
+    here) - there is no need to ever call a per-message detail endpoint,
+    which is what this integration deliberately avoids (see
+    `LibrusApiClient`'s module-level comment on the Wiadomości methods):
+    fetching a single message's detail almost certainly marks it read
+    server-side, while listing does not (`readDate` stayed `null` for a
+    genuinely unread message across repeated list fetches in testing).
+    """
+
+    id: str
+    sender_name: str
+    topic: str
+    content: str
+    send_date: str | None
+    read_date: str | None
+    has_attachment: bool
+
+
+@dataclass(slots=True)
 class LibrusData:
     """Everything the coordinator fetches in one update cycle."""
 
@@ -128,7 +169,7 @@ class LibrusData:
     grade_categories: dict[int, GradeCategoryData]
     notes: list[NoteData]
     attendances: list[AttendanceData]
-    attendance_types: dict[int, str]
+    attendance_types: dict[int, AttendanceTypeData]
     timetable: dict[date, list[LessonData]]
     homeworks: list[HomeworkEventData]
     school_notices: list[SchoolNoticeData]
@@ -136,3 +177,6 @@ class LibrusData:
     subjects: dict[int, str]
     teachers: dict[int, str]
     classrooms: dict[int, str]
+    messages_available: bool = False
+    unread_message_count: int = 0
+    messages: list[MessageData] = field(default_factory=list)

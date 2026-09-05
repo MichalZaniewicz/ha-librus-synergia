@@ -31,6 +31,8 @@ TO_REDACT = {
     "first_name",
     "last_name",
     "subject",
+    "sender_name",
+    "topic",
 }
 
 

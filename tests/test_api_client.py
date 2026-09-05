@@ -1,21 +1,31 @@
-"""Tests for LibrusApiClient against a mocked HTTP layer (aioresponses).
+"""Tests for LibrusApiClient against a directly-mocked aiohttp session.
 
 Deliberately does not depend on Home Assistant or pytest-homeassistant-
-custom-component - this suite only needs aiohttp + aioresponses, so it can
-run without a full HA install. The full HA-integrated test suite (config
-flow, coordinator, entities) is a follow-up item - see the project notes.
+custom-component - this suite only needs aiohttp, so it can run without a
+full HA install.
+
+Mocks `aiohttp.ClientSession.get`/`.post` directly (a dict of URL -> canned
+response) rather than using `aioresponses`: that library's last release
+(0.7.9) doesn't support aiohttp>=3.11's `ClientResponse.__init__` signature
+change, and pinning aiohttp back to satisfy it drags `pytest-homeassistant-
+custom-component`'s own dependency resolution down to a homeassistant
+release that predates `ConfigFlowResult` - breaking every OTHER test file
+in this suite that imports from `homeassistant.config_entries`. Direct
+session mocking has no aiohttp-version dependency at all.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 from urllib.parse import urljoin
 
 import aiohttp
 import pytest
-from aioresponses import aioresponses
 from yarl import URL
 
 # See scripts/manual_smoke_test.py for why this is appended, not inserted at
@@ -45,30 +55,114 @@ AUTHORIZATION_REDIRECT_URL = (
 )
 
 
-def _mock_successful_login(session: aiohttp.ClientSession, mocked: aioresponses) -> None:
+class _FakeResponse:
+    """A minimal stand-in for `aiohttp.ClientResponse` - usable directly as
+    its own async context manager, matching what `async with session.get(
+    ...) as response:` needs."""
+
+    def __init__(
+        self,
+        *,
+        status: int = 200,
+        json_data: Any = None,
+        text_data: str = "",
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.status = status
+        self.headers = headers or {}
+        self.url = URL("https://example.invalid/")
+        self._text = json.dumps(json_data) if json_data is not None else text_data
+
+    async def json(self, content_type: str | None = "application/json") -> Any:
+        # Mirrors real aiohttp: content_type=None bypasses the content-type
+        # check but still parses the body as JSON, raising a plain
+        # ValueError (json.JSONDecodeError) if it isn't valid JSON.
+        return json.loads(self._text)
+
+    async def text(self) -> str:
+        return self._text
+
+    async def __aenter__(self) -> "_FakeResponse":
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> bool:
+        return False
+
+    def __await__(self):
+        # client.py uses both `resp = await session.get(...)` and
+        # `async with session.get(...) as resp:` in different places -
+        # real aiohttp's request context manager supports both, so this
+        # fake must too.
+        async def _self() -> "_FakeResponse":
+            return self
+
+        return _self().__await__()
+
+
+class _MockedSession:
+    """Patches `session.get`/`session.post` to look up a canned
+    `_FakeResponse` by exact URL, registered ahead of time via `.get()`/
+    `.post()` - the same shape the old aioresponses-based tests used."""
+
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        self._session = session
+        self._gets: dict[str, _FakeResponse] = {}
+        self._posts: dict[str, _FakeResponse] = {}
+        self._patches = [
+            patch.object(session, "get", side_effect=self._handle_get),
+            patch.object(session, "post", side_effect=self._handle_post),
+        ]
+
+    def get(self, url: str, **kwargs: Any) -> None:
+        self._gets[url] = _FakeResponse(**kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> None:
+        self._posts[url] = _FakeResponse(**kwargs)
+
+    def _handle_get(self, url: Any, **_kwargs: Any) -> _FakeResponse:
+        response = self._gets.get(str(url))
+        if response is None:
+            raise AssertionError(f"Unexpected GET {url}")
+        return response
+
+    def _handle_post(self, url: Any, **_kwargs: Any) -> _FakeResponse:
+        response = self._posts.get(str(url))
+        if response is None:
+            raise AssertionError(f"Unexpected POST {url}")
+        return response
+
+    def __enter__(self) -> "_MockedSession":
+        for p in self._patches:
+            p.start()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        for p in self._patches:
+            p.stop()
+
+
+def _mock_successful_login(session: aiohttp.ClientSession, mocked: _MockedSession) -> None:
     mocked.get(
         SYNERGIA_PORTAL_LOGIN_URL,
         status=302,
         headers={"Location": AUTHORIZATION_REDIRECT_URL},
     )
-    mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, body="")
+    mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, text_data="")
     mocked.post(
         API_OAUTH_AUTHORIZATION_URL,
         status=200,
-        payload={"status": "ok", "goTo": "/OAuth/Authorization/2FA?client_id=46"},
+        json_data={"status": "ok", "goTo": "/OAuth/Authorization/2FA?client_id=46"},
     )
     hop1 = urljoin(API_OAUTH_AUTHORIZATION_WITH_SCOPE_URL, "/OAuth/Authorization/2FA?client_id=46")
     hop2 = "https://api.librus.pl/OAuth/Authorization/PerformLogin?client_id=46"
     final = "https://synergia.librus.pl/loguj/portalRodzina?code=abc&state=fakestate123"
     mocked.get(hop1, status=302, headers={"Location": hop2})
     mocked.get(hop2, status=302, headers={"Location": final})
-    mocked.get(final, status=200, body="<html>logged in</html>")
-    # aioresponses (0.7.9, against aiohttp 3.10) doesn't drive aiohttp's real
-    # Set-Cookie -> cookie-jar pipeline the way a live server response does
-    # (confirmed live against the real Librus servers on 2026-09-05 that
-    # this DOES happen for real) - seed the jar directly here to exercise
-    # the client's post-login cookie-jar reads without fighting the mocking
-    # library's gap.
+    mocked.get(final, status=200, text_data="<html>logged in</html>")
+    # The fake responses above carry no real Set-Cookie handling - seed the
+    # jar directly to exercise the client's post-login cookie-jar read
+    # (confirmed live against the real Librus servers on 2026-09-05 that a
+    # genuine response DOES populate this).
     session.cookie_jar.update_cookies(
         {"oauth_token": "faketoken123"}, response_url=URL("https://synergia.librus.pl/")
     )
@@ -77,7 +171,7 @@ def _mock_successful_login(session: aiohttp.ClientSession, mocked: aioresponses)
 @pytest.mark.asyncio
 async def test_login_success_sets_session_valid() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             _mock_successful_login(session, mocked)
             client = LibrusApiClient(session, "1234567u")
             session_data = await client.async_login("correct-password")
@@ -91,18 +185,14 @@ async def test_login_success_sets_session_valid() -> None:
 @pytest.mark.asyncio
 async def test_login_rejected_credentials_raises() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             mocked.get(
                 SYNERGIA_PORTAL_LOGIN_URL,
                 status=302,
                 headers={"Location": AUTHORIZATION_REDIRECT_URL},
             )
-            mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, body="")
-            mocked.post(
-                API_OAUTH_AUTHORIZATION_URL,
-                status=200,
-                payload={"status": "error"},
-            )
+            mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, text_data="")
+            mocked.post(API_OAUTH_AUTHORIZATION_URL, status=200, json_data={"status": "error"})
             client = LibrusApiClient(session, "1234567u")
             with pytest.raises(LibrusInvalidCredentialsError):
                 await client.async_login("wrong-password")
@@ -113,18 +203,17 @@ async def test_login_rejected_credentials_raises() -> None:
 @pytest.mark.asyncio
 async def test_login_captcha_marker_raises() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             mocked.get(
                 SYNERGIA_PORTAL_LOGIN_URL,
                 status=302,
                 headers={"Location": AUTHORIZATION_REDIRECT_URL},
             )
-            mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, body="")
+            mocked.get(AUTHORIZATION_REDIRECT_URL, status=200, text_data="")
             mocked.post(
                 API_OAUTH_AUTHORIZATION_URL,
                 status=200,
-                body='{"status": "error", "message": "please solve the recaptcha"}',
-                content_type="application/json",
+                json_data={"status": "error", "message": "please solve the recaptcha"},
             )
             client = LibrusApiClient(session, "1234567u")
             with pytest.raises(LibrusCaptchaRequiredError):
@@ -134,7 +223,7 @@ async def test_login_captcha_marker_raises() -> None:
 @pytest.mark.asyncio
 async def test_get_grades_after_login() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             _mock_successful_login(session, mocked)
             client = LibrusApiClient(session, "1234567u")
             await client.async_login("correct-password")
@@ -142,7 +231,7 @@ async def test_get_grades_after_login() -> None:
             mocked.get(
                 f"{DATA_BASE_URL}/Grades",
                 status=200,
-                payload={"Grades": [{"Id": 1, "Grade": "5", "Category": {"Id": 10}}]},
+                json_data={"Grades": [{"Id": 1, "Grade": "5", "Category": {"Id": 10}}]},
             )
             payload = await client.async_get_grades()
 
@@ -152,12 +241,12 @@ async def test_get_grades_after_login() -> None:
 @pytest.mark.asyncio
 async def test_maintenance_response_raises() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             _mock_successful_login(session, mocked)
             client = LibrusApiClient(session, "1234567u")
             await client.async_login("correct-password")
 
-            mocked.get(f"{DATA_BASE_URL}/Grades", status=503, body="")
+            mocked.get(f"{DATA_BASE_URL}/Grades", status=503, text_data="")
             with pytest.raises(LibrusServerMaintenanceError):
                 await client.async_get_grades()
 
@@ -165,12 +254,12 @@ async def test_maintenance_response_raises() -> None:
 @pytest.mark.asyncio
 async def test_non_json_response_raises_unexpected() -> None:
     async with aiohttp.ClientSession() as session:
-        with aioresponses() as mocked:
+        with _MockedSession(session) as mocked:
             _mock_successful_login(session, mocked)
             client = LibrusApiClient(session, "1234567u")
             await client.async_login("correct-password")
 
-            mocked.get(f"{DATA_BASE_URL}/Grades", status=200, body="<html>not json</html>")
+            mocked.get(f"{DATA_BASE_URL}/Grades", status=200, text_data="<html>not json</html>")
             with pytest.raises(LibrusUnexpectedResponseError):
                 await client.async_get_grades()
 

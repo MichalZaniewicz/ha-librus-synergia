@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from homeassistant.const import Platform
 
 DOMAIN = "librus_synergia"
@@ -30,11 +28,12 @@ MAX_SCAN_INTERVAL_MINUTES = 180
 # second one.
 LUCKY_NUMBER_PUBLISH_HOUR = 15
 
-# How long "seen id" bookkeeping for new-item events is kept before pruning.
-SEEN_ID_RETENTION = timedelta(days=700)  # ~2 school years
-
+# New-item bus events. Seen-id bookkeeping is in-memory only (see
+# coordinator.py's `_fire_for_new_ids`) - a HA restart just re-seeds
+# quietly, so there's nothing to prune across restarts.
 EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
+EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
 
 ATTR_SUBJECT_ID = "subject_id"

@@ -28,6 +28,7 @@ from .const import (
     ENDPOINT_CLASSROOMS,
     ENDPOINT_GRADE_CATEGORIES,
     ENDPOINT_GRADES,
+    ENDPOINT_HOMEWORK_ASSIGNMENTS,
     ENDPOINT_HOMEWORKS,
     ENDPOINT_LUCKY_NUMBERS,
     ENDPOINT_ME,
@@ -38,6 +39,9 @@ from .const import (
     ENDPOINT_TIMETABLES,
     LOGIN_HEADERS,
     MAX_OAUTH_REDIRECTS,
+    MESSAGES_ACCESS_DENIED_MARKER,
+    MESSAGES_BASE_URL,
+    MESSAGES_BOOTSTRAP_URL,
     OAUTH_TOKEN_COOKIE,
     PERSISTED_COOKIE_NAMES,
     SESSION_EXPIRY_SAFETY_MARGIN_SECONDS,
@@ -219,23 +223,30 @@ class LibrusApiClient:
     async def _async_request(
         self, endpoint: str, *, params: dict[str, str] | None = None
     ) -> dict[str, Any]:
-        url = f"{DATA_BASE_URL}/{endpoint}"
+        return await self._async_request_url(f"{DATA_BASE_URL}/{endpoint}", params=params)
+
+    async def _async_request_url(
+        self, url: str, *, params: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """Same as `_async_request` but for a fully-formed URL, not just an
+        endpoint under the Synergia gateway - needed for the separate
+        Wiadomości subsystem, which lives on its own domain."""
         try:
             async with self._session.get(
                 url, headers={"User-Agent": USER_AGENT}, params=params
             ) as response:
                 if response.status == 503:
                     raise LibrusServerMaintenanceError(
-                        f"Librus is under maintenance (HTTP 503) on {endpoint}."
+                        f"Librus is under maintenance (HTTP 503) on {url}."
                     )
                 payload = await self._async_read_json(response)
                 if response.status in (401, 403):
                     raise LibrusInvalidCredentialsError(
-                        f"Session rejected on {endpoint} (HTTP {response.status})."
+                        f"Session rejected on {url} (HTTP {response.status})."
                     )
                 if response.status >= 400:
                     raise LibrusUnexpectedResponseError(
-                        f"HTTP {response.status} from {endpoint}: {payload!r}"
+                        f"HTTP {response.status} from {url}: {payload!r}"
                     )
         except aiohttp.ClientError as err:
             raise LibrusConnectionError(str(err)) from err
@@ -299,3 +310,49 @@ class LibrusApiClient:
     async def async_get_classrooms(self) -> dict[str, Any]:
         """UNVERIFIED endpoint name - see scripts/manual_smoke_test.py."""
         return await self._async_request(ENDPOINT_CLASSROOMS)
+
+    async def async_get_homework_assignments(self) -> dict[str, Any]:
+        """UNVERIFIED - see const.py's note on ENDPOINT_HOMEWORK_ASSIGNMENTS
+        and scripts/manual_smoke_test.py."""
+        return await self._async_request(ENDPOINT_HOMEWORK_ASSIGNMENTS)
+
+    # ------------------------------------------------------------------
+    # Wiadomości (messages) - a separate subsystem, own domain/session.
+    #
+    # IMPORTANT, deliberate: there is no method here to fetch a single
+    # message's full body (`/{mailbox}/messages/{id}`), only list/count
+    # endpoints. Fetching an individual message almost certainly marks it
+    # read server-side in the real Librus inbox - so this integration only
+    # ever surfaces subject/sender/date/read-status previews, never
+    # silently marking anything as read just because a sensor polled it.
+    # ------------------------------------------------------------------
+
+    async def async_bootstrap_messages(self) -> bool:
+        """One-time-per-login bootstrap for the Wiadomości subsystem.
+
+        Returns False (not an error) if this account's school doesn't have
+        the messages module enabled - some don't. Caller decides how often
+        to call this (see coordinator.py); this method does no caching.
+        """
+        try:
+            async with self._session.get(
+                MESSAGES_BOOTSTRAP_URL, headers={"User-Agent": USER_AGENT}
+            ) as response:
+                text = await response.text()
+        except aiohttp.ClientError as err:
+            raise LibrusConnectionError(str(err)) from err
+        self._raise_if_captcha(text, "messages bootstrap")
+        return MESSAGES_ACCESS_DENIED_MARKER not in text
+
+    async def async_get_unread_messages_count(self, mailbox: str = "inbox") -> dict[str, Any]:
+        return await self._async_request_url(f"{MESSAGES_BASE_URL}/{mailbox}/unreadMessagesCount")
+
+    async def async_get_messages(
+        self, mailbox: str = "inbox", *, limit: int = 10, unread_only: bool = False
+    ) -> dict[str, Any]:
+        params = {"limit": str(limit)}
+        if unread_only:
+            params["unreadOnly"] = "1"
+        return await self._async_request_url(
+            f"{MESSAGES_BASE_URL}/{mailbox}/messages", params=params
+        )
