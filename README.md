@@ -46,7 +46,7 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` Unread announcements | Count, with recent titles |
 | `sensor` Behaviour notices | Count, with a short recent-items attribute |
-| `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones. Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
+| `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` School | Name, town/street, head teacher, contact details |
 | `sensor` Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `calendar` Timetable | Lesson plan, including known cancellations/substitutions |

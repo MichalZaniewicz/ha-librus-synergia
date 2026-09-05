@@ -122,6 +122,7 @@ async def test_messages_unavailable_school_is_non_fatal(hass) -> None:
 
     assert data.messages_available is False
     assert data.unread_message_count == 0
+    assert data.unread_messages_by_mailbox == {}
     assert data.messages == []
     client.async_get_unread_messages_count.assert_not_called()
 
@@ -129,7 +130,9 @@ async def test_messages_unavailable_school_is_non_fatal(hass) -> None:
 async def test_messages_parsed_when_available(hass) -> None:
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = True
-    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_unread_messages_count.return_value = {
+        "data": {"inbox": 1, "notes": 2, "alerts": 0}
+    }
     client.async_get_messages.return_value = {
         "data": [
             {
@@ -149,6 +152,10 @@ async def test_messages_parsed_when_available(hass) -> None:
 
     assert data.messages_available is True
     assert data.unread_message_count == 1
+    assert data.unread_messages_by_mailbox["inbox"] == 1
+    assert data.unread_messages_by_mailbox["notes"] == 2
+    assert data.unread_messages_by_mailbox["alerts"] == 0
+    assert data.unread_messages_by_mailbox["trash"] == 0
     assert len(data.messages) == 1
     assert data.messages[0].id == "42"
     assert data.messages[0].content == "Dzień dobry"

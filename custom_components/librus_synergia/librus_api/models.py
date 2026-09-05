@@ -224,6 +224,7 @@ class LibrusData:
     classrooms: dict[int, str]
     messages_available: bool = False
     unread_message_count: int = 0
+    unread_messages_by_mailbox: dict[str, int] = field(default_factory=dict)
     messages: list[MessageData] = field(default_factory=list)
     school: SchoolData | None = None
     school_class: ClassData | None = None

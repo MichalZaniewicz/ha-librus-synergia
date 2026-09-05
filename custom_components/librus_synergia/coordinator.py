@@ -160,7 +160,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         lucky_number = await self._async_get_lucky_number(today)
         await self._async_refresh_reference_data()
-        unread_count, messages = await self._async_get_messages()
+        unread_count, unread_by_mailbox, messages = await self._async_get_messages()
 
         grades = _parse_grades(grades_payload)
         school_notices = _parse_school_notices(notices_payload)
@@ -183,6 +183,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             classrooms=self._cached_classrooms,
             messages_available=self._messages_available,
             unread_message_count=unread_count,
+            unread_messages_by_mailbox=unread_by_mailbox,
             messages=messages,
             school=self._cached_school,
             school_class=self._cached_class,
@@ -269,9 +270,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
         self._reference_data_fetched_at = now
 
-    async def _async_get_messages(self) -> tuple[int, list[MessageData]]:
-        """Fetch unread count + a recent-messages preview from the separate
-        Wiadomości subsystem.
+    async def _async_get_messages(self) -> tuple[int, dict[str, int], list[MessageData]]:
+        """Fetch unread counts (per mailbox) + a recent-messages preview
+        from the separate Wiadomości subsystem.
 
         Bootstraps the dedicated session cookie once per login (not every
         cycle). Some schools don't have this Librus module enabled at all -
@@ -288,7 +289,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._messages_available = False
             self._messages_bootstrapped = True
         if not self._messages_available:
-            return 0, []
+            return 0, {}, []
 
         try:
             unread_payload, list_payload = await asyncio.gather(
@@ -297,7 +298,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
         except LibrusError:
             _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
-            return 0, []
+            return 0, {}, []
         return _parse_messages(unread_payload, list_payload)
 
     def _async_fire_new_item_events(
@@ -642,23 +643,40 @@ def _decode_message_content(raw: str) -> str:
         return raw
 
 
+# CONFIRMED live: the unread-count response is a per-mailbox breakdown
+# ({"data": {"inbox": N, "notes": N, "alerts": N, "substitutions": N,
+# "absences": N, "justifications": N, "trash": N, "archiveInbox": N, ...}}),
+# not a flat number. The non-"archive*" ones are surfaced - "substitutions"
+# in particular is likely the single most actionable one for a parent
+# (schedule changes), and it costs nothing extra since this whole response
+# is already being fetched for the plain inbox count.
+_MESSAGE_MAILBOXES = (
+    "inbox",
+    "notes",
+    "alerts",
+    "substitutions",
+    "absences",
+    "justifications",
+    "trash",
+)
+
+
 def _parse_messages(
     unread_payload: dict[str, Any], list_payload: dict[str, Any]
-) -> tuple[int, list[MessageData]]:
-    # CONFIRMED live: unread count is a per-mailbox breakdown
-    # ({"data": {"inbox": N, "notes": N, "alerts": N, ...}}), not a flat
-    # number - only "inbox" (the main mailbox) is surfaced for now.
-    unread_count = 0
+) -> tuple[int, dict[str, int], list[MessageData]]:
+    unread_by_mailbox: dict[str, int] = {}
     unread_data = unread_payload.get("data")
     if isinstance(unread_data, dict):
-        try:
-            unread_count = int(unread_data.get("inbox") or 0)
-        except (TypeError, ValueError):
-            unread_count = 0
+        for mailbox in _MESSAGE_MAILBOXES:
+            try:
+                unread_by_mailbox[mailbox] = int(unread_data.get(mailbox) or 0)
+            except (TypeError, ValueError):
+                unread_by_mailbox[mailbox] = 0
+    unread_count = unread_by_mailbox.get("inbox", 0)
 
     items = list_payload.get("data")
     if not isinstance(items, list):
-        return unread_count, []
+        return unread_count, unread_by_mailbox, []
     messages: list[MessageData] = []
     for item in items:
         if not isinstance(item, dict) or item.get("messageId") is None:
@@ -677,7 +695,7 @@ def _parse_messages(
                 has_attachment=bool(item.get("isAnyFileAttached")),
             )
         )
-    return unread_count, messages
+    return unread_count, unread_by_mailbox, messages
 
 
 def _parse_school(payload: dict[str, Any]) -> SchoolData | None:

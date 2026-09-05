@@ -381,6 +381,7 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         return {
+            "mailbox_breakdown": dict(self.coordinator.data.unread_messages_by_mailbox),
             "recent": [
                 {
                     "sender": m.sender_name,

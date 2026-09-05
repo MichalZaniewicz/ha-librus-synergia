@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- The unread-messages sensor's `mailbox_breakdown` attribute now shows the
+  per-mailbox unread count (inbox/notes/alerts/substitutions/absences/
+  justifications/trash) - the Wiadomości unread-count call already returns
+  all of these, so this is exposed at zero extra API cost.
+
 ## 0.4.0
 
 Pulled the complete feature list from szkolny.eu's own open-sourced app

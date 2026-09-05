@@ -90,6 +90,24 @@ async def test_unread_messages_sensor_unavailable_when_school_has_no_module(hass
     assert hass.states.get(entity_id).state == "unavailable"
 
 
+async def test_unread_messages_sensor_exposes_mailbox_breakdown(hass) -> None:
+    client = build_mock_client(
+        async_bootstrap_messages=True,
+        async_get_unread_messages_count={
+            "data": {"inbox": 1, "notes": 2, "alerts": 0}
+        },
+        async_get_messages={"data": []},
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "unread_messages")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    assert state.attributes["mailbox_breakdown"]["inbox"] == 1
+    assert state.attributes["mailbox_breakdown"]["notes"] == 2
+    assert state.attributes["mailbox_breakdown"]["trash"] == 0
+
+
 async def test_school_and_class_sensors(hass) -> None:
     client = build_mock_client(
         async_get_schools={
