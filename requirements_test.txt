@@ -1,0 +1,15 @@
+pytest
+pytest-asyncio
+aioresponses
+# Pin below aiohttp 3.11: aioresponses 0.7.9 doesn't support the
+# ClientResponse.__init__ signature change in newer aiohttp (missing
+# `stream_writer` kwarg) - confirmed 2026-09-05. Only affects this
+# standalone test venv, not the shipped integration (which declares no
+# aiohttp requirement at all - HA core provides it).
+aiohttp<3.11
+
+# Needed for the full HA-integrated suite (config flow, coordinator,
+# entities) - not yet used by tests/test_api_client.py, which only needs
+# aiohttp + aioresponses above and runs without a HA install.
+pytest-homeassistant-custom-component
+freezegun

@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Librus Synergia (nieoficjalna)",
+        "description": "Zaloguj się swoim loginem Librus (np. \"1234567u\") i hasłem. Integracja korzysta z prywatnego API webowego Librusa i może naruszać regulamin Librusa - używasz własnego konta na własne ryzyko. Sesja zwykle wygasa po około dobie i nie da się jej cicho odnowić bez hasła, dlatego - inaczej niż w niektórych integracjach - hasło JEST zapisywane (razem z sesją), żeby umożliwić automatyczne, codzienne odnawianie logowania; nigdy nie opuszcza Twojej instancji Home Assistant.",
+        "data": {
+          "username": "Login",
+          "password": "Hasło"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne uwierzytelnienie - Librus Synergia",
+        "description": "Nie udało się odnowić zapisanej sesji dla {login}. Podaj hasło ponownie, aby się zalogować.",
+        "data": {
+          "password": "Hasło"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Logowanie odrzucone. Sprawdź login i hasło.",
+      "captcha_needed": "Librus wymaga rozwiązania captchy, czego ta integracja nie potrafi zrobić automatycznie. Spróbuj ponownie później albo zaloguj się najpierw raz przez oficjalną aplikację/stronę Librusa.",
+      "account_action_required": "Twoje konto Librus wymaga najpierw akcji na stronie Librusa (akceptacja regulaminu lub zmiana hasła), a potem spróbuj ponownie.",
+      "cannot_connect": "Nie udało się połączyć z serwerami Librusa.",
+      "unknown": "Nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "To konto Librus jest już skonfigurowane.",
+      "reauth_successful": "Ponowne uwierzytelnienie powiodło się."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Librus Synergia",
+        "data": {
+          "scan_interval": "Częstotliwość odpytywania (minuty)"
+        },
+        "data_description": {
+          "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "overall_average": { "name": "Średnia ocen" },
+      "subject_average": { "name": "Średnia - {subject}" },
+      "attendance": { "name": "Frekwencja" },
+      "lucky_number": { "name": "Szczęśliwy numerek" },
+      "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },
+      "behaviour_notices": { "name": "Uwagi" }
+    },
+    "calendar": {
+      "timetable": { "name": "Plan lekcji" },
+      "agenda": { "name": "Terminarz" }
+    }
+  }
+}

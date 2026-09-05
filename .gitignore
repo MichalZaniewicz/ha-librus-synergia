@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local tooling / project journal (kept local, never committed)
+.claude/
+CLAUDE.md
+
+# Real Librus credentials must never be committed. manual_smoke_test.py reads
+# these from the environment, never from a file.
+.env
+
+# Home Assistant log dumps pulled in for debugging. These carry personal data
+# (student names, grades, message bodies, device ids) and must never be committed.
+*.log
+*.log.[0-9]
+homeassistant_logs*.txt
+home-assistant*.log*
+ha_logs*.txt

@@ -1,0 +1,138 @@
+"""Typed shapes for parsed Librus API data.
+
+Field names come from szkolny-eu/szkolny-android's source reading the same
+`api.librus.pl/2.0` endpoints this client calls. Parsing is defensive
+(missing keys default sensibly) because Librus doesn't publish a schema and
+per-school variations are known to exist upstream (see RustySnek/librus-apix's
+README: "some schools have different librus setups which may cause
+errors/warnings").
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+
+
+@dataclass(slots=True)
+class MeData:
+    account_id: int | None
+    first_name: str
+    last_name: str
+
+    @property
+    def display_name(self) -> str:
+        name = f"{self.first_name} {self.last_name}".strip()
+        return name or "Uczeń"
+
+
+@dataclass(slots=True)
+class GradeCategoryData:
+    id: int
+    name: str
+    count_to_average: bool
+    weight: int
+
+
+@dataclass(slots=True)
+class GradeData:
+    id: int
+    value: str
+    category_id: int | None
+    subject_id: int | None
+    semester: int | None
+    add_date: str | None
+    is_semester_proposition: bool
+    is_final_proposition: bool
+    comments: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class NoteData:
+    """A behaviour notice ("uwaga").
+
+    `positive`'s exact enum meaning (which of 0/1/2 is positive/neutral/
+    negative) is UNVERIFIED - see manual_smoke_test.py. Kept as the raw int
+    until confirmed against a live account.
+    """
+
+    id: int
+    text: str
+    category_id: int | None
+    teacher_id: int | None
+    date: str | None
+    positive: int | None
+
+
+@dataclass(slots=True)
+class AttendanceData:
+    id: int
+    lesson_id: int | None
+    lesson_no: int | None
+    date: str | None
+    semester: int | None
+    type_id: int | None
+
+
+@dataclass(slots=True)
+class LessonData:
+    lesson_no: int | None
+    hour_from: str | None
+    hour_to: str | None
+    subject_id: int | None
+    teacher_id: int | None
+    classroom_id: int | None
+    is_canceled: bool
+    is_substitution: bool
+
+
+@dataclass(slots=True)
+class HomeworkEventData:
+    """An agenda/event entry from the `HomeWorks` endpoint - despite the
+    name, this is Librus's general events feed (tests, trips, homework),
+    not the (disabled-upstream) `HomeWorkAssignments` endpoint."""
+
+    id: int
+    date: str | None
+    content: str
+    category_id: int | None
+    subject_id: int | None
+    time_from: str | None
+
+
+@dataclass(slots=True)
+class SchoolNoticeData:
+    # CONFIRMED live: unlike every other endpoint, ids here are strings
+    # (e.g. "LID-NBOARD-NOTICE-9093-..."), not ints.
+    id: str
+    subject: str
+    content: str
+    start_date: str | None
+    end_date: str | None
+    creation_date: str | None
+    was_read: bool = False
+
+
+@dataclass(slots=True)
+class LuckyNumberData:
+    day: str | None
+    number: int
+
+
+@dataclass(slots=True)
+class LibrusData:
+    """Everything the coordinator fetches in one update cycle."""
+
+    me: MeData
+    grades: list[GradeData]
+    grade_categories: dict[int, GradeCategoryData]
+    notes: list[NoteData]
+    attendances: list[AttendanceData]
+    attendance_types: dict[int, str]
+    timetable: dict[date, list[LessonData]]
+    homeworks: list[HomeworkEventData]
+    school_notices: list[SchoolNoticeData]
+    lucky_number: LuckyNumberData | None
+    subjects: dict[int, str]
+    teachers: dict[int, str]
+    classrooms: dict[int, str]

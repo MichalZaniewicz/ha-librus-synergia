@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Librus Synergia (unofficial)",
+        "description": "Log in with your Librus login (e.g. \"1234567u\") and password. This uses Librus's private web API and may violate Librus's Terms of Service - use your own account at your own risk. Your session normally expires after about a day with no way to silently renew it without your password, so - unlike some integrations - your password IS stored (alongside the session) to allow unattended daily refresh; it never leaves your Home Assistant instance.",
+        "data": {
+          "username": "Login",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Librus Synergia",
+        "description": "The saved session for {login} could not be renewed. Enter the password again to log in.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Login was rejected. Check the login/password.",
+      "captcha_needed": "Librus is asking for a captcha, which this integration cannot solve automatically. Try again later, or log in once via the official Librus app/website first.",
+      "account_action_required": "Your Librus account needs an action on Librus's own site first (accept rules, or change your password), then try again.",
+      "cannot_connect": "Could not reach the Librus servers.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This Librus account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Librus Synergia options",
+        "data": {
+          "scan_interval": "Poll interval (minutes)"
+        },
+        "data_description": {
+          "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "overall_average": { "name": "Overall grade average" },
+      "subject_average": { "name": "{subject} average" },
+      "attendance": { "name": "Attendance" },
+      "lucky_number": { "name": "Lucky number" },
+      "unread_announcements": { "name": "Unread announcements" },
+      "behaviour_notices": { "name": "Behaviour notices" }
+    },
+    "calendar": {
+      "timetable": { "name": "Timetable" },
+      "agenda": { "name": "Agenda" }
+    }
+  }
+}
