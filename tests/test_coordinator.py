@@ -15,6 +15,7 @@ from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordi
 from custom_components.librus_synergia.librus_api import (
     LibrusConnectionError,
     LibrusInvalidCredentialsError,
+    LibrusSessionExpiredError,
 )
 
 from .conftest import build_mock_client, make_config_entry
@@ -108,6 +109,48 @@ async def test_connection_error_raises_update_failed(hass) -> None:
     coordinator = _make_coordinator(hass, client)
 
     with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_session_expired_mid_cycle_recovers_via_forced_relogin(hass) -> None:
+    """CONFIRMED live (2026-09-05): Librus's real session lifetime can run
+    shorter than our own assumed-lifetime clock - a data endpoint rejects
+    the session mid-cycle even though `async_ensure_session_valid` thought
+    it was still fresh. The coordinator must force one re-login and retry
+    silently, WITHOUT ever asking the user to reauth, as long as the
+    forced re-login itself succeeds."""
+    client = build_mock_client()
+    client.async_get_grades.side_effect = [
+        LibrusSessionExpiredError("session dead"),
+        GRADE_PAYLOAD,
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.grades) == 1
+    # First call is the normal not-yet-expired check; second is the forced
+    # re-login triggered by the session-expired error.
+    assert client.async_ensure_session_valid.call_count == 2
+    _, kwargs = client.async_ensure_session_valid.call_args
+    assert kwargs.get("force") is True
+
+
+async def test_session_expired_and_relogin_also_fails_raises_auth_failed(hass) -> None:
+    """If the forced re-login itself fails (genuinely wrong password,
+    captcha, account action required), THAT must surface as a real reauth
+    prompt - there's nothing more to retry automatically."""
+    client = build_mock_client()
+    client.async_get_grades.side_effect = LibrusSessionExpiredError("session dead")
+
+    async def ensure_session_valid(password, *, force: bool = False):
+        if force:
+            raise LibrusInvalidCredentialsError("bad password")
+
+    client.async_ensure_session_valid.side_effect = ensure_session_valid
+    coordinator = _make_coordinator(hass, client)
+
+    with pytest.raises(ConfigEntryAuthFailed):
         await coordinator._async_update_data()
 
 

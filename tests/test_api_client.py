@@ -46,6 +46,7 @@ from librus_api.exceptions import (  # noqa: E402
     LibrusCaptchaRequiredError,
     LibrusInvalidCredentialsError,
     LibrusServerMaintenanceError,
+    LibrusSessionExpiredError,
     LibrusUnexpectedResponseError,
 )
 
@@ -236,6 +237,26 @@ async def test_get_grades_after_login() -> None:
             payload = await client.async_get_grades()
 
     assert payload["Grades"][0]["Grade"] == "5"
+
+
+@pytest.mark.asyncio
+async def test_data_fetch_session_rejected_raises_session_expired() -> None:
+    """CONFIRMED live (2026-09-05): a data endpoint can reject an
+    already-established session (HTTP 401/403) - e.g. Librus's real session
+    lifetime running shorter than our own conservative elapsed-time
+    estimate. This must raise LibrusSessionExpiredError, NOT
+    LibrusInvalidCredentialsError - the coordinator treats the two very
+    differently (force a silent re-login + retry vs. surface Home
+    Assistant's reauth flow to the user)."""
+    async with aiohttp.ClientSession() as session:
+        with _MockedSession(session) as mocked:
+            _mock_successful_login(session, mocked)
+            client = LibrusApiClient(session, "1234567u")
+            await client.async_login("correct-password")
+
+            mocked.get(f"{DATA_BASE_URL}/Grades", status=401, json_data={})
+            with pytest.raises(LibrusSessionExpiredError):
+                await client.async_get_grades()
 
 
 @pytest.mark.asyncio

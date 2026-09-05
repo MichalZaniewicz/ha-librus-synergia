@@ -32,7 +32,7 @@ from .const import (
     EVENT_NEW_NOTE,
     LUCKY_NUMBER_PUBLISH_HOUR,
 )
-from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError
+from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSessionExpiredError
 from .librus_api.models import (
     AttendanceData,
     AttendanceTypeData,
@@ -130,33 +130,42 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         next_week_start = week_start + timedelta(days=7)
 
         try:
-            (
-                me_payload,
-                grades_payload,
-                categories_payload,
-                notes_payload,
-                attendances_payload,
-                attendance_types_payload,
-                timetable_this_week,
-                timetable_next_week,
-                homeworks_payload,
-                notices_payload,
-            ) = await asyncio.gather(
-                self._client.async_get_me(),
-                self._client.async_get_grades(),
-                self._client.async_get_grade_categories(),
-                self._client.async_get_notes(),
-                self._client.async_get_attendances(),
-                self._client.async_get_attendance_types(),
-                self._client.async_get_timetable(week_start),
-                self._client.async_get_timetable(next_week_start),
-                self._client.async_get_homeworks(),
-                self._client.async_get_school_notices(),
-            )
+            core_payloads = await self._async_fetch_core_payloads(week_start, next_week_start)
+        except LibrusSessionExpiredError:
+            # CONFIRMED live (2026-09-05): Librus's real session lifetime can
+            # run shorter than our own conservative ASSUMED_SESSION_LIFETIME_
+            # SECONDS estimate - `async_ensure_session_valid` above thought
+            # the session was still fresh, but a data endpoint rejected it
+            # anyway. The stored password is still there for exactly this
+            # case: force one fresh login and retry ONCE before ever
+            # bothering the user with Home Assistant's reauth flow - never
+            # retry more than once per cycle (avoid hammering Librus).
+            try:
+                await self._client.async_ensure_session_valid(
+                    self.config_entry.data[CONF_PASSWORD], force=True
+                )
+                core_payloads = await self._async_fetch_core_payloads(week_start, next_week_start)
+            except LibrusAuthError as err:
+                raise ConfigEntryAuthFailed(str(err)) from err
+            except LibrusError as err:
+                raise UpdateFailed(str(err)) from err
         except LibrusAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except LibrusError as err:
             raise UpdateFailed(str(err)) from err
+
+        (
+            me_payload,
+            grades_payload,
+            categories_payload,
+            notes_payload,
+            attendances_payload,
+            attendance_types_payload,
+            timetable_this_week,
+            timetable_next_week,
+            homeworks_payload,
+            notices_payload,
+        ) = core_payloads
 
         lucky_number = await self._async_get_lucky_number(today)
         await self._async_refresh_reference_data()
@@ -189,6 +198,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             school_class=self._cached_class,
             free_days=self._cached_free_days,
             homework_categories=self._cached_homework_categories,
+        )
+
+    async def _async_fetch_core_payloads(
+        self, week_start: date, next_week_start: date
+    ) -> tuple[Any, ...]:
+        """The core (non-optional) data fetch - grades/attendance/timetable/
+        agenda/announcements. Factored out of `_async_update_data` so it can
+        be retried once, unmodified, after a forced re-login (see there)."""
+        return await asyncio.gather(
+            self._client.async_get_me(),
+            self._client.async_get_grades(),
+            self._client.async_get_grade_categories(),
+            self._client.async_get_notes(),
+            self._client.async_get_attendances(),
+            self._client.async_get_attendance_types(),
+            self._client.async_get_timetable(week_start),
+            self._client.async_get_timetable(next_week_start),
+            self._client.async_get_homeworks(),
+            self._client.async_get_school_notices(),
         )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:

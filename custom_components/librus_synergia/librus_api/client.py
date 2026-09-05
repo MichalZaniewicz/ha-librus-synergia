@@ -62,6 +62,7 @@ from .exceptions import (
     LibrusConnectionError,
     LibrusInvalidCredentialsError,
     LibrusServerMaintenanceError,
+    LibrusSessionExpiredError,
     LibrusUnexpectedResponseError,
 )
 
@@ -147,9 +148,13 @@ class LibrusApiClient:
         age = time.time() - self._logged_in_at
         return age < (ASSUMED_SESSION_LIFETIME_SECONDS - SESSION_EXPIRY_SAFETY_MARGIN_SECONDS)
 
-    async def async_ensure_session_valid(self, password: str) -> None:
-        """Log in only if the assumed session lifetime has elapsed."""
-        if self.is_session_valid():
+    async def async_ensure_session_valid(self, password: str, *, force: bool = False) -> None:
+        """Log in if the assumed session lifetime has elapsed, or always if
+        `force=True` - used by the coordinator to recover from a
+        `LibrusSessionExpiredError` (Librus rejected the session earlier
+        than our own elapsed-time estimate expected, see that exception's
+        docstring)."""
+        if not force and self.is_session_valid():
             return
         await self.async_login(password)
 
@@ -249,7 +254,12 @@ class LibrusApiClient:
                     )
                 payload = await self._async_read_json(response)
                 if response.status in (401, 403):
-                    raise LibrusInvalidCredentialsError(
+                    # Distinct from LibrusInvalidCredentialsError (which
+                    # means the login handshake itself was rejected) - this
+                    # means an already-established session died mid-cycle,
+                    # which the stored password can very likely fix without
+                    # asking the user anything. See LibrusSessionExpiredError.
+                    raise LibrusSessionExpiredError(
                         f"Session rejected on {url} (HTTP {response.status})."
                     )
                 if response.status >= 400:

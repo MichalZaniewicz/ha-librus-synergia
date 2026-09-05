@@ -9,6 +9,7 @@ from .exceptions import (
     LibrusError,
     LibrusInvalidCredentialsError,
     LibrusServerMaintenanceError,
+    LibrusSessionExpiredError,
     LibrusUnexpectedResponseError,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "LibrusServerMaintenanceError",
     "LibrusAuthError",
     "LibrusInvalidCredentialsError",
+    "LibrusSessionExpiredError",
     "LibrusCaptchaRequiredError",
     "LibrusAccountActionRequiredError",
     "LibrusUnexpectedResponseError",

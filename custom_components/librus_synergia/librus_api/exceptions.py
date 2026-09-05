@@ -40,6 +40,21 @@ class LibrusInvalidCredentialsError(LibrusAuthError):
     redirect target and no captcha marker was seen)."""
 
 
+class LibrusSessionExpiredError(LibrusAuthError):
+    """A data endpoint rejected our session cookie (HTTP 401/403) mid-cycle,
+    separately from the login handshake itself.
+
+    CONFIRMED live (2026-09-05): Librus's real session lifetime can run
+    shorter than our own conservative `ASSUMED_SESSION_LIFETIME_SECONDS`
+    estimate (20h) - a `Timetables` fetch got a 401 while our own
+    elapsed-time clock still considered the session fresh. Deliberately a
+    SEPARATE class from `LibrusInvalidCredentialsError`: the stored
+    password is very likely still correct here, so the coordinator forces
+    one fresh login + retry (see coordinator.py::_async_update_data)
+    before ever surfacing Home Assistant's reauth flow to the user. Only
+    escalate to reauth if that forced re-login itself fails."""
+
+
 class LibrusCaptchaRequiredError(LibrusAuthError):
     """A captcha marker was seen somewhere in the login response. Not
     observed in our own live testing, but szkolny-android's Portal login

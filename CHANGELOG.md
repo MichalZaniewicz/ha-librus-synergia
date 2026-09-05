@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2
+
+- **Fixed:** a session that expired mid-cycle (Librus rejecting a data
+  request with HTTP 401/403) no longer immediately asks you to reauthenticate.
+  Librus's real session lifetime can apparently run shorter than this
+  integration's own conservative ~20h estimate - the coordinator now forces
+  one silent re-login with the already-stored password and retries before
+  ever surfacing Home Assistant's "reauthenticate" prompt. Reauth is only
+  shown if that forced re-login itself fails (genuinely wrong password,
+  captcha, or an account action required on Librus's own site) - something
+  that really does need your attention. Confirmed live: this previously
+  showed as "Autoryzacja wygasła" ("Authorization expired") in Home
+  Assistant's repairs list even though the stored password was still
+  correct.
+
 ## 0.4.1
 
 - The unread-messages sensor's `mailbox_breakdown` attribute now shows the
