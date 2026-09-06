@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.9
+
+- Fixed the automation blueprints table: all four "Import Blueprint" badges
+  looked identical and sat in an unlabeled row below the table, with no
+  visual way to tell which button imported which blueprint. Each badge now
+  sits inline in its own row, next to that blueprint's name and
+  description.
+- Split the Entities table's `sensor`/`calendar` type tag into its own
+  column instead of prefixing the entity name - the mixed tag+name text
+  was wrapping awkwardly on narrower screens.
+- Documented the companion **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
+  repo (22 cards, shipped this session) in the README - see the "Custom
+  Lovelace cards" section.
+
 ## 0.4.8
 
 Two more attributes needed by the new `ha-librus-synergia-cards` repo's

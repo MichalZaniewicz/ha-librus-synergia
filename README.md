@@ -38,23 +38,23 @@ Each child/student is a separate login and a separate integration entry.
 
 ## Entities
 
-| Entity | Notes |
-|---|---|
-| `sensor` Overall grade average | Weighted average across every subject |
-| `sensor` *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, latest grade (with any teacher comments), proposed/final semester grades |
-| `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
-| `sensor` Lucky number | Today's "szczęśliwy numerek" |
-| `sensor` Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
-| `sensor` Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
-| `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
-| `sensor` School | Name, town/street, head teacher, contact details |
-| `sensor` Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
-| `sensor` Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
-| `sensor` Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade's short code (e.g. "wz"), with a `recent` attribute (value/category/date/comments) |
-| `sensor` Descriptive grades | Count of non-numeric descriptive grades (this school has these enabled instead of point-scale grades), with a `recent` attribute (subject/value/date) |
-| `calendar` Timetable | Lesson plan, including known cancellations/substitutions |
-| `calendar` Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
-| `calendar` Free days | The whole school year's holidays/breaks |
+| Type | Entity | Notes |
+|---|---|---|
+| `sensor` | Overall grade average | Weighted average across every subject |
+| `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, latest grade (with any teacher comments), proposed/final semester grades |
+| `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
+| `sensor` | Lucky number | Today's "szczęśliwy numerek" |
+| `sensor` | Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
+| `sensor` | Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
+| `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
+| `sensor` | School | Name, town/street, head teacher, contact details |
+| `sensor` | Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
+| `sensor` | Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
+| `sensor` | Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade's short code (e.g. "wz"), with a `recent` attribute (value/category/date/comments) |
+| `sensor` | Descriptive grades | Count of non-numeric descriptive grades (this school has these enabled instead of point-scale grades), with a `recent` attribute (subject/value/date) |
+| `calendar` | Timetable | Lesson plan, including known cancellations/substitutions |
+| `calendar` | Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
+| `calendar` | Free days | The whole school year's holidays/breaks |
 
 New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Four ready-made [blueprints](#automation-blueprints) wrap these for you.
 
@@ -67,17 +67,12 @@ Four ready-to-import blueprints under
 the events above so you don't have to write the YAML yourself - each just asks for an
 *action* (e.g. "Send a notification"):
 
-| Blueprint | What it does |
-| --- | --- |
-| [New Grade Notification](blueprints/automation/librus_synergia/new_grade_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_grade` fires. |
-| [New Behaviour Notice Notification](blueprints/automation/librus_synergia/new_note_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_note` fires. |
-| [New Announcement Notification](blueprints/automation/librus_synergia/new_announcement_notification.yaml) | Runs your action with the title whenever `librus_synergia_new_announcement` fires. |
-| [New Message Notification](blueprints/automation/librus_synergia/new_message_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_message` fires. |
-
-[![Open your Home Assistant instance and show the blueprint import dialog with the new-grade-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_grade_notification.yaml)
-[![Open your Home Assistant instance and show the blueprint import dialog with the new-note-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_note_notification.yaml)
-[![Open your Home Assistant instance and show the blueprint import dialog with the new-announcement-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_announcement_notification.yaml)
-[![Open your Home Assistant instance and show the blueprint import dialog with the new-message-notification blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_message_notification.yaml)
+| Blueprint | What it does | |
+| --- | --- | --- |
+| [New Grade Notification](blueprints/automation/librus_synergia/new_grade_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_grade` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_grade_notification.yaml) |
+| [New Behaviour Notice Notification](blueprints/automation/librus_synergia/new_note_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_note` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_note_notification.yaml) |
+| [New Announcement Notification](blueprints/automation/librus_synergia/new_announcement_notification.yaml) | Runs your action with the title whenever `librus_synergia_new_announcement` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_announcement_notification.yaml) |
+| [New Message Notification](blueprints/automation/librus_synergia/new_message_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_message` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_message_notification.yaml) |
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.
