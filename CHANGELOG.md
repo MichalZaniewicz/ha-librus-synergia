@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.8
+
+Two more attributes needed by the new `ha-librus-synergia-cards` repo's
+card designs:
+
+- The *Subject average* sensor now exposes a full `grades` attribute (the
+  complete per-grade log for that subject - value/category/date/comments,
+  newest first), not just the latest one - needed for a "grade log" style
+  card, per-subject or across every subject at once.
+- The *Attendance* sensor now exposes `last_absence_date`, for an
+  absence-free-streak style card.
+
 ## 0.4.7
 
 - The *Subject average* sensor now exposes a plain `subject` attribute

@@ -218,13 +218,28 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             (g for g in grades if g.subject_id == self._subject_id and g.is_final_proposition),
             None,
         )
-        count = sum(
-            1
+        subject_grades = [
+            g
             for g in grades
             if g.subject_id == self._subject_id
             and not g.is_semester_proposition
             and not g.is_final_proposition
-        )
+        ]
+        count = len(subject_grades)
+        categories = self.coordinator.data.grade_categories
+        # Full per-grade list for this one subject - lets a dashboard card
+        # show the actual grade log, not just the computed average. Sorted
+        # newest-first; date is a plain "YYYY-MM-DD"-prefixed string from
+        # Librus so lexicographic sort matches chronological order.
+        grade_log = [
+            {
+                "value": g.value,
+                "category": categories[g.category_id].name if g.category_id in categories else None,
+                "date": g.add_date,
+                "comments": g.comments,
+            }
+            for g in sorted(subject_grades, key=lambda g: g.add_date or "", reverse=True)
+        ]
         return {
             ATTR_SUBJECT_ID: self._subject_id,
             # A clean, language-independent name for dashboard cards to key
@@ -236,6 +251,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "latest_grade_date": latest.add_date if latest else None,
             "latest_grade_comments": latest.comments if latest else [],
             "grade_count": count,
+            "grades": grade_log,
             "proposed_semester_grade": proposed.value if proposed else None,
             "final_grade": final.value if final else None,
         }
@@ -284,7 +300,19 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             attendance_type = _attendance_type(data, attendance.type_id)
             name = attendance_type.name if attendance_type is not None else str(attendance.type_id)
             breakdown[name] = breakdown.get(name, 0) + 1
-        return {"breakdown": breakdown, "total_records": len(data.attendances)}
+        # Most recent real-absence date, for a "days since last absence"
+        # streak card - date strings are "YYYY-MM-DD"-prefixed so a plain
+        # max() over them matches chronological order.
+        absence_dates = [
+            a.date
+            for a in data.attendances
+            if a.date and (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
+        ]
+        return {
+            "breakdown": breakdown,
+            "total_records": len(data.attendances),
+            "last_absence_date": max(absence_dates) if absence_dates else None,
+        }
 
 
 class LibrusLuckyNumberSensor(LibrusSensorBase):

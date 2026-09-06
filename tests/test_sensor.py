@@ -49,6 +49,7 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     assert state.state == "1"
     assert state.attributes["total_records"] == 3
     assert state.attributes["breakdown"] == {"Obecność": 2, "Nieobecność": 1}
+    assert state.attributes["last_absence_date"] == "2026-09-03"
 
 
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
@@ -81,6 +82,9 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     state = hass.states.get(entity_id)
     assert state.attributes["latest_grade_comments"] == ["Świetna praca"]
     assert state.attributes["subject"] == "Matematyka"
+    assert state.attributes["grades"] == [
+        {"value": "4+", "category": "sprawdzian", "date": "2026-09-01", "comments": ["Świetna praca"]}
+    ]
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
 
 
