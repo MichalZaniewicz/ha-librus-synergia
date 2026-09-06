@@ -2,6 +2,17 @@
 
 ## 0.4.16
 
+**Real bug, found live**: the Attendance sensor's `breakdown` attribute
+only ever exposed a name → count map, with no indication of which names
+count as a presence. The companion cards guessed from the name text
+(`/obecno/i`), which also matches *inside* "Nieobecność" (absence) since
+it literally contains "obecność" as a substring - "Obecność" (present)
+and "Nieobecność" (absent) rendered as the SAME color on the Attendance
+card. Now exposes a `presence_by_type` map (name → bool, sourced from the
+school's own `AttendanceTypes[].IsPresenceKind` - the same authoritative
+source the sensor's own state/percentage already use) so consumers don't
+have to guess from Polish text at all.
+
 Code-review pass (no new user-visible features) closing three real
 resilience gaps plus one data-normalization hardening:
 
@@ -49,6 +60,13 @@ Companion cards (`ha-librus-synergia-cards` 0.2.3):
   added at 07:00 could show up above a message from 20:00 the same day).
   Bare dates are now padded to midnight before comparing, so same-day items
   interleave in a defined, sensible order.
+- **Attendance card: "Obecność" and "Nieobecność" no longer share a color**
+  (see the backend `presence_by_type` fix above - the card now reads that
+  instead of guessing from the name).
+- **Announcements/Behaviour notices tile cards now say what the number
+  means.** Both used to show a bare count with no label at all (`1`, `0`)
+  - now read `1 announcements`/`0 behaviour notices` (translated), matching
+  the Attendance/Messages tiles, which already did this correctly.
 
 ## 0.4.15
 

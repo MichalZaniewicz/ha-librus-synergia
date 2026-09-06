@@ -298,10 +298,22 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             return None
         data = self.coordinator.data
         breakdown: dict[str, int] = {}
+        # Whether each breakdown NAME counts as a presence, per the school's
+        # own AttendanceTypes[].IsPresenceKind - not every "sounds like an
+        # absence" name actually is one (e.g. "Spóźnienie"/late and
+        # "Zwolnienie"/excused-release both count as present) and, in the
+        # other direction, "Nieobecność" contains "obecność" as a literal
+        # substring, so a consumer guessing from the name text alone (a real
+        # bug found live in the companion cards - both "Obecność" and
+        # "Nieobecność" rendered with the same color) gets it wrong. Expose
+        # the authoritative flag instead of making every consumer re-guess it.
+        presence_by_type: dict[str, bool] = {}
         for attendance in data.attendances:
             attendance_type = _attendance_type(data, attendance.type_id)
             name = attendance_type.name if attendance_type is not None else str(attendance.type_id)
             breakdown[name] = breakdown.get(name, 0) + 1
+            if attendance_type is not None:
+                presence_by_type[name] = attendance_type.is_presence_kind
         # Most recent real-absence date, for a "days since last absence"
         # streak card - date strings are "YYYY-MM-DD"-prefixed so a plain
         # max() over them matches chronological order.
@@ -341,6 +353,7 @@ class LibrusAttendanceSensor(LibrusSensorBase):
 
         return {
             "breakdown": breakdown,
+            "presence_by_type": presence_by_type,
             "total_records": total_records,
             "last_absence_date": max(absence_dates) if absence_dates else None,
             "percentage": percentage,

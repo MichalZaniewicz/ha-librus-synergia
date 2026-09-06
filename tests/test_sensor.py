@@ -82,6 +82,12 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     assert state.state == "1"
     assert state.attributes["total_records"] == 3
     assert state.attributes["breakdown"] == {"Obecność": 2, "Nieobecność": 1}
+    # BUG FIX (2026-09-06, found live): the companion cards used to guess
+    # presence from the name text alone (a regex matching "obecno" as a
+    # substring - which also matches inside "Nieobecność") and rendered
+    # both with the same color. Expose the authoritative flag instead of
+    # making every consumer re-guess it from Polish text.
+    assert state.attributes["presence_by_type"] == {"Obecność": True, "Nieobecność": False}
     assert state.attributes["last_absence_date"] == "2026-09-03"
     # Independent % calculation (librusik-inspired, new 2026-09-06) - 2 of
     # 3 records are presence-kind.
