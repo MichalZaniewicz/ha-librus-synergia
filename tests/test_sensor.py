@@ -258,9 +258,11 @@ async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
 
 
 async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) -> None:
-    """New (2026-09-06, librusik-inspired): substitutions/alerts get full
-    content, not just a count - each tagged with its own mailbox so a
-    card can pass the right value back to the `get_message` service."""
+    """New (2026-09-06, librusik-inspired): substitutions/alerts/
+    justifications get full content, not just a count - each tagged with
+    its own mailbox so a card can pass the right value back to the
+    `get_message` service. justifications (usprawiedliwienia) added on
+    user request the same day, via the identical mechanism."""
     client = build_mock_client(async_bootstrap_messages=True)
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
     client.async_get_messages.side_effect = [
@@ -291,6 +293,19 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
                 }
             ]
         },
+        {
+            "data": [
+                {
+                    "messageId": "3",
+                    "senderName": "Wychowawca",
+                    "topic": "Usprawiedliwienie",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-06T09:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
     ]
     entry = await setup_integration(hass, client)
 
@@ -301,6 +316,9 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
     assert state.attributes["substitutions_recent"][0]["topic"] == "Zmiana w planie"
     assert state.attributes["alerts_recent"][0]["id"] == "2"
     assert state.attributes["alerts_recent"][0]["mailbox"] == "alerts"
+    assert state.attributes["justifications_recent"][0]["id"] == "3"
+    assert state.attributes["justifications_recent"][0]["mailbox"] == "justifications"
+    assert state.attributes["justifications_recent"][0]["topic"] == "Usprawiedliwienie"
 
 
 async def test_school_and_class_sensors(hass) -> None:

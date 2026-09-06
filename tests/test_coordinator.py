@@ -211,12 +211,13 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     now get their own full message list (not just an unread count, unlike
     every other secondary mailbox), each message tagged with which
     mailbox it came from so a card can pass the right value to the
-    `get_message` service."""
+    `get_message` service. "justifications" (usprawiedliwienia) joined
+    them the same day, on user request, via the identical mechanism."""
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = True
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
-    # asyncio.gather(inbox, substitutions, alerts) - side_effect consumed
-    # in call order, which matches that argument order.
+    # asyncio.gather(inbox, substitutions, alerts, justifications) -
+    # side_effect consumed in call order, which matches that argument order.
     client.async_get_messages.side_effect = [
         {"data": []},
         {
@@ -245,6 +246,19 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
                 }
             ]
         },
+        {
+            "data": [
+                {
+                    "messageId": "3",
+                    "senderName": "Wychowawca",
+                    "topic": "Usprawiedliwienie",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-06T09:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
     ]
     coordinator = _make_coordinator(hass, client)
 
@@ -257,6 +271,9 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     assert len(data.alert_messages) == 1
     assert data.alert_messages[0].mailbox == "alerts"
     assert data.alert_messages[0].topic == "Alert"
+    assert len(data.justification_messages) == 1
+    assert data.justification_messages[0].mailbox == "justifications"
+    assert data.justification_messages[0].topic == "Usprawiedliwienie"
 
 
 async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
@@ -289,6 +306,7 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
         },
         LibrusUnexpectedResponseError("Expected a JSON object, got list"),
         LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
     ]
     coordinator = _make_coordinator(hass, client)
 
@@ -300,6 +318,7 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
     assert data.messages[0].id == "42"
     assert data.substitution_messages == []
     assert data.alert_messages == []
+    assert data.justification_messages == []
 
 
 async def test_optional_endpoint_failure_does_not_wipe_core_data(hass) -> None:

@@ -338,3 +338,4 @@ class LibrusData:
     # actually read, not just know a count for.
     substitution_messages: list[MessageData] = field(default_factory=list)
     alert_messages: list[MessageData] = field(default_factory=list)
+    justification_messages: list[MessageData] = field(default_factory=list)

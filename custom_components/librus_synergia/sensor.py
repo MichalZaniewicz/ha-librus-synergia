@@ -681,11 +681,15 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "mailbox_breakdown": dict(data.unread_messages_by_mailbox),
             "recent": _message_list_attr(data.messages),
             # Full CONTENT (not just the count already in
-            # mailbox_breakdown) for the two secondary mailboxes most
-            # worth actually reading - "substitutions" (zastępstwa,
-            # schedule changes) and "alerts" (alerty).
+            # mailbox_breakdown) for the secondary mailboxes most worth
+            # actually reading - "substitutions" (zastępstwa, schedule
+            # changes), "alerts" (alerty), and "justifications"
+            # (usprawiedliwienia - a parent's submitted absence excuse and
+            # its pending/accepted status, added 2026-09-06 on user
+            # request).
             "substitutions_recent": _message_list_attr(data.substitution_messages),
             "alerts_recent": _message_list_attr(data.alert_messages),
+            "justifications_recent": _message_list_attr(data.justification_messages),
         }
 
 

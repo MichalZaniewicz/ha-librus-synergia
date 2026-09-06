@@ -238,6 +238,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             messages,
             substitution_messages,
             alert_messages,
+            justification_messages,
         ) = await self._async_get_messages()
 
         grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
@@ -265,6 +266,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             messages=messages,
             substitution_messages=substitution_messages,
             alert_messages=alert_messages,
+            justification_messages=justification_messages,
             school=self._cached_school,
             school_class=self._cached_class,
             free_days=self._cached_free_days,
@@ -457,12 +459,28 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     async def _async_get_messages(
         self,
-    ) -> tuple[int, dict[str, int], list[MessageData], list[MessageData], list[MessageData]]:
+    ) -> tuple[
+        int,
+        dict[str, int],
+        list[MessageData],
+        list[MessageData],
+        list[MessageData],
+        list[MessageData],
+    ]:
         """Fetch unread counts (per mailbox) + a recent-messages preview
         from the separate Wiadomości subsystem - inbox (full, as ever),
-        plus full CONTENT (not just counts) for "substitutions" and
-        "alerts", the two secondary mailboxes most worth actually reading
-        rather than just knowing a count for.
+        plus full CONTENT (not just counts) for "substitutions", "alerts"
+        and "justifications", the secondary mailboxes most worth actually
+        reading rather than just knowing a count for. "justifications" was
+        added 2026-09-06 (user request: "usprawiedliwienia") on the
+        strength of the SAME architecture already confirmed for
+        substitutions/alerts - all of these are sibling keys in one
+        unread-count response, and share the identical
+        `{mailbox}/messages` list endpoint, so this is a low-risk extension
+        of a pattern already proven, not a new guess. UNVERIFIED: whether a
+        submitted justification's accept/reject status is actually visible
+        in this mailbox's message content, or only the school's own
+        response text - first real submission will confirm.
 
         Bootstraps the dedicated session cookie once per login (not every
         cycle). Some schools don't have this Librus module enabled at all -
@@ -479,7 +497,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._messages_available = False
             self._messages_bootstrapped = True
         if not self._messages_available:
-            return 0, {}, [], [], []
+            return 0, {}, [], [], [], []
 
         try:
             unread_payload, inbox_payload = await asyncio.gather(
@@ -488,7 +506,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
         except LibrusError:
             _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
-            return 0, {}, [], [], []
+            return 0, {}, [], [], [], []
         unread_count, unread_by_mailbox, inbox_messages = _parse_messages(unread_payload, inbox_payload)
 
         # BUG FIX (2026-09-06, found live): substitutions/alerts used to be
@@ -499,21 +517,34 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # inbox/unread-count data too (confirmed live: mailbox_breakdown
         # went from real per-mailbox counts to an empty {} the moment this
         # was added in v0.4.13). Isolated into its own try/except so it can
-        # only ever degrade to "no substitutions/alerts shown", never take
-        # the core inbox data down with it.
+        # only ever degrade to "no substitutions/alerts/justifications
+        # shown", never take the core inbox data down with it.
         substitution_messages: list[MessageData] = []
         alert_messages: list[MessageData] = []
+        justification_messages: list[MessageData] = []
         try:
-            substitutions_payload, alerts_payload = await asyncio.gather(
+            substitutions_payload, alerts_payload, justifications_payload = await asyncio.gather(
                 self._client.async_get_messages(mailbox="substitutions", limit=10),
                 self._client.async_get_messages(mailbox="alerts", limit=10),
+                self._client.async_get_messages(mailbox="justifications", limit=10),
             )
             substitution_messages = _parse_message_list(substitutions_payload, "substitutions")
             alert_messages = _parse_message_list(alerts_payload, "alerts")
+            justification_messages = _parse_message_list(justifications_payload, "justifications")
         except LibrusError:
-            _LOGGER.debug("Secondary mailbox (substitutions/alerts) fetch failed (non-fatal)", exc_info=True)
+            _LOGGER.debug(
+                "Secondary mailbox (substitutions/alerts/justifications) fetch failed (non-fatal)",
+                exc_info=True,
+            )
 
-        return unread_count, unread_by_mailbox, inbox_messages, substitution_messages, alert_messages
+        return (
+            unread_count,
+            unread_by_mailbox,
+            inbox_messages,
+            substitution_messages,
+            alert_messages,
+            justification_messages,
+        )
 
     def _async_fire_new_item_events(
         self,

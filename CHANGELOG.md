@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.18
+
+User request: "czy usprawiedliwienia można jakoś pobrać i pokazać?" (can
+justifications be fetched and shown?), asked right after submitting a
+real absence excuse still awaiting acceptance.
+
+**"Usprawiedliwienia" (justifications) now get full content, not just an
+unread count.** Same architecture already proven for "Zastępstwa"
+(substitutions) and "Alerty" (alerts) in 0.4.13 - all these mailboxes are
+sibling keys in the same unread-count response and share the identical
+`{mailbox}/messages` list endpoint, so this extends a pattern already
+live-verified rather than guessing at a new one. Exposed as a new
+`justifications_recent` attribute on the Unread messages sensor,
+following the exact `substitutions_recent`/`alerts_recent` shape.
+
+UNVERIFIED: whether a submitted justification's accept/reject status is
+actually visible in this mailbox's message content, or only the school's
+own free-text response - the user's real pending justification will
+confirm this on the next real update.
+
 ## 0.4.17
 
 Two real bugs, both found live by the user.
