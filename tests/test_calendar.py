@@ -152,23 +152,30 @@ async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
     card's `hass.callApi('calendars/...')`) exercises - to invoke
     `CalendarEntity.async_get_events` end to end, for "today" only.
 
-    Deliberately a single calendar day, not "this ISO week": a wider
-    window can straddle an ISO-week boundary depending on which real
-    weekday the suite happens to run on (e.g. Sat-Wed spans two weeks),
-    which would make `LibrusTimetableCalendar.async_get_events` fetch TWO
-    weeks and call the mocked client twice as often as this test's
-    `side_effect` list expects - the exact class of weekday-boundary bug
-    this whole test file exists to catch, almost caught in the test
-    itself instead of the product code. One calendar day can never span
-    two ISO weeks, so this is safe regardless of which day CI runs on."""
+    Deliberately kept to a single calendar DATE on both ends, not "this
+    ISO week": a wider window can straddle an ISO-week boundary depending
+    on which real weekday the suite happens to run on, which would make
+    `LibrusTimetableCalendar.async_get_events` fetch TWO weeks and call
+    the mocked client twice as often as this test's `side_effect` list
+    expects - the exact class of weekday-boundary bug this whole test
+    file exists to catch, twice now almost caught in the test itself
+    instead of the product code (first attempt used `start_of_today` to
+    `start_of_today + 1 day` as the window - looks like "one day", but
+    `end_date.date()` is then TOMORROW's date, which starts a new ISO
+    week whenever today is a Sunday; confirmed live by CI actually
+    running on a Sunday). `start_date.date() == end_date.date()` here on
+    BOTH ends guarantees `_iso_week_start` agrees for both, so
+    `async_get_events` always fetches exactly one week, regardless of
+    which day CI runs on."""
     start_of_today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_today = start_of_today + timedelta(hours=23, minutes=59, seconds=59)
     response = await hass.services.async_call(
         "calendar",
         "get_events",
         {
             "entity_id": entity_id,
             "start_date_time": start_of_today,
-            "end_date_time": start_of_today + timedelta(days=1),
+            "end_date_time": end_of_today,
         },
         blocking=True,
         return_response=True,
