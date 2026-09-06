@@ -143,6 +143,88 @@ async def test_timetable_calendar_resolves_subject_and_teacher_names(hass) -> No
     assert state.attributes["description"] == "Anna Kowalska"
 
 
+async def test_timetable_calendar_today_query_excludes_tomorrow(hass) -> None:
+    """BUG FIX (2026-09-06, found live): a "today" query - [today 00:00,
+    tomorrow 00:00), the exact window every card in this repo's own
+    companion cards uses - wrongly returned TOMORROW's whole timetable
+    too. `async_get_events` filtered by `day > end_date.date()`, but
+    `end_date.date()` on a local-midnight boundary resolves to tomorrow's
+    date (midnight technically belongs to the next day), so the "day >
+    tomorrow" check never excluded tomorrow itself. Confirmed live via
+    `ha_config_get_calendar_events` on a real Sunday: querying "today"
+    (no school) returned Monday's full 6-lesson day instead of nothing."""
+    timetable_payload = {
+        "Timetable": {
+            _TOMORROW: [
+                [
+                    {
+                        "LessonNo": "1",
+                        "HourFrom": "08:00",
+                        "HourTo": "08:45",
+                        "Subject": {"Id": "1", "Name": "Jutro"},
+                        "Teacher": {"Id": "1"},
+                        "Classroom": {"Id": "1"},
+                        "IsCanceled": False,
+                        "IsSubstitutionClass": False,
+                    }
+                ]
+            ]
+        }
+    }
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 1, "Name": "Jutro"}]},
+        async_get_timetable=timetable_payload,
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    now = dt_util.now()
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    response = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {
+            "entity_id": entity_id,
+            "start_date_time": start_of_today,
+            "end_date_time": start_of_today + timedelta(days=1),
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response[entity_id]["events"] == []
+
+
+async def test_agenda_calendar_today_query_excludes_tomorrow(hass) -> None:
+    """Same date-boundary bug class (see the timetable test above),
+    applied to the Agenda calendar's own async_get_events."""
+    client = build_mock_client(
+        async_get_homeworks={
+            "HomeWorks": [
+                {"Id": 1, "Content": "Jutrzejsze wydarzenie", "Date": _TOMORROW, "Category": None, "Subject": None},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "agenda")
+
+    now = dt_util.now()
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    response = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {
+            "entity_id": entity_id,
+            "start_date_time": start_of_today,
+            "end_date_time": start_of_today + timedelta(days=1),
+        },
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response[entity_id]["events"] == []
+
+
 _TODAY = dt_util.now().date().isoformat()
 
 

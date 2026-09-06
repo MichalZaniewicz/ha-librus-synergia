@@ -45,6 +45,19 @@ def _iso_week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
+def _inclusive_end_date(end_date: datetime) -> date:
+    """The last calendar DATE actually inside a half-open `[start, end)`
+    window. `end_date.date()` alone over-includes by one day whenever
+    `end_date` lands exactly on a local-midnight boundary (the case for
+    essentially every card in this repo's own dev harness/cards - "today"
+    is requested as [today 00:00, tomorrow 00:00)) - midnight technically
+    belongs to the NEXT calendar day, so a bare `.date()` silently pulls
+    that whole next day's all-day events into the "current" range.
+    Nudging back by one microsecond first fixes exactly that case while
+    leaving any other end time's date unaffected."""
+    return (end_date - timedelta(microseconds=1)).date()
+
+
 def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> CalendarEvent | None:
     if lesson.hour_from is None or lesson.hour_to is None:
         return None
@@ -213,18 +226,26 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             return []
         merged: dict[date, list[LessonData]] = {}
         week_start = _iso_week_start(start_date.date())
-        last_week_start = _iso_week_start(end_date.date())
+        last_week_start = _iso_week_start(_inclusive_end_date(end_date))
         while week_start <= last_week_start:
             merged.update(await self._async_get_week(week_start))
             week_start += timedelta(days=7)
 
         events: list[CalendarEvent] = []
         for day, lessons in merged.items():
-            if day < start_date.date() or day > end_date.date():
-                continue
             for lesson in lessons:
                 event = _lesson_to_event(day, lesson, self.coordinator.data)
-                if event is not None:
+                # BUG FIX (2026-09-06, found live): compare the lesson's
+                # OWN start/end datetimes against the real [start_date,
+                # end_date) window, not a day-level filter derived from
+                # `.date()` - the old `day > end_date.date()` check treated
+                # an exclusive local-midnight end boundary (e.g. "today",
+                # which every card here requests as [today 00:00, tomorrow
+                # 00:00)) as inclusive of the next day's `.date()`, so a
+                # "today's lessons" query wrongly returned tomorrow's whole
+                # timetable too. Confirmed live via
+                # ha_config_get_calendar_events on a real Sunday.
+                if event is not None and event.start < end_date and event.end > start_date:
                     events.append(event)
         return events
 
@@ -272,7 +293,10 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
     ) -> list[CalendarEvent]:
         if self.coordinator.data is None:
             return []
-        start, end = start_date.date(), end_date.date()
+        # BUG FIX (2026-09-06): see _inclusive_end_date - a bare
+        # `end_date.date()` over-includes one day at an exact local-
+        # midnight boundary.
+        start, end = start_date.date(), _inclusive_end_date(end_date)
         events: list[CalendarEvent] = []
         for item in self.coordinator.data.homeworks:
             event = _homework_to_event(item, self.coordinator.data)
@@ -319,7 +343,10 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
     ) -> list[CalendarEvent]:
         if self.coordinator.data is None:
             return []
-        start, end = start_date.date(), end_date.date()
+        # BUG FIX (2026-09-06): see _inclusive_end_date - a bare
+        # `end_date.date()` over-includes one day at an exact local-
+        # midnight boundary.
+        start, end = start_date.date(), _inclusive_end_date(end_date)
         events: list[CalendarEvent] = []
         for item in self.coordinator.data.free_days:
             event = _free_day_to_event(item)

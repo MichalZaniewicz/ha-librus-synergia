@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.12
+
+**Real bug, found live**: any calendar query ending exactly at local
+midnight (which is what "today", "this week", and every other card in
+this project's own companion cards repo actually requests) wrongly
+included the ENTIRE next day too. Confirmed live on a real Sunday: asking
+the Timetable calendar for "today" (no lessons - the school week hadn't
+started) returned Monday's full 6-lesson day instead of nothing.
+
+Root cause: `calendar.py`'s `async_get_events` filtered by comparing bare
+calendar dates (`event.start.date()` vs. `end_date.date()`), but a
+half-open `[start, end)` window's `end` at exactly midnight belongs to
+the *next* calendar date - so the date-only filter treated that whole
+next day as included. Fixed in all three calendars (Timetable, Agenda,
+Free days) - the Timetable calendar now compares lessons' actual
+start/end datetimes against the real window instead of reducing either
+side to a bare date; Agenda and Free days use a new `_inclusive_end_date`
+helper that correctly resolves the last date actually inside the window.
+
 ## 0.4.11
 
 New `librus_synergia.get_message` service: fetches ONE message's full,
