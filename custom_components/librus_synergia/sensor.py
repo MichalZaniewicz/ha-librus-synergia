@@ -229,6 +229,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             ATTR_SUBJECT_ID: self._subject_id,
             "latest_grade": latest.value if latest else None,
             "latest_grade_date": latest.add_date if latest else None,
+            "latest_grade_comments": latest.comments if latest else [],
             "grade_count": count,
             "proposed_semester_grade": proposed.value if proposed else None,
             "final_grade": final.value if final else None,

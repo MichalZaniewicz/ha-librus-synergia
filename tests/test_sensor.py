@@ -63,6 +63,7 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
                     "Subject": {"Id": 42005},
                     "Semester": 1,
                     "AddDate": "2026-09-01",
+                    "Comments": [701],
                 }
             ]
         },
@@ -71,12 +72,14 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
                 {"Id": 10, "Name": "sprawdzian", "CountToTheAverage": True, "Weight": 2}
             ]
         },
+        async_get_grade_comments={"Comments": [{"Id": 701, "Text": "Świetna praca"}]},
     )
     entry = await setup_integration(hass, client)
 
     entity_id = _entity_id(hass, entry, "subject_42005_average")
     assert entity_id is not None
     state = hass.states.get(entity_id)
+    assert state.attributes["latest_grade_comments"] == ["Świetna praca"]
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
 
 

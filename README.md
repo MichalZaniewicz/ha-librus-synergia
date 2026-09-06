@@ -41,7 +41,7 @@ Each child/student is a separate login and a separate integration entry.
 | Entity | Notes |
 |---|---|
 | `sensor` Overall grade average | Weighted average across every subject |
-| `sensor` *Subject* average (one per subject) | Discovered automatically from your account; attributes include latest grade, proposed/final semester grades |
+| `sensor` *Subject* average (one per subject) | Discovered automatically from your account; attributes include latest grade (with any teacher comments), proposed/final semester grades |
 | `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |

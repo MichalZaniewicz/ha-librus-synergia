@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.6
+
+- Fixed an oversight from v0.4.5: the *Subject average* sensor's latest-
+  grade info never actually exposed the resolved `Grades/Comments` text,
+  even though the correlation fix that round computed it correctly. New
+  `latest_grade_comments` attribute.
+
 ## 0.4.5
 
 Closed most of the remaining feature-parity gaps using exact field names
