@@ -143,19 +143,32 @@ async def test_timetable_calendar_resolves_subject_and_teacher_names(hass) -> No
     assert state.attributes["description"] == "Anna Kowalska"
 
 
+_TODAY = dt_util.now().date().isoformat()
+
+
 async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
     """Calls the real `calendar.get_events` service - the same code path
     Home Assistant's own calendar REST API (and therefore any dashboard
     card's `hass.callApi('calendars/...')`) exercises - to invoke
-    `CalendarEntity.async_get_events` end to end, "this ISO week"."""
-    now = dt_util.now()
+    `CalendarEntity.async_get_events` end to end, for "today" only.
+
+    Deliberately a single calendar day, not "this ISO week": a wider
+    window can straddle an ISO-week boundary depending on which real
+    weekday the suite happens to run on (e.g. Sat-Wed spans two weeks),
+    which would make `LibrusTimetableCalendar.async_get_events` fetch TWO
+    weeks and call the mocked client twice as often as this test's
+    `side_effect` list expects - the exact class of weekday-boundary bug
+    this whole test file exists to catch, almost caught in the test
+    itself instead of the product code. One calendar day can never span
+    two ISO weeks, so this is safe regardless of which day CI runs on."""
+    start_of_today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
     response = await hass.services.async_call(
         "calendar",
         "get_events",
         {
             "entity_id": entity_id,
-            "start_date_time": now - timedelta(days=now.weekday()),
-            "end_date_time": now + timedelta(days=6 - now.weekday()),
+            "start_date_time": start_of_today,
+            "end_date_time": start_of_today + timedelta(days=1),
         },
         blocking=True,
         return_response=True,
@@ -175,7 +188,7 @@ async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass) -
     exact exception via the error log. Must now recover silently."""
     good_payload = {
         "Timetable": {
-            _TOMORROW: [
+            _TODAY: [
                 [
                     {
                         "LessonNo": "1",
