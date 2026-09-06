@@ -75,6 +75,10 @@
         "message_id": {
           "name": "Message ID",
           "description": "The message's id, from the Unread messages sensor's \"recent\" attribute."
+        },
+        "mailbox": {
+          "name": "Mailbox",
+          "description": "Which mailbox the message is in. Defaults to \"inbox\" - use \"substitutions\" or \"alerts\" for a message from the Unread messages sensor's \"substitutions_recent\" or \"alerts_recent\" attribute."
         }
       }
     }

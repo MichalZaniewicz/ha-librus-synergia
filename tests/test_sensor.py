@@ -30,9 +30,9 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     client = build_mock_client(
         async_get_attendances={
             "Attendances": [
-                {"Id": 1, "Date": "2026-09-01", "Type": {"Id": 100}},  # Obecność (present)
-                {"Id": 2, "Date": "2026-09-02", "Type": {"Id": 100}},  # Obecność (present)
-                {"Id": 3, "Date": "2026-09-03", "Type": {"Id": 1}},  # Nieobecność (absence)
+                {"Id": 1, "Date": "2026-09-01", "Semester": 1, "Type": {"Id": 100}},  # present
+                {"Id": 2, "Date": "2026-09-02", "Semester": 1, "Type": {"Id": 100}},  # present
+                {"Id": 3, "Date": "2026-09-03", "Semester": 2, "Type": {"Id": 1}},  # absence
             ]
         },
         async_get_attendance_types={
@@ -50,6 +50,11 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     assert state.attributes["total_records"] == 3
     assert state.attributes["breakdown"] == {"Obecność": 2, "Nieobecność": 1}
     assert state.attributes["last_absence_date"] == "2026-09-03"
+    # Independent % calculation (librusik-inspired, new 2026-09-06) - 2 of
+    # 3 records are presence-kind.
+    assert state.attributes["percentage"] == round(100 * 2 / 3, 1)
+    assert state.attributes["by_semester"]["1"] == {"total": 2, "present": 2, "percentage": 100.0}
+    assert state.attributes["by_semester"]["2"] == {"total": 1, "present": 0, "percentage": 0.0}
 
 
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
@@ -202,6 +207,53 @@ async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
     entity_id = _entity_id(hass, entry, "unread_messages")
     state = hass.states.get(entity_id)
     assert state.attributes["recent"][0]["id"] == "186536"
+    assert state.attributes["recent"][0]["mailbox"] == "inbox"
+
+
+async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) -> None:
+    """New (2026-09-06, librusik-inspired): substitutions/alerts get full
+    content, not just a count - each tagged with its own mailbox so a
+    card can pass the right value back to the `get_message` service."""
+    client = build_mock_client(async_bootstrap_messages=True)
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    client.async_get_messages.side_effect = [
+        {"data": []},
+        {
+            "data": [
+                {
+                    "messageId": "1",
+                    "senderName": "Sekretariat",
+                    "topic": "Zmiana w planie",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-04T10:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+        {
+            "data": [
+                {
+                    "messageId": "2",
+                    "senderName": "Dyrekcja",
+                    "topic": "Alert",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-04T11:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+    ]
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "unread_messages")
+    state = hass.states.get(entity_id)
+    assert state.attributes["substitutions_recent"][0]["id"] == "1"
+    assert state.attributes["substitutions_recent"][0]["mailbox"] == "substitutions"
+    assert state.attributes["substitutions_recent"][0]["topic"] == "Zmiana w planie"
+    assert state.attributes["alerts_recent"][0]["id"] == "2"
+    assert state.attributes["alerts_recent"][0]["mailbox"] == "alerts"
 
 
 async def test_school_and_class_sensors(hass) -> None:

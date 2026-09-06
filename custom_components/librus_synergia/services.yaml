@@ -10,3 +10,17 @@ get_message:
       example: "186536"
       selector:
         text:
+    mailbox:
+      required: false
+      example: "inbox"
+      default: "inbox"
+      selector:
+        select:
+          options:
+            - "inbox"
+            - "substitutions"
+            - "alerts"
+            - "notes"
+            - "absences"
+            - "justifications"
+            - "trash"

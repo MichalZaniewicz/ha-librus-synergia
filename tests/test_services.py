@@ -55,6 +55,25 @@ async def test_get_message_service_returns_decoded_content(hass) -> None:
     client.async_get_message.assert_awaited_once_with("inbox", "186536")
 
 
+async def test_get_message_service_mailbox_field_passed_through(hass) -> None:
+    """New (2026-09-06): the `mailbox` field lets a card fetch full
+    content for a substitutions/alerts message, not just inbox."""
+    client = build_mock_client()
+    client.async_get_message.return_value = GOOD_MESSAGE_PAYLOAD
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "get_message",
+        {"device_id": _device_id(hass, entry), "message_id": "1", "mailbox": "substitutions"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response["mailbox"] == "substitutions"
+    client.async_get_message.assert_awaited_once_with("substitutions", "1")
+
+
 async def test_get_message_service_unknown_device_raises(hass) -> None:
     client = build_mock_client()
     await setup_integration(hass, client)

@@ -42,11 +42,11 @@ Each child/student is a separate login and a separate integration entry.
 |---|---|---|
 | `sensor` | Overall grade average | Weighted average across every subject |
 | `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, latest grade (with any teacher comments), proposed/final semester grades |
-| `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
+| `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown, total record count, an independently-computed `percentage` (works even if your school hides this), and a `by_semester` breakdown (count/percentage per semester) in attributes |
 | `sensor` | Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` | Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
 | `sensor` | Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
-| `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones (including each message's `id`, for the [`get_message` service](#services)) and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). The routine poll never marks anything read - only the message list/count endpoints are used for that. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
+| `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones (including each message's `id`/`mailbox`, for the [`get_message` service](#services)) and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Also carries full preview content (not just a count) for the two secondary mailboxes worth actually reading - `substitutions_recent` and `alerts_recent`. The routine poll never marks anything read - only the message list/count endpoints are used for that. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` | School | Name, town/street, head teacher, contact details |
 | `sensor` | Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `sensor` | Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
@@ -94,10 +94,11 @@ from an automation that isn't a direct response to someone opening it.
 | Field | Description |
 |---|---|
 | `device_id` | The Librus Synergia device (student) to fetch from. |
-| `message_id` | The message's `id`, from the Unread messages sensor's `recent` attribute. |
+| `message_id` | The message's `id`, from the Unread messages sensor's `recent`/`substitutions_recent`/`alerts_recent` attribute. |
+| `mailbox` | Which mailbox the message is in - defaults to `inbox`; use `substitutions` or `alerts` for a message from those attributes. |
 
-Returns `sender`, `topic`, `content` (full text), `send_date`, `read_date`,
-`has_attachment`.
+Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
+`send_date`, `read_date`, `has_attachment`.
 
 ## Custom Lovelace cards
 

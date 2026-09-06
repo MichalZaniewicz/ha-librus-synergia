@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.13
+
+Two feature-parity additions inspired by a comparison against
+`dani3l0/librusik` (a third-party Librus web client):
+
+- **Attendance sensor**: new `percentage` (independently computed - works
+  even if your school disables Librus's own average display) and
+  `by_semester` (per-semester count + percentage) attributes.
+  `AttendanceData.semester` was already parsed but never actually used
+  until now.
+- **Unread messages sensor**: full content (not just an unread count) for
+  the two secondary mailboxes most worth actually reading -
+  `substitutions_recent` and `alerts_recent`, same shape as the existing
+  `recent` (inbox) attribute, each message tagged with its own `mailbox`.
+  The `get_message` service gained a matching optional `mailbox` field
+  (defaults to `inbox`) so a card can fetch full content for one of these
+  too, not just an inbox message.
+
 ## 0.4.12
 
 **Real bug, found live**: any calendar query ending exactly at local

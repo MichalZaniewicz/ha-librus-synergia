@@ -27,6 +27,7 @@ _GET_MESSAGE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): cv.string,
         vol.Required("message_id"): cv.string,
+        vol.Optional("mailbox", default="inbox"): cv.string,
     }
 )
 
@@ -75,8 +76,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
         """
         coordinator = _resolve_coordinator(hass, call.data["device_id"])
         message_id = call.data["message_id"]
+        mailbox = call.data["mailbox"]
         try:
-            raw = await coordinator.async_fetch_message("inbox", message_id)
+            raw = await coordinator.async_fetch_message(mailbox, message_id)
         except LibrusError as err:
             raise HomeAssistantError(f"Failed to fetch message {message_id}: {err}") from err
 
@@ -89,6 +91,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         )
         return {
             "id": message_id,
+            "mailbox": mailbox,
             "sender": sender_name,
             "topic": data.get("topic", ""),
             "content": decode_message_content(data.get("Message", "")),

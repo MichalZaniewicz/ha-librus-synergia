@@ -155,16 +155,24 @@ class LuckyNumberData:
 
 @dataclass(slots=True)
 class MessageData:
-    """A Wiadomości (private message) preview.
+    """A Wiadomości (private message) preview from a mailbox's LIST
+    endpoint.
 
-    CONFIRMED live (2026-09-05): the list endpoint already returns the full
-    `content` (base64-encoded in the raw response, decoded to plain text
-    here) - there is no need to ever call a per-message detail endpoint,
-    which is what this integration deliberately avoids (see
-    `LibrusApiClient`'s module-level comment on the Wiadomości methods):
-    fetching a single message's detail almost certainly marks it read
-    server-side, while listing does not (`readDate` stayed `null` for a
-    genuinely unread message across repeated list fetches in testing).
+    CONFIRMED live (2026-09-06): `content` here is Librus's own TRUNCATED
+    preview (base64-encoded in the raw response, decoded to plain text) -
+    not the full body, despite an earlier session's finding to the
+    contrary (that finding held for a short message that happened to fit
+    within the truncation length; a longer real message exposed the
+    truncation). The full body needs the `get_message` service
+    (`services.py`), which is a SEPARATE, deliberate code path from the
+    routine polling this dataclass feeds - CONFIRMED live that fetching a
+    single message's detail marks it read server-side, while listing
+    (what populates this dataclass) does not (`readDate` stayed `null`
+    for a genuinely unread message across repeated list fetches).
+
+    `mailbox` records which mailbox this came from ("inbox",
+    "substitutions", "alerts", ...) - needed so a card can pass the right
+    value back to the `get_message` service.
     """
 
     id: str
@@ -174,6 +182,7 @@ class MessageData:
     send_date: str | None
     read_date: str | None
     has_attachment: bool
+    mailbox: str = "inbox"
 
 
 @dataclass(slots=True)
@@ -322,3 +331,10 @@ class LibrusData:
     behaviour_grades: list[BehaviourGradeData] = field(default_factory=list)
     descriptive_grades: list[DescriptiveGradeData] = field(default_factory=list)
     parent_teacher_conferences: list[ParentTeacherConferenceData] = field(default_factory=list)
+    # Full message CONTENT for a couple of the most actionable secondary
+    # mailboxes (unlike unread_messages_by_mailbox above, which only ever
+    # carries counts for every mailbox) - "substitutions" (zastępstwa) and
+    # "alerts" (alerty) are the two a parent is most likely to want to
+    # actually read, not just know a count for.
+    substitution_messages: list[MessageData] = field(default_factory=list)
+    alert_messages: list[MessageData] = field(default_factory=list)

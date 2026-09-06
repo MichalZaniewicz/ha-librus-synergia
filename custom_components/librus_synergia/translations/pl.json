@@ -75,6 +75,10 @@
         "message_id": {
           "name": "ID wiadomości",
           "description": "Identyfikator wiadomości z atrybutu \"recent\" sensora Nieprzeczytane wiadomości."
+        },
+        "mailbox": {
+          "name": "Skrzynka",
+          "description": "W której skrzynce jest wiadomość. Domyślnie \"inbox\" - użyj \"substitutions\" lub \"alerts\" dla wiadomości z atrybutu \"substitutions_recent\" lub \"alerts_recent\" sensora Nieprzeczytane wiadomości."
         }
       }
     }

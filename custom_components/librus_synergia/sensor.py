@@ -18,6 +18,7 @@ from .librus_api.models import (
     GradeCategoryData,
     GradeData,
     LibrusData,
+    MessageData,
 )
 
 
@@ -308,10 +309,41 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             for a in data.attendances
             if a.date and (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
         ]
+
+        # Independent attendance-percentage calculation - inspired by a
+        # feature comparison against dani3l0/librusik (a third-party
+        # Librus web client), which computes this itself rather than
+        # relying on Librus's own UI showing it (some schools disable
+        # theirs). AttendanceData.semester was already parsed but never
+        # actually used until now.
+        total_records = len(data.attendances)
+        presence_records = sum(
+            1
+            for a in data.attendances
+            if (t := _attendance_type(data, a.type_id)) is not None and t.is_presence_kind
+        )
+        percentage = round(100 * presence_records / total_records, 1) if total_records else None
+
+        by_semester: dict[str, dict[str, Any]] = {}
+        for a in data.attendances:
+            if a.semester is None:
+                continue
+            bucket = by_semester.setdefault(str(a.semester), {"total": 0, "present": 0})
+            bucket["total"] += 1
+            t = _attendance_type(data, a.type_id)
+            if t is not None and t.is_presence_kind:
+                bucket["present"] += 1
+        for bucket in by_semester.values():
+            bucket["percentage"] = (
+                round(100 * bucket["present"] / bucket["total"], 1) if bucket["total"] else None
+            )
+
         return {
             "breakdown": breakdown,
-            "total_records": len(data.attendances),
+            "total_records": total_records,
             "last_absence_date": max(absence_dates) if absence_dates else None,
+            "percentage": percentage,
+            "by_semester": by_semester,
         }
 
 
@@ -544,6 +576,25 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
         }
 
 
+def _message_list_attr(messages: list[MessageData]) -> list[dict[str, Any]]:
+    """Same shape used for every mailbox's `*_recent` attribute - `id` +
+    `mailbox` together are what a card needs to pass to the `get_message`
+    service to load a specific message's full content."""
+    return [
+        {
+            "id": m.id,
+            "mailbox": m.mailbox,
+            "sender": m.sender_name,
+            "topic": m.topic,
+            "content": m.content[:200],
+            "date": m.send_date,
+            "unread": m.read_date is None,
+            "has_attachment": m.has_attachment,
+        }
+        for m in messages[:10]
+    ]
+
+
 class LibrusUnreadMessagesSensor(LibrusSensorBase):
     """Unread count in the main Wiadomości inbox, with a preview list.
 
@@ -580,20 +631,16 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
+        data = self.coordinator.data
         return {
-            "mailbox_breakdown": dict(self.coordinator.data.unread_messages_by_mailbox),
-            "recent": [
-                {
-                    "id": m.id,
-                    "sender": m.sender_name,
-                    "topic": m.topic,
-                    "content": m.content[:200],
-                    "date": m.send_date,
-                    "unread": m.read_date is None,
-                    "has_attachment": m.has_attachment,
-                }
-                for m in self.coordinator.data.messages[:10]
-            ]
+            "mailbox_breakdown": dict(data.unread_messages_by_mailbox),
+            "recent": _message_list_attr(data.messages),
+            # Full CONTENT (not just the count already in
+            # mailbox_breakdown) for the two secondary mailboxes most
+            # worth actually reading - "substitutions" (zastępstwa,
+            # schedule changes) and "alerts" (alerty).
+            "substitutions_recent": _message_list_attr(data.substitution_messages),
+            "alerts_recent": _message_list_attr(data.alert_messages),
         }
 
 

@@ -202,6 +202,60 @@ async def test_messages_parsed_when_available(hass) -> None:
     assert len(data.messages) == 1
     assert data.messages[0].id == "42"
     assert data.messages[0].content == "Dzień dobry"
+    assert data.messages[0].mailbox == "inbox"
+
+
+async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
+    """New (2026-09-06, librusik-inspired): "substitutions" and "alerts"
+    now get their own full message list (not just an unread count, unlike
+    every other secondary mailbox), each message tagged with which
+    mailbox it came from so a card can pass the right value to the
+    `get_message` service."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    # asyncio.gather(inbox, substitutions, alerts) - side_effect consumed
+    # in call order, which matches that argument order.
+    client.async_get_messages.side_effect = [
+        {"data": []},
+        {
+            "data": [
+                {
+                    "messageId": "1",
+                    "senderName": "Sekretariat",
+                    "topic": "Zmiana w planie",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-04T10:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+        {
+            "data": [
+                {
+                    "messageId": "2",
+                    "senderName": "Dyrekcja",
+                    "topic": "Alert",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-04T11:00:00",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.messages == []
+    assert len(data.substitution_messages) == 1
+    assert data.substitution_messages[0].mailbox == "substitutions"
+    assert data.substitution_messages[0].topic == "Zmiana w planie"
+    assert len(data.alert_messages) == 1
+    assert data.alert_messages[0].mailbox == "alerts"
+    assert data.alert_messages[0].topic == "Alert"
 
 
 async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:
