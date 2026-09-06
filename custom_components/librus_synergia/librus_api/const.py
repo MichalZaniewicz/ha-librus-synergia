@@ -122,6 +122,45 @@ ENDPOINT_HOMEWORK_CATEGORIES = "HomeWorks/Categories"
 ENDPOINT_PARENT_TEACHER_CONFERENCES = "ParentTeacherConferences"
 ENDPOINT_GRADE_TYPES = "Grades/Types"
 
+# CONFIRMED live (2026-09-06), found by reading szkolny-eu/szkolny-android's
+# full LibrusApi*.kt file list (not just the higher-level LibrusFeatures.kt
+# flags used for the previous round) - see CLAUDE.md's session note.
+#
+# Notes/Categories: CONFIRMED real+POPULATED (8 real category names on this
+# account) - wired into the coordinator immediately, see
+# _cached_note_categories.
+#
+# Everything else below is CONFIRMED real+reachable but returned EMPTY on
+# this account - same "confirmed but nothing to build a parser against yet"
+# treatment as VirtualClasses/ParentTeacherConferences/HomeWorkAssignments.
+# Client methods exist for probing; none are wired into the coordinator.
+ENDPOINT_NOTE_CATEGORIES = "Notes/Categories"
+# "Ocena zachowania" (a formal behaviour grade, e.g. wzorowe/bardzo dobre) -
+# genuinely distinct from Notes ("uwagi", free-text remarks). This school's
+# BehaviourGradesSettings (see Units) confirms it uses a points-based
+# variant of this.
+ENDPOINT_BEHAVIOUR_GRADES_POINTS = "BehaviourGrades/Points"
+ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES = "BehaviourGrades/Points/Categories"
+# CONFIRMED to be a SEPARATE endpoint from /Grades, not embedded per-grade
+# data - coordinator.py's _parse_grades currently assumes comments arrive
+# nested inside each /Grades item (item["Comments"]), which this endpoint's
+# existence casts real doubt on. Flagged, not yet fixed - both are empty on
+# this account so there's no real comment record to check the correlation
+# key against (probably a nested Grade: {Id: ...} per comment, but
+# unconfirmed).
+ENDPOINT_GRADE_COMMENTS = "Grades/Comments"
+# School/unit configuration - which grade systems are enabled
+# (GradesSettings.{Standard,Point,Descriptive}GradesEnabled), bell schedule,
+# behaviour-points settings. CONFIRMED this account's school has
+# PointGradesEnabled=false but DescriptiveGradesEnabled=true.
+ENDPOINT_UNITS = "Units"
+# Alternate grading systems, alongside the numeric one this integration
+# already supports. PointGrades is confirmed NOT enabled for this account's
+# school (see Units above) - kept here for completeness/other schools.
+ENDPOINT_POINT_GRADES = "PointGrades"
+ENDPOINT_DESCRIPTIVE_GRADES = "DescriptiveGrades"
+ENDPOINT_TEXT_GRADES = "TextGrades"
+
 # Wiadomości (private messages) is a SEPARATE subsystem on its own domain,
 # reachable only after bootstrapping a dedicated session cookie on top of
 # the main Synergia one (reverse-engineered from `emsi/librus_pyapi`, MIT).

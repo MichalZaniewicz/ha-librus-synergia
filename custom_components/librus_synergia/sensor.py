@@ -350,9 +350,16 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
             key=lambda n: n.date,
             reverse=True,
         )[:5]
+        categories = self.coordinator.data.note_categories
         return {
             "recent": [
-                {"date": n.date, "positive": n.positive, "text": n.text[:200]} for n in recent
+                {
+                    "date": n.date,
+                    "positive": n.positive,
+                    "category": categories.get(n.category_id) if n.category_id else None,
+                    "text": n.text[:200],
+                }
+                for n in recent
             ]
         }
 

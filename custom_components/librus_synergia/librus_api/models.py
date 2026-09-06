@@ -230,3 +230,4 @@ class LibrusData:
     school_class: ClassData | None = None
     free_days: list[FreeDayData] = field(default_factory=list)
     homework_categories: dict[int, str] = field(default_factory=dict)
+    note_categories: dict[int, str] = field(default_factory=dict)

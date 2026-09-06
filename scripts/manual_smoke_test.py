@@ -97,6 +97,17 @@ async def main() -> int:
             ("HomeWorks/Categories", client.async_get_homework_categories()),
             ("ParentTeacherConferences", client.async_get_parent_teacher_conferences()),
             ("Grades/Types", client.async_get_grade_types()),
+            ("Notes/Categories", client.async_get_note_categories()),
+            ("BehaviourGrades/Points", client.async_get_behaviour_grade_points()),
+            (
+                "BehaviourGrades/Points/Categories",
+                client.async_get_behaviour_grade_point_categories(),
+            ),
+            ("Grades/Comments", client.async_get_grade_comments()),
+            ("Units", client.async_get_units()),
+            ("PointGrades", client.async_get_point_grades()),
+            ("DescriptiveGrades", client.async_get_descriptive_grades()),
+            ("TextGrades", client.async_get_text_grades()),
         ]
 
         for label, coro in endpoints:

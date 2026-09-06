@@ -83,6 +83,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_class: ClassData | None = None
         self._cached_homework_categories: dict[int, str] = {}
         self._cached_free_days: list[FreeDayData] = []
+        self._cached_note_categories: dict[int, str] = {}
 
         # The lucky number is normally published once a day; skip refetching
         # it before LUCKY_NUMBER_PUBLISH_HOUR once today's value is cached.
@@ -198,6 +199,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             school_class=self._cached_class,
             free_days=self._cached_free_days,
             homework_categories=self._cached_homework_categories,
+            note_categories=self._cached_note_categories,
         )
 
     async def _async_fetch_core_payloads(
@@ -266,6 +268,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 homework_categories_payload,
                 school_free_days_payload,
                 class_free_days_payload,
+                note_categories_payload,
             ) = await asyncio.gather(
                 self._client.async_get_subjects(),
                 self._client.async_get_teachers(),
@@ -275,6 +278,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._client.async_get_homework_categories(),
                 self._client.async_get_school_free_days(),
                 self._client.async_get_class_free_days(),
+                self._client.async_get_note_categories(),
             )
         except LibrusError:
             _LOGGER.warning(
@@ -296,6 +300,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_free_days = _parse_free_days(
             school_free_days_payload, "SchoolFreeDays"
         ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
+        self._cached_note_categories = _parse_id_name_map(
+            note_categories_payload, ("Categories",)
+        )
         self._reference_data_fetched_at = now
 
     async def _async_get_messages(self) -> tuple[int, dict[str, int], list[MessageData]]:
@@ -802,7 +809,9 @@ def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> d
         # present-but-None value.
         first = item.get("FirstName") or ""
         last = item.get("LastName") or ""
-        name = item.get("Name") or f"{first} {last}".strip()
+        # CONFIRMED live: Notes/Categories uses "CategoryName", not "Name"
+        # like every other id-name lookup this helper is used for.
+        name = item.get("Name") or item.get("CategoryName") or f"{first} {last}".strip()
         if name:
             result[int(item["Id"])] = name
     return result

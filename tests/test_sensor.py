@@ -80,6 +80,34 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
 
 
+async def test_behaviour_notices_sensor_resolves_category_name(hass) -> None:
+    """CONFIRMED live (2026-09-06): Notes/Categories is real and populated -
+    the `recent` attribute must resolve category_id to the real name, not
+    just show the raw id."""
+    client = build_mock_client(
+        async_get_notes={
+            "Notes": [
+                {
+                    "Id": 1,
+                    "Text": "Wzorowa postawa na lekcji",
+                    "Category": {"Id": 855},
+                    "Date": "2026-09-05",
+                    "Positive": 1,
+                }
+            ]
+        },
+        async_get_note_categories={
+            "Categories": [{"Id": 855, "CategoryName": "Praca na lekcji"}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "behaviour_notices")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    assert state.attributes["recent"][0]["category"] == "Praca na lekcji"
+
+
 async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
     """The `recent` attribute must carry more than just a bare subject list
     (content preview + dates), matching the Behaviour notices/Unread

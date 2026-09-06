@@ -25,10 +25,14 @@ from .const import (
     DATA_BASE_URL,
     ENDPOINT_ATTENDANCE_TYPES,
     ENDPOINT_ATTENDANCES,
+    ENDPOINT_BEHAVIOUR_GRADES_POINTS,
+    ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES,
     ENDPOINT_CLASSES,
     ENDPOINT_CLASSROOMS,
     ENDPOINT_CLASS_FREE_DAYS,
+    ENDPOINT_DESCRIPTIVE_GRADES,
     ENDPOINT_GRADE_CATEGORIES,
+    ENDPOINT_GRADE_COMMENTS,
     ENDPOINT_GRADE_TYPES,
     ENDPOINT_GRADES,
     ENDPOINT_HOMEWORK_ASSIGNMENTS,
@@ -36,14 +40,18 @@ from .const import (
     ENDPOINT_HOMEWORKS,
     ENDPOINT_LUCKY_NUMBERS,
     ENDPOINT_ME,
+    ENDPOINT_NOTE_CATEGORIES,
     ENDPOINT_NOTES,
     ENDPOINT_PARENT_TEACHER_CONFERENCES,
+    ENDPOINT_POINT_GRADES,
     ENDPOINT_SCHOOL_FREE_DAYS,
     ENDPOINT_SCHOOL_NOTICES,
     ENDPOINT_SCHOOLS,
     ENDPOINT_SUBJECTS,
     ENDPOINT_TEACHERS,
+    ENDPOINT_TEXT_GRADES,
     ENDPOINT_TIMETABLES,
+    ENDPOINT_UNITS,
     ENDPOINT_VIRTUAL_CLASSES,
     LOGIN_HEADERS,
     MAX_OAUTH_REDIRECTS,
@@ -361,6 +369,43 @@ class LibrusApiClient:
         like "bz"/"np"/"zw") - not currently consumed anywhere, kept for
         diagnostics/future use now that it's confirmed real."""
         return await self._async_request(ENDPOINT_GRADE_TYPES)
+
+    async def async_get_note_categories(self) -> dict[str, Any]:
+        """CONFIRMED live (2026-09-06) with real, populated data - wired
+        into the coordinator's reference-data refresh."""
+        return await self._async_request(ENDPOINT_NOTE_CATEGORIES)
+
+    async def async_get_behaviour_grade_points(self) -> dict[str, Any]:
+        """"Ocena zachowania" (formal behaviour grade) - distinct from
+        Notes ("uwagi"). CONFIRMED real+reachable, empty on this account so
+        far - not wired into the coordinator/any entity yet, see const.py's
+        ENDPOINT_BEHAVIOUR_GRADES_POINTS."""
+        return await self._async_request(ENDPOINT_BEHAVIOUR_GRADES_POINTS)
+
+    async def async_get_behaviour_grade_point_categories(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES)
+
+    async def async_get_grade_comments(self) -> dict[str, Any]:
+        """CONFIRMED live to be a SEPARATE endpoint from /Grades - see
+        const.py's ENDPOINT_GRADE_COMMENTS for why this casts doubt on
+        _parse_grades' current embedded-Comments assumption. Empty on this
+        account, not wired in."""
+        return await self._async_request(ENDPOINT_GRADE_COMMENTS)
+
+    async def async_get_units(self) -> dict[str, Any]:
+        """School/unit configuration (which grade systems are enabled, bell
+        schedule, behaviour-points settings). CONFIRMED real+populated, not
+        wired into the coordinator/any entity yet."""
+        return await self._async_request(ENDPOINT_UNITS)
+
+    async def async_get_point_grades(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_POINT_GRADES)
+
+    async def async_get_descriptive_grades(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_DESCRIPTIVE_GRADES)
+
+    async def async_get_text_grades(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_TEXT_GRADES)
 
     # ------------------------------------------------------------------
     # Wiadomości (messages) - a separate subsystem, own domain/session.

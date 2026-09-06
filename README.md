@@ -45,7 +45,7 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
-| `sensor` Behaviour notices | Count, with a short recent-items attribute |
+| `sensor` Behaviour notices | Count, with a short recent-items attribute including the resolved category name |
 | `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` School | Name, town/street, head teacher, contact details |
 | `sensor` Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
@@ -89,6 +89,7 @@ A few details couldn't be confirmed against a real account with data yet (an emp
 - Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
 - Real homework assignments (as opposed to the general agenda feed above) come from a separate `HomeWorkAssignments` endpoint, confirmed live to be real and reachable - it just had nothing in it yet, so it isn't wired into any entity until there's real data to confirm its shape against.
 - A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.
+- A deeper pass over szkolny-eu/szkolny-android's raw `LibrusApi*.kt` file list (not just its higher-level feature flags) turned up more confirmed-real-but-empty endpoints, all with client methods available but not wired into any entity: `BehaviourGrades/Points` (a formal "ocena zachowania" behaviour grade, distinct from the free-text Notes/"uwagi" already supported), `PointGrades`/`DescriptiveGrades`/`TextGrades` (alternate grading systems alongside the numeric one - this account's school has `DescriptiveGradesEnabled` but not `PointGradesEnabled`, per the `Units` endpoint), and `Grades/Comments`. That last one is worth a specific flag: it's a *separate* endpoint from `/Grades`, which casts real doubt on this integration's current assumption that grade comments arrive nested inside each `/Grades` item - unconfirmed either way since both are empty on the test account.
 
 If you hit one of these, please open an issue with what you saw (redact personal data).
 

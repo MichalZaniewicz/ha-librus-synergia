@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.4
+
+Deeper pass over szkolny-eu/szkolny-android's raw endpoint list (every
+`LibrusApi*.kt` file, not just the higher-level feature-flag list used for
+the 0.4.0 round), live-probed against the real account.
+
+- **Behaviour notices** sensor's `recent` attribute now resolves each
+  note's category id to its real name (e.g. "Praca na lekcji") via the
+  `Notes/Categories` endpoint - confirmed live with real data.
+- New client methods for endpoints confirmed real+reachable but empty on
+  the test account, not yet wired into any entity (same treatment as
+  `VirtualClasses`/`ParentTeacherConferences` before them):
+  `BehaviourGrades/Points` (+ Categories) - a formal "ocena zachowania"
+  behaviour grade, distinct from Notes/"uwagi"; `PointGrades`,
+  `DescriptiveGrades`, `TextGrades` - alternate grading systems (this
+  account's school has descriptive grades enabled, not point grades, per
+  the new `Units` endpoint); `Grades/Comments`.
+- **Flagged, not yet fixed**: `Grades/Comments` turned out to be a
+  *separate* endpoint from `/Grades`, casting real doubt on this
+  integration's assumption that grade comments arrive nested inside each
+  `/Grades` item. Unconfirmed either way - no real grade with a comment
+  exists yet to check against.
+
 ## 0.4.3
 
 - **Unread announcements** sensor's `recent` attribute now carries a content
