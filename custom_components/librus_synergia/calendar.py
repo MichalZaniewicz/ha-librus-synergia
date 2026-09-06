@@ -179,31 +179,51 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
     _attr_has_entity_name = True
     _attr_translation_key = "timetable"
 
+    # How long an on-demand-fetched week is trusted before being refetched -
+    # same window as the coordinator's own reference-data cache. Without
+    # this, a week fetched once (e.g. a dashboard querying "next month")
+    # would be served from _week_cache FOREVER for the lifetime of this
+    # entity, silently going stale (a substitution added/removed after the
+    # first fetch would never be picked up).
+    _WEEK_CACHE_TTL = timedelta(hours=24)
+
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_timetable"
         self._attr_device_info = librus_device_info(entry)
-        self._week_cache: dict[date, dict[date, list[LessonData]]] = {}
+        self._week_cache: dict[date, tuple[dict[date, list[LessonData]], datetime]] = {}
 
     async def _async_get_week(self, week_start: date) -> dict[date, list[LessonData]]:
-        if week_start not in self._week_cache:
-            try:
-                payload = await self.coordinator.async_fetch_timetable_week(week_start)
-            except LibrusError:
-                # Forced re-login (inside async_fetch_timetable_week) also
-                # failed - don't crash the whole calendar REST request over
-                # one week's worth of lessons; log and degrade to "no
-                # lessons known for this week" instead. Not cached, so the
-                # next request for this same week tries again fresh.
+        cached = self._week_cache.get(week_start)
+        if cached is not None and dt_util.utcnow() - cached[1] < self._WEEK_CACHE_TTL:
+            return cached[0]
+        try:
+            payload = await self.coordinator.async_fetch_timetable_week(week_start)
+        except LibrusError:
+            # Forced re-login (inside async_fetch_timetable_week) also
+            # failed - don't crash the whole calendar REST request over one
+            # week's worth of lessons. Prefer stale cached data over none if
+            # we have it (a day-old timetable is still more useful than an
+            # empty one); only degrade to "no lessons known" if this week
+            # was never fetched successfully before.
+            if cached is not None:
                 _LOGGER.warning(
-                    "Failed to fetch timetable for week starting %s "
-                    "(session recovery also failed) - returning no lessons "
-                    "for this week",
+                    "Failed to refresh timetable for week starting %s "
+                    "(session recovery also failed) - serving stale cached "
+                    "data instead",
                     week_start,
                 )
-                return {}
-            self._week_cache[week_start] = merge_timetables(payload)
-        return self._week_cache[week_start]
+                return cached[0]
+            _LOGGER.warning(
+                "Failed to fetch timetable for week starting %s "
+                "(session recovery also failed) - returning no lessons "
+                "for this week",
+                week_start,
+            )
+            return {}
+        merged = merge_timetables(payload)
+        self._week_cache[week_start] = (merged, dt_util.utcnow())
+        return merged
 
     @property
     def event(self) -> CalendarEvent | None:

@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.4.16
+
+Code-review pass (no new user-visible features) closing three real
+resilience gaps plus one data-normalization hardening:
+
+- **`_async_fetch_core_payloads` no longer fails all-or-nothing.** All 16
+  core+supplementary endpoints used to sit in ONE `asyncio.gather()` -
+  exactly the same failure class already fixed once for the Wiadomości
+  mailboxes in 0.4.14 (`asyncio.gather()` discards every already-succeeded
+  result the moment any ONE awaitable raises). A single flaky/newer
+  endpoint (e.g. `DescriptiveGrades`, `ParentTeacherConferences`) could
+  wipe grades/attendance/timetable/notices for the whole cycle. Split into
+  two tiers: the original core sensors stay in one gather (still fatal on
+  failure, still drives the forced-relogin-and-retry-once recovery), the
+  newer supplementary endpoints are now fetched with
+  `return_exceptions=True` so one failing only degrades that one entity to
+  empty, never the rest.
+- **Bare-JSON-array normalization is no longer endpoint-blind.** 0.4.14
+  fixed a real bug (a secondary Wiadomości mailbox returning a bare array)
+  by having `_async_read_json` wrap ANY bare array under a hardcoded
+  `"data"` key - correct for Wiadomości, but silently wrong for any other
+  endpoint that might someday do the same (e.g. `Grades/Comments`, which
+  uses a `"Comments"` key). Now opt-in per call site
+  (`array_envelope_key=...`) - only the one endpoint that has actually been
+  observed doing this gets normalized; anything else still fails loudly.
+- **Timetable week cache now expires.** `LibrusTimetableCalendar` caches
+  on-demand-fetched weeks (for date ranges outside the coordinator's own
+  current+next-week poll window) forever for the entity's lifetime -
+  correct once, then silently stale if a substitution changed later. Now
+  refetches after 24h, and falls back to the stale cached data (rather than
+  nothing) if a refresh attempt fails.
+
+Companion cards (`ha-librus-synergia-cards` 0.2.3):
+- **Cards no longer rescan the entity registry on every unrelated state
+  change.** Home Assistant hands every card a new `hass` object on ANY
+  state change anywhere in the instance, and every card's device/entity
+  resolution ran a full linear scan of `hass.entities` on every single
+  render as a result. `LibrusBaseCard._resolveEntities()` now memoizes its
+  result against the specific `hass.entities` reference it was computed
+  from - that reference only actually changes when the entity registry
+  itself changes (a rename, a reload, a device added/removed), not on
+  every state update.
+- **"What's new" feed's sort fixed for same-day items.** Grades/notes/
+  announcements carry a bare `YYYY-MM-DD` date, messages a full
+  `YYYY-MM-DDTHH:MM:SS` timestamp - sorting the two directly always sorted
+  a same-day bare date as "later" than any specific time that day (a grade
+  added at 07:00 could show up above a message from 20:00 the same day).
+  Bare dates are now padded to midnight before comparing, so same-day items
+  interleave in a defined, sensible order.
+
 ## 0.4.15
 
 **Real bug, found live**: the Lucky number sensor always presented its

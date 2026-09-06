@@ -207,11 +207,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         except LibrusError as err:
             raise UpdateFailed(str(err)) from err
 
+        # NOTE: this order must match _async_fetch_core_payloads' return -
+        # tier 1 (core) fields first, then tier 2 (optional) fields, each
+        # tier in the exact order its own gather() lists them.
         (
             me_payload,
             grades_payload,
             categories_payload,
-            grade_comments_payload,
             notes_payload,
             attendances_payload,
             attendance_types_payload,
@@ -219,6 +221,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             timetable_next_week,
             homeworks_payload,
             notices_payload,
+            grade_comments_payload,
             homework_assignments_payload,
             behaviour_grades_payload,
             behaviour_grade_comments_payload,
@@ -277,17 +280,43 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
         )
 
+    # Labels for the SUPPLEMENTARY endpoints fetched by _async_fetch_core_
+    # payloads, in the exact order passed to that method's second
+    # asyncio.gather() - used only for the warning logged when one of them
+    # fails. Keep in sync with that gather() call.
+    _OPTIONAL_PAYLOAD_LABELS = (
+        "Grades/Comments",
+        "HomeWorkAssignments",
+        "BehaviourGrades/Points",
+        "BehaviourGrades/Points/Comments",
+        "DescriptiveGrades",
+        "ParentTeacherConferences",
+    )
+
     async def _async_fetch_core_payloads(
         self, week_start: date, next_week_start: date
     ) -> tuple[Any, ...]:
         """The core (non-optional) data fetch - grades/attendance/timetable/
         agenda/announcements. Factored out of `_async_update_data` so it can
-        be retried once, unmodified, after a forced re-login (see there)."""
-        return await asyncio.gather(
+        be retried once, unmodified, after a forced re-login (see there).
+
+        Split into two tiers, on purpose - previously all 16 endpoints were
+        in ONE asyncio.gather(), so a single failure on any of them (e.g. a
+        newer, less-exercised endpoint like DescriptiveGrades hiccuping)
+        raised and discarded every OTHER endpoint's already-successful
+        result too, wiping grades/attendance/timetable for the whole cycle
+        over one unrelated endpoint. TIER 1 below is the original,
+        genuinely load-bearing sensors - a failure there is still fatal and
+        still drives the forced-relogin-and-retry-once logic in
+        `_async_update_data`. TIER 2 is the newer supplementary endpoints -
+        fetched with `return_exceptions=True` so one of them failing only
+        degrades THAT ONE entity to empty this cycle, same "confirmed real,
+        empty" degrade path this codebase already uses for a genuinely
+        empty account."""
+        core = await asyncio.gather(
             self._client.async_get_me(),
             self._client.async_get_grades(),
             self._client.async_get_grade_categories(),
-            self._client.async_get_grade_comments(),
             self._client.async_get_notes(),
             self._client.async_get_attendances(),
             self._client.async_get_attendance_types(),
@@ -295,12 +324,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_timetable(next_week_start),
             self._client.async_get_homeworks(),
             self._client.async_get_school_notices(),
+        )
+
+        optional_results = await asyncio.gather(
+            self._client.async_get_grade_comments(),
             self._client.async_get_homework_assignments(),
             self._client.async_get_behaviour_grade_points(),
             self._client.async_get_behaviour_grade_point_comments(),
             self._client.async_get_descriptive_grades(),
             self._client.async_get_parent_teacher_conferences(),
+            return_exceptions=True,
         )
+        optional_payloads = [
+            self._degrade_optional_payload(label, result)
+            for label, result in zip(self._OPTIONAL_PAYLOAD_LABELS, optional_results)
+        ]
+
+        return (*core, *optional_payloads)
+
+    @staticmethod
+    def _degrade_optional_payload(
+        label: str, result: dict[str, Any] | BaseException
+    ) -> dict[str, Any]:
+        """Turn one `return_exceptions=True` gather result into a payload,
+        degrading a LibrusError to an empty dict (so its parser sees the
+        same shape as a genuinely empty account) instead of letting it take
+        down the rest of the core-data fetch. Anything that ISN'T a
+        LibrusError (a real bug, or asyncio.CancelledError) is re-raised -
+        only confirmed API-level failures are safe to swallow here."""
+        if isinstance(result, BaseException):
+            if isinstance(result, LibrusError):
+                _LOGGER.debug(
+                    "Optional endpoint '%s' fetch failed (non-fatal): %s",
+                    label,
+                    result,
+                    exc_info=result,
+                )
+                return {}
+            raise result
+        return result
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
         now = dt_util.now()

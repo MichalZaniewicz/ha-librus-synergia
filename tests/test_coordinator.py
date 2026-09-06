@@ -302,6 +302,26 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
     assert data.alert_messages == []
 
 
+async def test_optional_endpoint_failure_does_not_wipe_core_data(hass) -> None:
+    """BUG FIX (2026-09-06, code review): _async_fetch_core_payloads used to
+    put all 16 core+supplementary endpoints in ONE asyncio.gather() -
+    exactly the same all-or-nothing failure class already fixed once for
+    messages (see test_secondary_mailbox_failure_does_not_wipe_inbox_data).
+    A single newer/less-exercised endpoint (DescriptiveGrades here) raising
+    must degrade only ITS OWN entity to empty, never wipe out
+    grades/attendance/timetable/notices, which were fetched successfully."""
+    client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
+    client.async_get_descriptive_grades.side_effect = LibrusUnexpectedResponseError(
+        "HTTP 500 from DescriptiveGrades"
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.grades) == 1
+    assert data.descriptive_grades == []
+
+
 async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:
     """CONFIRMED live (2026-09-06): Librus truncates the list endpoint's
     base64 `content` field to a fixed byte length, which can land mid a

@@ -243,16 +243,39 @@ class LibrusApiClient:
     # ------------------------------------------------------------------
 
     async def _async_request(
-        self, endpoint: str, *, params: dict[str, str] | None = None
+        self,
+        endpoint: str,
+        *,
+        params: dict[str, str] | None = None,
+        array_envelope_key: str | None = None,
     ) -> dict[str, Any]:
-        return await self._async_request_url(f"{DATA_BASE_URL}/{endpoint}", params=params)
+        return await self._async_request_url(
+            f"{DATA_BASE_URL}/{endpoint}",
+            params=params,
+            array_envelope_key=array_envelope_key,
+        )
 
     async def _async_request_url(
-        self, url: str, *, params: dict[str, str] | None = None
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        array_envelope_key: str | None = None,
     ) -> dict[str, Any]:
         """Same as `_async_request` but for a fully-formed URL, not just an
         endpoint under the Synergia gateway - needed for the separate
-        Wiadomości subsystem, which lives on its own domain."""
+        Wiadomości subsystem, which lives on its own domain.
+
+        `array_envelope_key`: some endpoints (confirmed live so far: the
+        Wiadomości secondary-mailbox list endpoints) return a bare JSON
+        array instead of the usual `{"<key>": [...]}` envelope. Only pass
+        this for an endpoint that has actually been observed doing that -
+        it tells `_async_read_json` which key to wrap the array under.
+        Every other endpoint keeps the original strict behavior (a bare
+        list is treated as an unexpected response, not silently guessed
+        at) so a *different* endpoint that unexpectedly returns a list
+        someday fails loudly instead of being mis-keyed under "data".
+        """
         try:
             async with self._session.get(
                 url, headers={"User-Agent": USER_AGENT}, params=params
@@ -261,7 +284,9 @@ class LibrusApiClient:
                     raise LibrusServerMaintenanceError(
                         f"Librus is under maintenance (HTTP 503) on {url}."
                     )
-                payload = await self._async_read_json(response)
+                payload = await self._async_read_json(
+                    response, array_envelope_key=array_envelope_key
+                )
                 if response.status in (401, 403):
                     # Distinct from LibrusInvalidCredentialsError (which
                     # means the login handshake itself was rejected) - this
@@ -280,7 +305,9 @@ class LibrusApiClient:
         return payload
 
     @staticmethod
-    async def _async_read_json(response: aiohttp.ClientResponse) -> dict[str, Any]:
+    async def _async_read_json(
+        response: aiohttp.ClientResponse, *, array_envelope_key: str | None = None
+    ) -> dict[str, Any]:
         try:
             data = await response.json(content_type=None)
         except (aiohttp.ContentTypeError, ValueError) as err:
@@ -300,7 +327,18 @@ class LibrusApiClient:
             # fetches - silently wiped out the otherwise-working inbox
             # unread-count/message-list data too, via a shared
             # asyncio.gather()).
-            return {"data": data}
+            #
+            # Only the ONE confirmed endpoint (via async_get_messages'
+            # explicit array_envelope_key="data") gets this treatment. Any
+            # other endpoint that unexpectedly returns a bare list falls
+            # through to the "Expected a JSON object" error below instead of
+            # being silently (and possibly wrongly - e.g. Grades/Comments
+            # uses a "Comments" key, not "data") wrapped under "data".
+            if array_envelope_key is not None:
+                return {array_envelope_key: data}
+            raise LibrusUnexpectedResponseError(
+                f"Expected a JSON object, got {type(data).__name__}"
+            )
         if not isinstance(data, dict):
             raise LibrusUnexpectedResponseError(
                 f"Expected a JSON object, got {type(data).__name__}"
@@ -473,8 +511,15 @@ class LibrusApiClient:
         params = {"limit": str(limit)}
         if unread_only:
             params["unreadOnly"] = "1"
+        # CONFIRMED live (2026-09-06): at least one secondary mailbox
+        # ("substitutions"/"alerts") returns a bare JSON array here instead
+        # of the {"data": [...]} envelope every other mailbox uses -
+        # array_envelope_key normalizes that one confirmed case without
+        # guessing the same for every other endpoint in the client.
         return await self._async_request_url(
-            f"{MESSAGES_BASE_URL}/{mailbox}/messages", params=params
+            f"{MESSAGES_BASE_URL}/{mailbox}/messages",
+            params=params,
+            array_envelope_key="data",
         )
 
     async def async_get_message(self, mailbox: str, message_id: str) -> dict[str, Any]:
