@@ -204,6 +204,49 @@ async def test_messages_parsed_when_available(hass) -> None:
     assert data.messages[0].content == "Dzień dobry"
 
 
+async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:
+    """CONFIRMED live (2026-09-06): Librus truncates the list endpoint's
+    base64 `content` field to a fixed byte length, which can land mid a
+    multi-byte UTF-8 character (a Polish "a" here). Previously this raised
+    UnicodeDecodeError and fell all the way back to the raw, still-encoded
+    base64 string - rendered as an unbroken hash-like blob in the
+    Wiadomości card, causing horizontal scroll. Must decode the readable
+    prefix instead of the raw base64."""
+    # base64.b64decode("U3phbm93bmkgUGHFhHN0d28sCgp6YXByYXN6YW0gY2jEmXRu"
+    # eyChIHVjem5pw7N3IHoga2xhcyBzacOzZG15Y2ggZG8gdWR6aWHFgnUgdyB6YWrEmWNp"
+    # YWNoIHJvendpamFqxA==") truncates "rozwijając" mid-"ą".
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    client.async_get_messages.return_value = {
+        "data": [
+            {
+                "messageId": "99",
+                "senderName": "Hanke Kamila",
+                "topic": "Zajecia",
+                "content": (
+                    "U3phbm93bmkgUGHFhHN0d28sCgp6YXByYXN6YW0gY2jEmXRueWNoIHVj"
+                    "em5pw7N3IHoga2xhcyBzacOzZG15Y2ggZG8gdWR6aWHFgnUgdyB6YWrE"
+                    "mWNpYWNoIHJvendpamFqxA=="
+                ),
+                "sendDate": "2026-09-04T15:06:46",
+                "readDate": "2026-09-05T10:00:00",
+                "isAnyFileAttached": False,
+            }
+        ]
+    }
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.messages) == 1
+    content = data.messages[0].content
+    # Readable prefix decoded, no raw base64 leaked through, no U+FFFD/mojibake.
+    assert content.startswith("Szanowni Państwo,\n\nzapraszam chętnych uczniów")
+    assert "U3phbm93" not in content
+    assert "�" not in content
+
+
 async def test_notes_positive_resolves_to_sentiment_label(hass) -> None:
     """CONFIRMED (2026-09-06) via szkolny-android's reference parser:
     0=negative, 1=positive, else(2)=neutral."""

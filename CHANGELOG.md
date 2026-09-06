@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.10
+
+Two real bugs found live while building the new "Szkoła" HA dashboard with
+every companion card installed:
+
+- **Wiadomości card showing an unbroken base64 blob (horizontal scroll)**:
+  Librus's message-list endpoint truncates the base64-encoded `content`
+  field to a fixed byte length, which can land mid a multi-byte UTF-8
+  character (e.g. a Polish "ą"/"ę"/"ń"). Decoding that then raised
+  `UnicodeDecodeError`, and the integration fell all the way back to the
+  raw, still-base64-encoded string - rendered by the card as one long
+  unbroken blob. Now decodes the readable prefix instead (drops only the
+  incomplete trailing bytes), matching how every other truncated message
+  already reads.
+- **Week-timetable card showing "Coś poszło nie tak"**: `LibrusTimetable
+  Calendar.async_get_events` (used by any dashboard asking for a date
+  range outside the coordinator's own current+next-week cache) called the
+  API client directly, with none of the coordinator's forced-relogin-and-
+  retry-once recovery for a session that expired mid-cycle. A live session
+  expiry crashed the whole `/api/calendars/<entity>` request with an
+  unhandled 500. The coordinator now exposes a reusable
+  `async_fetch_timetable_week` that applies the same one-retry recovery
+  outside the normal poll cycle too; if that retry also fails, the
+  calendar degrades to "no lessons known for that week" instead of
+  crashing the request.
+
 ## 0.4.9
 
 - Fixed the automation blueprints table: all four "Import Blueprint" badges

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -12,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
 from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
+from .librus_api import LibrusError
 from .librus_api.models import (
     FreeDayData,
     HomeworkEventData,
@@ -19,6 +21,8 @@ from .librus_api.models import (
     LibrusData,
     ParentTeacherConferenceData,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -170,7 +174,21 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
 
     async def _async_get_week(self, week_start: date) -> dict[date, list[LessonData]]:
         if week_start not in self._week_cache:
-            payload = await self.coordinator.client.async_get_timetable(week_start)
+            try:
+                payload = await self.coordinator.async_fetch_timetable_week(week_start)
+            except LibrusError:
+                # Forced re-login (inside async_fetch_timetable_week) also
+                # failed - don't crash the whole calendar REST request over
+                # one week's worth of lessons; log and degrade to "no
+                # lessons known for this week" instead. Not cached, so the
+                # next request for this same week tries again fresh.
+                _LOGGER.warning(
+                    "Failed to fetch timetable for week starting %s "
+                    "(session recovery also failed) - returning no lessons "
+                    "for this week",
+                    week_start,
+                )
+                return {}
             self._week_cache[week_start] = merge_timetables(payload)
         return self._week_cache[week_start]
 

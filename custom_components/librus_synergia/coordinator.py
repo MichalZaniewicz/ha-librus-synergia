@@ -122,6 +122,36 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ranges outside this coordinator's current+next-week cache)."""
         return self._client
 
+    async def async_fetch_timetable_week(self, week_start: date) -> Any:
+        """Fetch one week's raw `Timetable` payload on demand, for
+        `LibrusTimetableCalendar.async_get_events` serving a date range
+        outside the current+next-week window this coordinator normally
+        caches (e.g. a dashboard card asking for "this ISO week" while
+        today is a Sunday, whose Monday has already rolled out of that
+        window).
+
+        BUG FIX (2026-09-06, found live): this on-demand path used to call
+        `self.client.async_get_timetable(week_start)` directly, with none
+        of `_async_update_data`'s forced-relogin-and-retry-once recovery
+        for a mid-cycle session expiry. When the real Librus session died
+        between the coordinator's own last successful poll and a
+        dashboard's calendar REST request, the raw `LibrusSessionExpiredError`
+        propagated straight out of `CalendarEntity.async_get_events` and
+        crashed the whole `/api/calendars/<entity>` request with an
+        unhandled 500 - confirmed live via `ha_config_get_calendar_events`
+        returning exactly that 500 for a past-week range, traced to this
+        exact exception in the error log. Same one-retry-only recovery as
+        `_async_update_data`, just reusable outside the normal poll cycle.
+        """
+        assert self.config_entry is not None
+        try:
+            return await self._client.async_get_timetable(week_start)
+        except LibrusSessionExpiredError:
+            await self._client.async_ensure_session_valid(
+                self.config_entry.data[CONF_PASSWORD], force=True
+            )
+            return await self._client.async_get_timetable(week_start)
+
     async def _async_update_data(self) -> LibrusData:
         assert self.config_entry is not None
         try:
@@ -872,13 +902,29 @@ def _parse_lucky_number(payload: dict[str, Any]) -> LuckyNumberData | None:
 def _decode_message_content(raw: str) -> str:
     """The list endpoint's `content` field is base64-encoded plain text
     (CONFIRMED live - decoding several real messages produced readable
-    Polish text). Falls back to the raw string if it ever isn't, rather
-    than raising and losing the whole messages feature over one bad entry.
+    Polish text). Falls back to the raw string if the payload isn't valid
+    base64 at all, rather than raising and losing the whole messages
+    feature over one bad entry.
+
+    CONFIRMED live (2026-09-06): Librus truncates this field to a fixed
+    BYTE length, which can land mid-multi-byte UTF-8 character (e.g. a
+    Polish "ą"/"ę"/"ń") - a plain `.decode("utf-8")` then raises
+    UnicodeDecodeError on an otherwise-valid message, and previously this
+    fell all the way back to the raw, still-base64-encoded string (visible
+    in the Wiadomości card as an unbroken hash-like blob causing horizontal
+    scroll). Retry with `errors="ignore"` first, which just drops the
+    incomplete trailing bytes and keeps the readable prefix - matches how
+    every OTHER truncated message already reads (cut off mid-word, not
+    mid-character).
     """
     try:
-        return base64.b64decode(raw).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
+        decoded_bytes = base64.b64decode(raw)
+    except ValueError:
         return raw
+    try:
+        return decoded_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return decoded_bytes.decode("utf-8", errors="ignore")
 
 
 # CONFIRMED live: the unread-count response is a per-mailbox breakdown
