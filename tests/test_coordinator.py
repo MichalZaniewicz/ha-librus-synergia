@@ -322,6 +322,60 @@ async def test_optional_endpoint_failure_does_not_wipe_core_data(hass) -> None:
     assert data.descriptive_grades == []
 
 
+def test_decode_message_content_strips_xml_cdata_wrapper() -> None:
+    """BUG FIX (2026-09-06, found live - "co to za bug z treścią
+    wiadomości?"): the single-message endpoint's `Message` field, once
+    base64-decoded, isn't plain text - it's a tiny XML wrapper
+    (`<Message><Content><![CDATA[...]]></Content></Message>`). A card's
+    expanded message view showed the literal
+    "<Message><Content><![CDATA[" prefix leaking into the display."""
+    import base64
+
+    from custom_components.librus_synergia.coordinator import decode_message_content
+
+    xml_wrapped = (
+        "<Message><Content><![CDATA[Szanowni Państwo! Drodzy Uczniowie!"
+        "\n\nPrzypominam wszystkim.]]></Content></Message>"
+    )
+    encoded = base64.b64encode(xml_wrapped.encode("utf-8")).decode("ascii")
+
+    result = decode_message_content(encoded)
+
+    assert result == "Szanowni Państwo! Drodzy Uczniowie!\n\nPrzypominam wszystkim."
+    assert "<Message>" not in result
+    assert "CDATA" not in result
+
+
+def test_decode_message_content_handles_missing_cdata_close_tag() -> None:
+    """Defensive fallback if the CDATA-wrapped text is itself truncated
+    (mirrors the plain-text truncation the list endpoint is confirmed to
+    do) - everything after the opening marker, not raw XML markup."""
+    import base64
+
+    from custom_components.librus_synergia.coordinator import decode_message_content
+
+    truncated = "<Message><Content><![CDATA[Szanowni Państwo! cut off mid"
+    encoded = base64.b64encode(truncated.encode("utf-8")).decode("ascii")
+
+    result = decode_message_content(encoded)
+
+    assert result == "Szanowni Państwo! cut off mid"
+    assert "<Message>" not in result
+
+
+def test_decode_message_content_leaves_plain_text_untouched() -> None:
+    """The list endpoint's `content` field is confirmed plain text (no XML
+    wrapper) - the CDATA-stripping regex must be a no-op there."""
+    import base64
+
+    from custom_components.librus_synergia.coordinator import decode_message_content
+
+    plain = "Szanowni Państwo, zapraszam na zebranie."
+    encoded = base64.b64encode(plain.encode("utf-8")).decode("ascii")
+
+    assert decode_message_content(encoded) == plain
+
+
 async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:
     """CONFIRMED live (2026-09-06): Librus truncates the list endpoint's
     base64 `content` field to a fixed byte length, which can land mid a

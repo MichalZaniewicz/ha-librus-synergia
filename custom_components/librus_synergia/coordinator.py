@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -1015,13 +1016,32 @@ def _parse_lucky_number(payload: dict[str, Any]) -> LuckyNumberData | None:
     return LuckyNumberData(day=raw.get("LuckyNumberDay"), number=number)
 
 
+# CONFIRMED live (2026-09-06): the single-message endpoint's `Message`
+# field (LibrusApiClient.async_get_message), once base64-decoded, is NOT
+# plain text - it's a tiny XML wrapper,
+# `<Message><Content><![CDATA[the real text...]]></Content></Message>`,
+# and the real content lives inside the CDATA section. Found live: a
+# card's expanded message view showed the literal
+# "<Message><Content><![CDATA[" prefix leaking into the display. The list
+# endpoint's `content` field does NOT do this (confirmed plain text, no
+# wrapper) - decode_message_content is shared by both, so this regex is a
+# no-op there (it simply won't match).
+_MESSAGE_XML_CDATA_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
+# Defensive fallback for a CDATA section missing its closing "]]>" - e.g.
+# if a future endpoint truncates this XML-wrapped text the way the list
+# endpoint's plain-text `content` is known to (unconfirmed whether
+# async_get_message's response can be truncated at all, but showing "cut
+# off mid-sentence" beats showing raw XML markup either way).
+_MESSAGE_XML_CDATA_OPEN_RE = re.compile(r"<!\[CDATA\[(.*)$", re.DOTALL)
+
+
 def decode_message_content(raw: str) -> str:
     """The list endpoint's `content` field (and the single-message
     endpoint's `Message` field - see `LibrusApiClient.async_get_message`)
-    are base64-encoded plain text (CONFIRMED live - decoding several real
-    messages produced readable Polish text). Falls back to the raw string
-    if the payload isn't valid base64 at all, rather than raising and
-    losing the whole messages feature over one bad entry. Public (not
+    are base64-encoded (CONFIRMED live - decoding several real messages
+    produced readable Polish text). Falls back to the raw string if the
+    payload isn't valid base64 at all, rather than raising and losing the
+    whole messages feature over one bad entry. Public (not
     underscore-prefixed) - shared with `services.py`'s `get_message`
     handler, which decodes the full-content field the same way.
 
@@ -1041,9 +1061,15 @@ def decode_message_content(raw: str) -> str:
     except ValueError:
         return raw
     try:
-        return decoded_bytes.decode("utf-8")
+        text = decoded_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        return decoded_bytes.decode("utf-8", errors="ignore")
+        text = decoded_bytes.decode("utf-8", errors="ignore")
+
+    if (match := _MESSAGE_XML_CDATA_RE.search(text)) is not None:
+        return match.group(1)
+    if (match := _MESSAGE_XML_CDATA_OPEN_RE.search(text)) is not None:
+        return match.group(1)
+    return text
 
 
 # CONFIRMED live: the unread-count response is a per-mailbox breakdown

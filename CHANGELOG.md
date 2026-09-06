@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.17
+
+Two real bugs, both found live by the user.
+
+**"ogłoszeń nie można odczytywać?" (announcements can't be read)**: the
+Unread announcements sensor's `recent` attribute truncated `content` to
+200 characters for no real reason - unlike the Wiadomości mailboxes,
+Librus does NOT truncate this endpoint's content server-side, so this was
+this integration's own doing. Now exposes the full content (plus an `id`
+field, for the companion card's click-to-expand). No extra API call and
+no read-marking side effect either - this data was already being fetched
+in full every cycle.
+
+**"co to za bug z treścią wiadomości?" (message content bug)**: a card's
+expanded full-message view showed the literal `<Message><Content>` `
+<![CDATA[` prefix leaking into the display. The single-message endpoint's
+`Message` field, once base64-decoded, isn't plain text - it's a tiny XML
+wrapper around the real content in a CDATA section. `decode_message_content`
+now strips this wrapper (falls back gracefully if the closing `]]>` is
+ever missing). The list endpoint's `content` field is unaffected -
+confirmed plain text, no wrapper.
+
 ## 0.4.16
 
 **Real bug, found live**: the Attendance sensor's `breakdown` attribute

@@ -426,8 +426,16 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
         return {
             "recent": [
                 {
+                    "id": n.id,
                     "subject": n.subject,
-                    "content": n.content[:200],
+                    # Unlike the Wiadomości mailboxes, Librus does NOT
+                    # truncate this endpoint's content server-side - it was
+                    # this integration that used to cut it to 200 chars for
+                    # no real reason, making the full text impossible for a
+                    # card to ever show. Expose it whole; there's no read-
+                    # marking side effect or extra API call to worry about
+                    # here, unlike the Wiadomości "click to read" feature.
+                    "content": n.content,
                     "start_date": n.start_date,
                     "end_date": n.end_date,
                     "creation_date": n.creation_date,

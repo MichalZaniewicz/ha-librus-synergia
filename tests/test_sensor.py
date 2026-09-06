@@ -164,13 +164,14 @@ async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
     """The `recent` attribute must carry more than just a bare subject list
     (content preview + dates), matching the Behaviour notices/Unread
     messages sensors' established pattern."""
+    long_content = "Treść ogłoszenia. " * 20  # > 200 chars
     client = build_mock_client(
         async_get_school_notices={
             "SchoolNotices": [
                 {
                     "Id": "LID-NBOARD-NOTICE-9093-1",
                     "Subject": "Kandydaci do Rady Samorządu Uczniowskiego",
-                    "Content": "Treść ogłoszenia...",
+                    "Content": long_content,
                     "StartDate": "2026-09-01",
                     "EndDate": "2026-09-30",
                     "CreationDate": "2026-09-01",
@@ -186,8 +187,15 @@ async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
     assert state.state == "1"
     recent = state.attributes["recent"]
     assert len(recent) == 1
+    assert recent[0]["id"] == "LID-NBOARD-NOTICE-9093-1"
     assert recent[0]["subject"] == "Kandydaci do Rady Samorządu Uczniowskiego"
-    assert recent[0]["content"] == "Treść ogłoszenia..."
+    # BUG FIX (2026-09-06, found live - "ogłoszeń nie można odczytywać?"):
+    # unlike the Wiadomości mailboxes, Librus does NOT truncate this
+    # endpoint's content server-side - it was this integration hardcoding a
+    # 200-char cutoff for no real reason, making the full text impossible
+    # for a card to ever show regardless of what it did with it.
+    assert recent[0]["content"] == long_content
+    assert len(recent[0]["content"]) > 200
     assert recent[0]["start_date"] == "2026-09-01"
     assert recent[0]["end_date"] == "2026-09-30"
 

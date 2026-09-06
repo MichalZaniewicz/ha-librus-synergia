@@ -531,5 +531,13 @@ class LibrusApiClient:
         key). See the big comment above this method's section for why this
         marks the message read and must only be called from deliberate
         user action.
+
+        Also CONFIRMED live (2026-09-06, found by the user in a card's
+        expanded view): the decoded `Message` field isn't plain text - it's
+        wrapped in a tiny XML shell,
+        `<Message><Content><![CDATA[the real text...]]></Content></Message>`.
+        `coordinator.decode_message_content` strips this; do not decode
+        this field any other way or the literal XML markup leaks into the
+        UI.
         """
         return await self._async_request_url(f"{MESSAGES_BASE_URL}/{mailbox}/messages/{message_id}")
