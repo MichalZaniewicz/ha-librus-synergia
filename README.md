@@ -82,6 +82,22 @@ the events above so you don't have to write the YAML yourself - each just asks f
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.
 
+## Custom Lovelace cards
+
+Want a dashboard without wiring these sensors into generic entity cards by hand?
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
+is a companion HACS repo with 22 purpose-built cards - grade averages and a full
+grade log (per-subject or across every subject), attendance, behaviour notices
+and the formal behaviour grade, messages, announcements, homework assignments,
+today's timetable, a week-at-a-glance grid, the agenda, free days, a "Today"
+overview, a weekly summary, the lucky number, a playful trading-card style
+student summary, and an absence-free streak counter. Each card auto-detects
+your child's device (zero YAML for the common case of one student), themes with
+your Home Assistant theme automatically, and follows your HA language (English,
+Polish).
+
+![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
+
 ## Known limitations / unverified details
 
 A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices/grades at the time of writing). Most field names below come straight from reading szkolny-eu/szkolny-android's own reference parser (the same GPL-3.0 source this whole integration is modeled on), not guesswork - but none of it has been checked against a real *populated* response yet:
