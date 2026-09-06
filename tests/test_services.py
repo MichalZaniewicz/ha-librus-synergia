@@ -25,7 +25,12 @@ GOOD_MESSAGE_PAYLOAD = {
 
 
 def _device_id(hass, entry) -> str:
-    device = dr.async_get(hass).async_get_device({(DOMAIN, entry.entry_id)})
+    # async_get_device(identifiers=...) is deprecated (identifiers are no
+    # longer guaranteed unique across config entries) - the modern,
+    # unambiguous lookup is by identifier scoped to the owning entry.
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, entry.entry_id), entry.entry_id
+    )
     assert device is not None
     return device.id
 
