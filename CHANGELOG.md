@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.11
+
+New `librus_synergia.get_message` service: fetches ONE message's full,
+untruncated content (the Unread messages sensor's `recent` attribute only
+ever carries Librus's own truncated preview). **Confirmed live that this
+marks the message read on Librus's servers**, exactly like opening it in
+the Librus app - so it is deliberately a service, never wired into the
+coordinator's routine polling, and only ever meant to run on someone's own
+explicit action (e.g. clicking a message in a dashboard card). The Unread
+messages sensor's `recent` attribute now also carries each message's `id`,
+needed to call the new service. See the README's new "Services" section.
+
 ## 0.4.10
 
 Two real bugs found live while building the new "Szkoła" HA dashboard with

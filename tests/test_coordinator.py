@@ -247,6 +247,53 @@ async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) 
     assert "�" not in content
 
 
+async def test_fetch_message_recovers_from_mid_cycle_session_expiry(hass) -> None:
+    """`async_fetch_message` (services.py's `get_message` on-demand path,
+    deliberately outside the coordinator's routine polling) gets the same
+    forced-relogin-and-retry-once recovery as `_async_update_data` and
+    `async_fetch_timetable_week` for a session that died since the last
+    successful poll."""
+    good_payload = {
+        "data": {
+            "senderName": "Marciszak Amelia",
+            "topic": "Zebranie z rodzicami",
+            "Message": "RHppZWQgZG9icnk=",  # "Dzied dobry" (base64)
+            "sendDate": "2026-09-04T17:47:10",
+            "readDate": "2026-09-06T18:22:51",
+        }
+    }
+    client = build_mock_client()
+    client.async_get_message.side_effect = [
+        LibrusSessionExpiredError("session dead"),
+        good_payload,
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    result = await coordinator.async_fetch_message("inbox", "186536")
+
+    assert result == good_payload
+    force_calls = [
+        c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
+    ]
+    assert len(force_calls) == 1
+
+
+async def test_fetch_message_raises_when_recovery_also_fails(hass) -> None:
+    """Unlike the timetable's on-demand fetch (which degrades to "no
+    lessons known"), a failed message fetch has no sensible empty fallback
+    - it must propagate so the `get_message` service can surface a real
+    error to whoever clicked the message."""
+    client = build_mock_client()
+    client.async_get_message.side_effect = [
+        LibrusSessionExpiredError("session dead"),
+        LibrusInvalidCredentialsError("bad password"),
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    with pytest.raises(LibrusInvalidCredentialsError):
+        await coordinator.async_fetch_message("inbox", "186536")
+
+
 async def test_notes_positive_resolves_to_sentiment_label(hass) -> None:
     """CONFIRMED (2026-09-06) via szkolny-android's reference parser:
     0=negative, 1=positive, else(2)=neutral."""

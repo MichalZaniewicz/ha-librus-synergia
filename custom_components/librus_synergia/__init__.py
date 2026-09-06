@@ -19,6 +19,7 @@ from .const import (
 )
 from .coordinator import LibrusDataUpdateCoordinator
 from .librus_api import LibrusApiClient, LibrusSessionData
+from .services import async_setup_services, async_unload_services
 
 type LibrusConfigEntry = ConfigEntry[LibrusDataUpdateCoordinator]
 
@@ -75,12 +76,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_setup_services(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    # Services are domain-wide, not per-entry - only drop them once the
+    # LAST Librus Synergia entry (student) is going away, so a second
+    # entry doesn't lose `get_message` while the first is just reloading.
+    remaining = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
+    if unloaded and not remaining:
+        async_unload_services(hass)
+    return unloaded
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:

@@ -132,6 +132,12 @@ async def main() -> int:
             has_access = False
 
         if has_access:
+            # Deliberately NOT probing async_get_message() here - CONFIRMED
+            # live it marks the fetched message read server-side, and this
+            # script is meant to be safe to re-run repeatedly against a
+            # real account without side effects. If you need to re-verify
+            # that endpoint, do it in a throwaway scratchpad script instead
+            # (see CLAUDE.md's 2026-09-06 session note), never here.
             for label, coro in [
                 ("Unread messages count", client.async_get_unread_messages_count()),
                 ("Messages (inbox, limit 10)", client.async_get_messages(limit=10)),

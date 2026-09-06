@@ -421,12 +421,17 @@ class LibrusApiClient:
     # ------------------------------------------------------------------
     # Wiadomości (messages) - a separate subsystem, own domain/session.
     #
-    # IMPORTANT, deliberate: there is no method here to fetch a single
-    # message's full body (`/{mailbox}/messages/{id}`), only list/count
-    # endpoints. Fetching an individual message almost certainly marks it
-    # read server-side in the real Librus inbox - so this integration only
-    # ever surfaces subject/sender/date/read-status previews, never
-    # silently marking anything as read just because a sensor polled it.
+    # IMPORTANT: `async_get_message` below (fetching one message's full
+    # body via `/{mailbox}/messages/{id}`) is CONFIRMED live (2026-09-06)
+    # to mark the message read server-side in the real Librus inbox - the
+    # `readDate` field flips from null to a real timestamp immediately
+    # after one GET, on a message that stayed unread across many prior
+    # LIST-endpoint polls. This is exactly why it is NOT called from the
+    # coordinator's routine polling (which only ever uses the list/count
+    # endpoints above, matching "listing never marks anything read") -
+    # it exists solely for `services.py`'s `get_message` service, invoked
+    # only on a user's own deliberate action (clicking a message in a
+    # card), same as opening a message in the real Librus app.
     # ------------------------------------------------------------------
 
     async def async_bootstrap_messages(self) -> bool:
@@ -458,3 +463,15 @@ class LibrusApiClient:
         return await self._async_request_url(
             f"{MESSAGES_BASE_URL}/{mailbox}/messages", params=params
         )
+
+    async def async_get_message(self, mailbox: str, message_id: str) -> dict[str, Any]:
+        """Fetch ONE message's full, untruncated body.
+
+        CONFIRMED live (2026-09-06): real response root key is `"data"`,
+        full content lives in a base64-encoded `"Message"` field (note the
+        capital M - distinct from the list endpoint's lowercase `content`
+        key). See the big comment above this method's section for why this
+        marks the message read and must only be called from deliberate
+        user action.
+        """
+        return await self._async_request_url(f"{MESSAGES_BASE_URL}/{mailbox}/messages/{message_id}")

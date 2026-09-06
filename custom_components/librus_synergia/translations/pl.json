@@ -62,5 +62,21 @@
       "agenda": { "name": "Terminarz" },
       "free_days": { "name": "Dni wolne" }
     }
+  },
+  "services": {
+    "get_message": {
+      "name": "Pobierz wiadomość",
+      "description": "Pobiera pełną, nieobciętą treść JEDNEJ wiadomości z Librusa. Oznacza to wiadomość jako przeczytaną na serwerach Librusa, dokładnie tak jak otwarcie jej w aplikacji lub na stronie Librusa - wywołuj to tylko dla wiadomości, którą ktoś faktycznie chce otworzyć, nigdy automatycznie ani wg harmonogramu.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń), dla którego pobrać wiadomość."
+        },
+        "message_id": {
+          "name": "ID wiadomości",
+          "description": "Identyfikator wiadomości z atrybutu \"recent\" sensora Nieprzeczytane wiadomości."
+        }
+      }
+    }
   }
 }

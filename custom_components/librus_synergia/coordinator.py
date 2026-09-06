@@ -152,6 +152,23 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
             return await self._client.async_get_timetable(week_start)
 
+    async def async_fetch_message(self, mailbox: str, message_id: str) -> Any:
+        """Fetch one message's full body on demand, for `services.py`'s
+        `get_message` service - deliberately outside the coordinator's
+        normal poll cycle (see `LibrusApiClient.async_get_message`'s
+        docstring for why: CONFIRMED live this marks the message read
+        server-side, so it must only ever run on a user's own explicit
+        action, never automatically). Same one-retry-only session-expiry
+        recovery as `async_fetch_timetable_week`."""
+        assert self.config_entry is not None
+        try:
+            return await self._client.async_get_message(mailbox, message_id)
+        except LibrusSessionExpiredError:
+            await self._client.async_ensure_session_valid(
+                self.config_entry.data[CONF_PASSWORD], force=True
+            )
+            return await self._client.async_get_message(mailbox, message_id)
+
     async def _async_update_data(self) -> LibrusData:
         assert self.config_entry is not None
         try:
@@ -899,12 +916,15 @@ def _parse_lucky_number(payload: dict[str, Any]) -> LuckyNumberData | None:
     return LuckyNumberData(day=raw.get("LuckyNumberDay"), number=number)
 
 
-def _decode_message_content(raw: str) -> str:
-    """The list endpoint's `content` field is base64-encoded plain text
-    (CONFIRMED live - decoding several real messages produced readable
-    Polish text). Falls back to the raw string if the payload isn't valid
-    base64 at all, rather than raising and losing the whole messages
-    feature over one bad entry.
+def decode_message_content(raw: str) -> str:
+    """The list endpoint's `content` field (and the single-message
+    endpoint's `Message` field - see `LibrusApiClient.async_get_message`)
+    are base64-encoded plain text (CONFIRMED live - decoding several real
+    messages produced readable Polish text). Falls back to the raw string
+    if the payload isn't valid base64 at all, rather than raising and
+    losing the whole messages feature over one bad entry. Public (not
+    underscore-prefixed) - shared with `services.py`'s `get_message`
+    handler, which decodes the full-content field the same way.
 
     CONFIRMED live (2026-09-06): Librus truncates this field to a fixed
     BYTE length, which can land mid-multi-byte UTF-8 character (e.g. a
@@ -973,7 +993,7 @@ def _parse_messages(
                 id=str(item["messageId"]),
                 sender_name=sender_name,
                 topic=item.get("topic", ""),
-                content=_decode_message_content(item.get("content", "")),
+                content=decode_message_content(item.get("content", "")),
                 send_date=item.get("sendDate"),
                 read_date=item.get("readDate"),
                 has_attachment=bool(item.get("isAnyFileAttached")),

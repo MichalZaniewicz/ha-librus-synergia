@@ -584,6 +584,7 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "mailbox_breakdown": dict(self.coordinator.data.unread_messages_by_mailbox),
             "recent": [
                 {
+                    "id": m.id,
                     "sender": m.sender_name,
                     "topic": m.topic,
                     "content": m.content[:200],

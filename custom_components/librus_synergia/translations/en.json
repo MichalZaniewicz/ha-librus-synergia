@@ -62,5 +62,21 @@
       "agenda": { "name": "Agenda" },
       "free_days": { "name": "Free days" }
     }
+  },
+  "services": {
+    "get_message": {
+      "name": "Get message",
+      "description": "Fetches ONE message's full, untruncated content from Librus. This marks the message as read on Librus's servers, exactly like opening it in the Librus app or website - only call this for a message a person has actually chosen to open, never automatically or on a schedule.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Librus Synergia device (student) to fetch the message from."
+        },
+        "message_id": {
+          "name": "Message ID",
+          "description": "The message's id, from the Unread messages sensor's \"recent\" attribute."
+        }
+      }
+    }
   }
 }

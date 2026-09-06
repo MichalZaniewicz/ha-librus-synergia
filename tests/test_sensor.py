@@ -176,6 +176,34 @@ async def test_unread_messages_sensor_exposes_mailbox_breakdown(hass) -> None:
     assert state.attributes["mailbox_breakdown"]["trash"] == 0
 
 
+async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
+    """The `get_message` service needs a real message id from somewhere a
+    card can reach - this is that somewhere. Without it there'd be no way
+    for a dashboard to know WHICH message to ask the service to fetch."""
+    client = build_mock_client(
+        async_bootstrap_messages=True,
+        async_get_unread_messages_count={"data": {"inbox": 1}},
+        async_get_messages={
+            "data": [
+                {
+                    "messageId": "186536",
+                    "senderName": "Marciszak Amelia",
+                    "topic": "Zebranie z rodzicami",
+                    "content": "RHppZWQgZG9icnk=",
+                    "sendDate": "2026-09-04T17:47:10",
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "unread_messages")
+    state = hass.states.get(entity_id)
+    assert state.attributes["recent"][0]["id"] == "186536"
+
+
 async def test_school_and_class_sensors(hass) -> None:
     client = build_mock_client(
         async_get_schools={

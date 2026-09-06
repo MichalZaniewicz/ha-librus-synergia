@@ -46,7 +46,7 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` | Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` | Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
 | `sensor` | Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
-| `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
+| `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones (including each message's `id`, for the [`get_message` service](#services)) and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). The routine poll never marks anything read - only the message list/count endpoints are used for that. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` | School | Name, town/street, head teacher, contact details |
 | `sensor` | Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `sensor` | Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
@@ -76,6 +76,28 @@ the events above so you don't have to write the YAML yourself - each just asks f
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.
+
+## Services
+
+### `librus_synergia.get_message`
+
+Fetches ONE message's full, untruncated content (the Unread messages sensor's
+`recent` attribute only ever carries a short preview - Librus itself truncates
+that field). **This marks the message as read on Librus's servers, exactly
+like opening it in the Librus app or website** - confirmed live: a message's
+`readDate` flips from empty to a real timestamp the moment this is called.
+Only call it for a message someone has actually chosen to open (e.g. the
+[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)
+Wiadomości card does this when you click a message) - never on a schedule or
+from an automation that isn't a direct response to someone opening it.
+
+| Field | Description |
+|---|---|
+| `device_id` | The Librus Synergia device (student) to fetch from. |
+| `message_id` | The message's `id`, from the Unread messages sensor's `recent` attribute. |
+
+Returns `sender`, `topic`, `content` (full text), `send_date`, `read_date`,
+`has_attachment`.
 
 ## Custom Lovelace cards
 

@@ -1,0 +1,12 @@
+get_message:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    message_id:
+      required: true
+      example: "186536"
+      selector:
+        text:
