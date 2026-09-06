@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.3
+
+- **Unread announcements** sensor's `recent` attribute now carries a content
+  preview and start/end/creation dates for each announcement, not just a
+  bare subject list (`titles`) - matching the Behaviour notices and Unread
+  messages sensors' existing pattern. No extra API calls - this data was
+  already fetched and parsed, just not surfaced.
+
 ## 0.4.2
 
 - **Fixed:** a session that expired mid-cycle (Librus rejecting a data

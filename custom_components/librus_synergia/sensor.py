@@ -289,7 +289,9 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
 
 
 class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
-    """Count of school notices ("ogłoszenia") not yet marked read."""
+    """Count of school notices ("ogłoszenia") not yet marked read, with a
+    recent-items attribute (subject/content preview/dates) matching the
+    Behaviour notices and Unread messages sensors' pattern."""
 
     _attr_translation_key = "unread_announcements"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -309,7 +311,18 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"titles": [n.subject for n in self._unread()[:10]]}
+        return {
+            "recent": [
+                {
+                    "subject": n.subject,
+                    "content": n.content[:200],
+                    "start_date": n.start_date,
+                    "end_date": n.end_date,
+                    "creation_date": n.creation_date,
+                }
+                for n in self._unread()[:10]
+            ]
+        }
 
 
 class LibrusBehaviourNoticesSensor(LibrusSensorBase):

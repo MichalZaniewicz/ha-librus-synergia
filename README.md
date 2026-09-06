@@ -44,7 +44,7 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` *Subject* average (one per subject) | Discovered automatically from your account; attributes include latest grade, proposed/final semester grades |
 | `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
-| `sensor` Unread announcements | Count, with recent titles |
+| `sensor` Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
 | `sensor` Behaviour notices | Count, with a short recent-items attribute |
 | `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` School | Name, town/street, head teacher, contact details |

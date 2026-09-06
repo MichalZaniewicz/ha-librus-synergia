@@ -80,6 +80,38 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
 
 
+async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
+    """The `recent` attribute must carry more than just a bare subject list
+    (content preview + dates), matching the Behaviour notices/Unread
+    messages sensors' established pattern."""
+    client = build_mock_client(
+        async_get_school_notices={
+            "SchoolNotices": [
+                {
+                    "Id": "LID-NBOARD-NOTICE-9093-1",
+                    "Subject": "Kandydaci do Rady Samorządu Uczniowskiego",
+                    "Content": "Treść ogłoszenia...",
+                    "StartDate": "2026-09-01",
+                    "EndDate": "2026-09-30",
+                    "CreationDate": "2026-09-01",
+                    "WasRead": False,
+                }
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "unread_announcements")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    recent = state.attributes["recent"]
+    assert len(recent) == 1
+    assert recent[0]["subject"] == "Kandydaci do Rady Samorządu Uczniowskiego"
+    assert recent[0]["content"] == "Treść ogłoszenia..."
+    assert recent[0]["start_date"] == "2026-09-01"
+    assert recent[0]["end_date"] == "2026-09-30"
+
+
 async def test_unread_messages_sensor_unavailable_when_school_has_no_module(hass) -> None:
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = False
