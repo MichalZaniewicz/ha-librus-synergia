@@ -104,12 +104,15 @@ Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 22 purpose-built cards - grade averages and a full
-grade log (per-subject or across every subject), attendance, behaviour notices
-and the formal behaviour grade, messages, announcements, homework assignments,
-today's timetable, a week-at-a-glance grid, the agenda, free days, a "Today"
-overview, a weekly summary, the lucky number, a playful trading-card style
-student summary, and an absence-free streak counter. Each card auto-detects
+is a companion HACS repo with 30 purpose-built cards - grade averages, a full
+grade log (per-subject or across every subject), a grade trend chart and a
+grade distribution histogram, attendance (plus a percentage/semester
+breakdown), behaviour notices and the formal behaviour grade, messages,
+substitutions & alerts, announcements, homework assignments, a combined
+"what's new" activity feed, today's timetable, a week-at-a-glance grid, the
+agenda, free days, a "Today" overview, a weekly summary, the lucky number, a
+playful trading-card style student summary, an absence-free streak counter,
+and compact single-row tiles for several of the above. Each card auto-detects
 your child's device (zero YAML for the common case of one student), themes with
 your Home Assistant theme automatically, and follows your HA language (English,
 Polish).

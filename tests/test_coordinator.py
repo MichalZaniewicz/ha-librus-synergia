@@ -16,6 +16,7 @@ from custom_components.librus_synergia.librus_api import (
     LibrusConnectionError,
     LibrusInvalidCredentialsError,
     LibrusSessionExpiredError,
+    LibrusUnexpectedResponseError,
 )
 
 from .conftest import build_mock_client, make_config_entry
@@ -256,6 +257,49 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     assert len(data.alert_messages) == 1
     assert data.alert_messages[0].mailbox == "alerts"
     assert data.alert_messages[0].topic == "Alert"
+
+
+async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
+    """BUG FIX (2026-09-06, found live): substitutions/alerts used to be
+    fetched in the SAME asyncio.gather() as the core inbox/unread-count
+    calls - asyncio.gather() fails as a whole the moment any ONE of its
+    awaitables raises, so a real live failure fetching these two bonus
+    mailboxes (a genuine shape mismatch - see test_api_client.py's
+    test_messages_list_bare_array_response_is_normalized) silently wiped
+    out the otherwise-working inbox data too: mailbox_breakdown went from
+    real per-mailbox counts to an empty {} on the user's actual account.
+    The two fetches must be isolated so one failing can only ever degrade
+    to "no substitutions/alerts shown", never take inbox down with it."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_messages.side_effect = [
+        {
+            "data": [
+                {
+                    "messageId": "42",
+                    "senderName": "Amelia Marciszak",
+                    "topic": "Zebranie",
+                    "content": "",
+                    "sendDate": None,
+                    "readDate": None,
+                    "isAnyFileAttached": False,
+                }
+            ]
+        },
+        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.unread_message_count == 1
+    assert data.unread_messages_by_mailbox["inbox"] == 1
+    assert len(data.messages) == 1
+    assert data.messages[0].id == "42"
+    assert data.substitution_messages == []
+    assert data.alert_messages == []
 
 
 async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:

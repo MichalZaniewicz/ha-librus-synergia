@@ -419,19 +419,37 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return 0, {}, [], [], []
 
         try:
-            unread_payload, inbox_payload, substitutions_payload, alerts_payload = await asyncio.gather(
+            unread_payload, inbox_payload = await asyncio.gather(
                 self._client.async_get_unread_messages_count(),
                 self._client.async_get_messages(limit=10),
-                self._client.async_get_messages(mailbox="substitutions", limit=10),
-                self._client.async_get_messages(mailbox="alerts", limit=10),
             )
         except LibrusError:
             _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
             return 0, {}, [], [], []
-
         unread_count, unread_by_mailbox, inbox_messages = _parse_messages(unread_payload, inbox_payload)
-        substitution_messages = _parse_message_list(substitutions_payload, "substitutions")
-        alert_messages = _parse_message_list(alerts_payload, "alerts")
+
+        # BUG FIX (2026-09-06, found live): substitutions/alerts used to be
+        # fetched in the SAME asyncio.gather() as the two calls above -
+        # asyncio.gather() fails as a whole the moment ANY one of its
+        # awaitables raises, so a failure fetching these two bonus
+        # mailboxes was silently wiping out the otherwise-working
+        # inbox/unread-count data too (confirmed live: mailbox_breakdown
+        # went from real per-mailbox counts to an empty {} the moment this
+        # was added in v0.4.13). Isolated into its own try/except so it can
+        # only ever degrade to "no substitutions/alerts shown", never take
+        # the core inbox data down with it.
+        substitution_messages: list[MessageData] = []
+        alert_messages: list[MessageData] = []
+        try:
+            substitutions_payload, alerts_payload = await asyncio.gather(
+                self._client.async_get_messages(mailbox="substitutions", limit=10),
+                self._client.async_get_messages(mailbox="alerts", limit=10),
+            )
+            substitution_messages = _parse_message_list(substitutions_payload, "substitutions")
+            alert_messages = _parse_message_list(alerts_payload, "alerts")
+        except LibrusError:
+            _LOGGER.debug("Secondary mailbox (substitutions/alerts) fetch failed (non-fatal)", exc_info=True)
+
         return unread_count, unread_by_mailbox, inbox_messages, substitution_messages, alert_messages
 
     def _async_fire_new_item_events(

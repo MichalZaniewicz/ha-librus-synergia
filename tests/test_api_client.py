@@ -40,6 +40,7 @@ from librus_api.const import (  # noqa: E402
     API_OAUTH_AUTHORIZATION_URL,
     API_OAUTH_AUTHORIZATION_WITH_SCOPE_URL,
     DATA_BASE_URL,
+    MESSAGES_BASE_URL,
     SYNERGIA_PORTAL_LOGIN_URL,
 )
 from librus_api.exceptions import (  # noqa: E402
@@ -283,6 +284,33 @@ async def test_non_json_response_raises_unexpected() -> None:
             mocked.get(f"{DATA_BASE_URL}/Grades", status=200, text_data="<html>not json</html>")
             with pytest.raises(LibrusUnexpectedResponseError):
                 await client.async_get_grades()
+
+
+@pytest.mark.asyncio
+async def test_messages_list_bare_array_response_is_normalized() -> None:
+    """BUG FIX (2026-09-06, found live): confirmed a real Wiadomości
+    mailbox's list endpoint ("substitutions"/"alerts") can return a bare
+    JSON array instead of the {"data": [...]} envelope every other
+    endpoint in this client uses - a real request against the live
+    account raised LibrusUnexpectedResponseError("Expected a JSON object,
+    got list"), which (before coordinator.py isolated the two fetches)
+    silently wiped out the otherwise-working inbox unread-count/message
+    data too via a shared asyncio.gather(). _async_read_json must
+    normalize a bare list into {"data": [...]} instead of raising."""
+    async with aiohttp.ClientSession() as session:
+        with _MockedSession(session) as mocked:
+            _mock_successful_login(session, mocked)
+            client = LibrusApiClient(session, "1234567u")
+            await client.async_login("correct-password")
+
+            mocked.get(
+                f"{MESSAGES_BASE_URL}/substitutions/messages",
+                status=200,
+                json_data=[{"messageId": "1", "topic": "Zmiana w planie"}],
+            )
+            payload = await client.async_get_messages(mailbox="substitutions", limit=10)
+
+    assert payload == {"data": [{"messageId": "1", "topic": "Zmiana w planie"}]}
 
 
 @pytest.mark.asyncio

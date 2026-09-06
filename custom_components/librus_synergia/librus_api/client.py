@@ -288,6 +288,19 @@ class LibrusApiClient:
             raise LibrusUnexpectedResponseError(
                 f"Non-JSON response (HTTP {response.status}): {text[:200]!r}"
             ) from err
+        if isinstance(data, list):
+            # CONFIRMED live (2026-09-06): at least one Wiadomości mailbox's
+            # list endpoint ("substitutions" and/or "alerts") returns a
+            # bare JSON array instead of the {"data": [...]} envelope every
+            # other endpoint in this client uses - normalize instead of
+            # raising, so one differently-shaped secondary mailbox doesn't
+            # take the whole request down (was surfacing as
+            # LibrusUnexpectedResponseError: "Expected a JSON object, got
+            # list", which - before coordinator.py isolated the two
+            # fetches - silently wiped out the otherwise-working inbox
+            # unread-count/message-list data too, via a shared
+            # asyncio.gather()).
+            return {"data": data}
         if not isinstance(data, dict):
             raise LibrusUnexpectedResponseError(
                 f"Expected a JSON object, got {type(data).__name__}"

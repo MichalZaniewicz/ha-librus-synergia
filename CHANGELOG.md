@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.14
+
+**Real regression from 0.4.13, found live within hours of shipping**: the
+Unread messages sensor's `mailbox_breakdown`/`recent` went from real data
+to completely empty (`{}`/`[]`) - not just the new `substitutions_recent`/
+`alerts_recent` failing, but the previously-solid inbox unread-count and
+message list too.
+
+Root cause: one of the "substitutions"/"alerts" mailboxes' list endpoint
+returns a bare JSON array instead of the `{"data": [...]}` envelope every
+other endpoint in this client uses, raising `LibrusUnexpectedResponseError`.
+0.4.13 fetched all four calls (unread-count, inbox, substitutions, alerts)
+in a single `asyncio.gather()` - which fails as a whole the moment any ONE
+of its awaitables raises, so this one shape mismatch silently wiped out
+the otherwise-working inbox data too.
+
+Fixed at both levels:
+- `_async_read_json` now normalizes a bare JSON array into `{"data": [...]}`
+  instead of raising - substitutions/alerts should now actually populate,
+  not just fail gracefully.
+- Belt-and-suspenders: the coordinator now fetches inbox/unread-count and
+  substitutions/alerts as two separate, independently-failing steps, so a
+  problem with the bonus mailboxes can never take the core inbox data
+  down with it again.
+
 ## 0.4.13
 
 Two feature-parity additions inspired by a comparison against
