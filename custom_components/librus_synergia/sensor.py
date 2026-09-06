@@ -227,6 +227,11 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         )
         return {
             ATTR_SUBJECT_ID: self._subject_id,
+            # A clean, language-independent name for dashboard cards to key
+            # off - the friendly_name is built from a per-language
+            # translation string ("{subject} average" vs "Średnia -
+            # {subject}"), which is fragile to parse back apart in JS.
+            "subject": self._subject_name,
             "latest_grade": latest.value if latest else None,
             "latest_grade_date": latest.add_date if latest else None,
             "latest_grade_comments": latest.comments if latest else [],

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.7
+
+- The *Subject average* sensor now exposes a plain `subject` attribute
+  (the resolved subject name, e.g. "Matematyka") - needed by the new
+  companion `ha-librus-synergia-cards` repo to group per-subject data,
+  since the only place the name previously appeared was baked into
+  `friendly_name` via a per-language translation string, which is fragile
+  to parse back apart in JavaScript.
+
 ## 0.4.6
 
 - Fixed an oversight from v0.4.5: the *Subject average* sensor's latest-
