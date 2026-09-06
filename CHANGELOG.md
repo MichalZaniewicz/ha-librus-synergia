@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.5
+
+Closed most of the remaining feature-parity gaps using exact field names
+read from szkolny-eu/szkolny-android's own reference parser (not guessed) -
+even without any real populated example on the test account yet.
+
+- **Resolved a long-standing unverified detail**: `Notes[].Positive` is now
+  confirmed - `0` = negative, `1` = positive, anything else = neutral. The
+  Behaviour notices sensor's `recent` attribute now shows this as
+  `sentiment` instead of the bare number.
+- **Fixed a real bug**: grade comments were assumed to be embedded inside
+  each `/Grades` item - they're actually a separate `Grades/Comments`
+  endpoint, with each grade's own `Comments` field holding ids into it.
+  Fixed the correlation (handles both a bare-id list and an object-id
+  list defensively).
+- **New:** Homework assignments sensor - real "zadania domowe", distinct
+  from the Agenda calendar's general feed.
+- **New:** Behaviour grade sensor - the formal "ocena zachowania", distinct
+  from the free-text Behaviour notices ("uwagi") sensor.
+- **New:** Descriptive grades sensor - this school has descriptive grades
+  enabled (confirmed via the `Units` endpoint) instead of point-scale
+  grades.
+- Parent-teacher conferences (`ParentTeacherConferences`) are now merged
+  into the Agenda calendar as a defensive extra - live-verified redundant
+  with the general agenda feed for this account, but costs nothing to add.
+- None of the three new sensors have ever shown real data - their
+  endpoints have been empty every time this account has been checked.
+  `PointGrades` (confirmed disabled for this school) and `TextGrades`
+  (enablement unknown) remain deliberately unwired.
+
 ## 0.4.4
 
 Deeper pass over szkolny-eu/szkolny-android's raw endpoint list (every

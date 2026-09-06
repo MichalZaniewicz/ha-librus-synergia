@@ -28,6 +28,7 @@ TO_REDACT = {
     "value",
     "text",
     "content",
+    "comments",
     "first_name",
     "last_name",
     "subject",

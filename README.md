@@ -45,10 +45,13 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown and total record count in attributes |
 | `sensor` Lucky number | Today's "szczęśliwy numerek" |
 | `sensor` Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
-| `sensor` Behaviour notices | Count, with a short recent-items attribute including the resolved category name |
+| `sensor` Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
 | `sensor` Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Never marks anything read - only the message list/count endpoints are used, never the per-message detail one. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
 | `sensor` School | Name, town/street, head teacher, contact details |
 | `sensor` Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
+| `sensor` Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
+| `sensor` Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade's short code (e.g. "wz"), with a `recent` attribute (value/category/date/comments) |
+| `sensor` Descriptive grades | Count of non-numeric descriptive grades (this school has these enabled instead of point-scale grades), with a `recent` attribute (subject/value/date) |
 | `calendar` Timetable | Lesson plan, including known cancellations/substitutions |
 | `calendar` Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
 | `calendar` Free days | The whole school year's holidays/breaks |
@@ -81,15 +84,14 @@ Blueprint, and paste a blueprint's GitHub URL.
 
 ## Known limitations / unverified details
 
-A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices at the time of writing) and are flagged in code comments where they matter:
+A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices/grades at the time of writing). Most field names below come straight from reading szkolny-eu/szkolny-android's own reference parser (the same GPL-3.0 source this whole integration is modeled on), not guesswork - but none of it has been checked against a real *populated* response yet:
 
 - **Grade value parsing**: the `+0.5`/`-0.25` numeric modifier convention (`5+`, `4-`, ...) is a common third-party inference, not something Librus documents - the live `Grades/Types` reference endpoint confirms every *non-numeric* mark Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`, `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) is correctly excluded from the average, but the exact numeric value a `+`/`-` modifier should produce is still unverified (no grades existed on the test account, first week of the school year).
-- **`Notes[].Positive`**'s exact 0/1/2 enum (which value means positive/neutral/negative) is unconfirmed - no behaviour notices existed on the test account either.
-- `VirtualClasses` (split/group classes, e.g. language subgroups) and `ParentTeacherConferences` are confirmed real endpoints with client methods available, but not wired into any entity yet - the account had none of either to confirm field shapes against.
+- **Homework assignments, Behaviour grade and Descriptive grades sensors** are all wired up and shipping, but none have ever shown real data - the account's `HomeWorkAssignments`/`BehaviourGrades/Points`/`DescriptiveGrades` endpoints have been empty every time they've been checked.
+- **`Grades/Comments`**: fixed to correctly treat this as a separate endpoint from `/Grades` (a grade's own `Comments` field is a list of ids to resolve against it, not embedded text) - still unconfirmed against a real commented grade either way.
+- `VirtualClasses` (split/group classes, e.g. language subgroups), `PointGrades` (confirmed *disabled* for this account's school via the `Units` endpoint) and `TextGrades` (enablement unknown) all have client methods available but aren't wired into any entity - nothing to build a parser against, or nothing that would ever populate for this account.
 - Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
-- Real homework assignments (as opposed to the general agenda feed above) come from a separate `HomeWorkAssignments` endpoint, confirmed live to be real and reachable - it just had nothing in it yet, so it isn't wired into any entity until there's real data to confirm its shape against.
 - A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.
-- A deeper pass over szkolny-eu/szkolny-android's raw `LibrusApi*.kt` file list (not just its higher-level feature flags) turned up more confirmed-real-but-empty endpoints, all with client methods available but not wired into any entity: `BehaviourGrades/Points` (a formal "ocena zachowania" behaviour grade, distinct from the free-text Notes/"uwagi" already supported), `PointGrades`/`DescriptiveGrades`/`TextGrades` (alternate grading systems alongside the numeric one - this account's school has `DescriptiveGradesEnabled` but not `PointGradesEnabled`, per the `Units` endpoint), and `Grades/Comments`. That last one is worth a specific flag: it's a *separate* endpoint from `/Grades`, which casts real doubt on this integration's current assumption that grade comments arrive nested inside each `/Grades` item - unconfirmed either way since both are empty on the test account.
 
 If you hit one of these, please open an issue with what you saw (redact personal data).
 

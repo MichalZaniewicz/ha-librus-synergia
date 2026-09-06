@@ -12,7 +12,13 @@ from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
 from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
-from .librus_api.models import FreeDayData, HomeworkEventData, LessonData, LibrusData
+from .librus_api.models import (
+    FreeDayData,
+    HomeworkEventData,
+    LessonData,
+    LibrusData,
+    ParentTeacherConferenceData,
+)
 
 
 async def async_setup_entry(
@@ -101,6 +107,33 @@ def _homework_to_event(item: HomeworkEventData, data: LibrusData) -> CalendarEve
     )
 
 
+def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData) -> CalendarEvent | None:
+    """Defensive extra merge - see ParentTeacherConferenceData's docstring
+    for why this is a belt-and-suspenders addition, not the primary
+    source, of "wywiadówka"/"zebranie" events. Always an all-day event
+    (the `Time` field goes into the description instead) - matches every
+    other event in this calendar and avoids mixing date/datetime `start`/
+    `end` types within the same event list, which HA's CalendarEvent
+    comparisons can't handle."""
+    if not item.date:
+        return None
+    try:
+        day = date.fromisoformat(item.date[:10])
+    except ValueError:
+        return None
+
+    teacher_name = data.teachers.get(item.teacher_id) if item.teacher_id is not None else None
+    summary = f"[Zebranie z Rodzicami] {item.topic}".strip() if item.topic else "Zebranie z Rodzicami"
+    description_parts = [p for p in (item.time, teacher_name) if p]
+
+    return CalendarEvent(
+        start=day,
+        end=day + timedelta(days=1),
+        summary=summary,
+        description=" - ".join(description_parts) or None,
+    )
+
+
 def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
     try:
         start = date.fromisoformat(item.date_from[:10])
@@ -179,7 +212,10 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
 
 
 class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
-    """General agenda/events feed (tests, trips, homework) from `HomeWorks`.
+    """General agenda/events feed (tests, trips, homework) from `HomeWorks`,
+    plus a defensive merge of `ParentTeacherConferences` (see
+    `ParentTeacherConferenceData`'s docstring - live-verified redundant
+    with `HomeWorks` for this account, kept as a belt-and-suspenders extra).
 
     Unlike the timetable, `HomeWorks` isn't confirmed to accept a date-range
     query (see the project's empirical-gaps notes), so this only serves
@@ -205,6 +241,11 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
             for item in self.coordinator.data.homeworks
             if (event := _homework_to_event(item, self.coordinator.data)) is not None
             and event.end >= today
+        ] + [
+            event
+            for item in self.coordinator.data.parent_teacher_conferences
+            if (event := _pt_conference_to_event(item, self.coordinator.data)) is not None
+            and event.end >= today
         ]
         return min(upcoming, key=lambda event: event.start) if upcoming else None
 
@@ -217,6 +258,10 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         events: list[CalendarEvent] = []
         for item in self.coordinator.data.homeworks:
             event = _homework_to_event(item, self.coordinator.data)
+            if event is not None and start <= event.start <= end:
+                events.append(event)
+        for item in self.coordinator.data.parent_teacher_conferences:
+            event = _pt_conference_to_event(item, self.coordinator.data)
             if event is not None and start <= event.start <= end:
                 events.append(event)
         return events

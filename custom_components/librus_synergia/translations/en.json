@@ -52,7 +52,10 @@
       "behaviour_notices": { "name": "Behaviour notices" },
       "unread_messages": { "name": "Unread messages" },
       "school": { "name": "School" },
-      "school_class": { "name": "Class" }
+      "school_class": { "name": "Class" },
+      "homework_assignments": { "name": "Homework assignments" },
+      "behaviour_grade": { "name": "Behaviour grade" },
+      "descriptive_grades": { "name": "Descriptive grades" }
     },
     "calendar": {
       "timetable": { "name": "Timetable" },

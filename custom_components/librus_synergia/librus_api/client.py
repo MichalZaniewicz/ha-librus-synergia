@@ -27,6 +27,7 @@ from .const import (
     ENDPOINT_ATTENDANCES,
     ENDPOINT_BEHAVIOUR_GRADES_POINTS,
     ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES,
+    ENDPOINT_BEHAVIOUR_GRADES_POINTS_COMMENTS,
     ENDPOINT_CLASSES,
     ENDPOINT_CLASSROOMS,
     ENDPOINT_CLASS_FREE_DAYS,
@@ -338,8 +339,7 @@ class LibrusApiClient:
         return await self._async_request(ENDPOINT_CLASSROOMS)
 
     async def async_get_homework_assignments(self) -> dict[str, Any]:
-        """UNVERIFIED - see const.py's note on ENDPOINT_HOMEWORK_ASSIGNMENTS
-        and scripts/manual_smoke_test.py."""
+        """See const.py's note on ENDPOINT_HOMEWORK_ASSIGNMENTS."""
         return await self._async_request(ENDPOINT_HOMEWORK_ASSIGNMENTS)
 
     async def async_get_schools(self) -> dict[str, Any]:
@@ -361,6 +361,8 @@ class LibrusApiClient:
         return await self._async_request(ENDPOINT_HOMEWORK_CATEGORIES)
 
     async def async_get_parent_teacher_conferences(self) -> dict[str, Any]:
+        """Wired into LibrusAgendaCalendar as a defensive extra merge - see
+        ParentTeacherConferenceData's docstring."""
         return await self._async_request(ENDPOINT_PARENT_TEACHER_CONFERENCES)
 
     async def async_get_grade_types(self) -> dict[str, Any]:
@@ -377,19 +379,21 @@ class LibrusApiClient:
 
     async def async_get_behaviour_grade_points(self) -> dict[str, Any]:
         """"Ocena zachowania" (formal behaviour grade) - distinct from
-        Notes ("uwagi"). CONFIRMED real+reachable, empty on this account so
-        far - not wired into the coordinator/any entity yet, see const.py's
-        ENDPOINT_BEHAVIOUR_GRADES_POINTS."""
+        Notes ("uwagi"). CONFIRMED reachable, empty on this account so
+        far - wired into LibrusBehaviourGradeSensor via coordinator.py's
+        core-data fetch."""
         return await self._async_request(ENDPOINT_BEHAVIOUR_GRADES_POINTS)
 
     async def async_get_behaviour_grade_point_categories(self) -> dict[str, Any]:
         return await self._async_request(ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES)
 
+    async def async_get_behaviour_grade_point_comments(self) -> dict[str, Any]:
+        return await self._async_request(ENDPOINT_BEHAVIOUR_GRADES_POINTS_COMMENTS)
+
     async def async_get_grade_comments(self) -> dict[str, Any]:
         """CONFIRMED live to be a SEPARATE endpoint from /Grades - see
-        const.py's ENDPOINT_GRADE_COMMENTS for why this casts doubt on
-        _parse_grades' current embedded-Comments assumption. Empty on this
-        account, not wired in."""
+        const.py's ENDPOINT_GRADE_COMMENTS. Wired into _parse_grades'
+        comment-id correlation."""
         return await self._async_request(ENDPOINT_GRADE_COMMENTS)
 
     async def async_get_units(self) -> dict[str, Any]:
@@ -399,12 +403,19 @@ class LibrusApiClient:
         return await self._async_request(ENDPOINT_UNITS)
 
     async def async_get_point_grades(self) -> dict[str, Any]:
+        """CONFIRMED disabled for this account's school (see Units'
+        GradesSettings.PointGradesEnabled) - not wired into any entity."""
         return await self._async_request(ENDPOINT_POINT_GRADES)
 
     async def async_get_descriptive_grades(self) -> dict[str, Any]:
+        """CONFIRMED enabled for this account's school (see Units'
+        GradesSettings.DescriptiveGradesEnabled) - wired into
+        LibrusDescriptiveGradesSensor."""
         return await self._async_request(ENDPOINT_DESCRIPTIVE_GRADES)
 
     async def async_get_text_grades(self) -> dict[str, Any]:
+        """Enablement for this account's school unknown (no config flag
+        seen either way in Units) - not wired into any entity."""
         return await self._async_request(ENDPOINT_TEXT_GRADES)
 
     # ------------------------------------------------------------------

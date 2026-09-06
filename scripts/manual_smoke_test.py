@@ -5,9 +5,9 @@ custom_components/ so HA never loads it. Run against a real Librus account to
 verify the wire protocol (reverse-engineered from `emsi/librus_pyapi`, the
 currently-working flow after Librus's 2026-03-28 auth change - see
 librus_api/const.py's module docstring) and to close the remaining empirical
-gaps: what Notes[].Positive enumerates, how grade values like "5+"/"4-"/"bz"
-should be parsed, whether HomeWorkAssignments is distinct/usable, and the
-real Wiadomości (messages) response shapes.
+gaps: how grade values like "5+"/"4-"/"bz" should be parsed, whether the
+Grades/Comments id-correlation actually holds once a real commented grade
+exists, and the real Wiadomości (messages) response shapes.
 
 Usage (PowerShell):
     $env:LIBRUS_USERNAME = "..."
@@ -83,7 +83,7 @@ async def main() -> int:
             ("AttendanceTypes", client.async_get_attendance_types()),
             ("Timetables (this week)", client.async_get_timetable(week_start)),
             ("HomeWorks", client.async_get_homeworks()),
-            ("HomeWorkAssignments (UNVERIFIED)", client.async_get_homework_assignments()),
+            ("HomeWorkAssignments", client.async_get_homework_assignments()),
             ("SchoolNotices", client.async_get_school_notices()),
             ("LuckyNumbers", client.async_get_lucky_number()),
             ("Subjects", client.async_get_subjects()),
@@ -102,6 +102,10 @@ async def main() -> int:
             (
                 "BehaviourGrades/Points/Categories",
                 client.async_get_behaviour_grade_point_categories(),
+            ),
+            (
+                "BehaviourGrades/Points/Comments",
+                client.async_get_behaviour_grade_point_comments(),
             ),
             ("Grades/Comments", client.async_get_grade_comments()),
             ("Units", client.async_get_units()),
@@ -142,13 +146,14 @@ async def main() -> int:
 
         _print_section("Done")
         print(
-            "Check above: Notes[].Positive values (which is positive/neutral/"
-            "negative), a few Grades[].Grade values (symbols like 5+/4-/bz), "
-            "whether HomeWorks/HomeWorkAssignments look distinct from each "
-            "other, and the Messages response field names. Update "
-            "librus_api/const.py, librus_api/models.py and coordinator.py's "
-            "parsers if anything here differs from what they currently "
-            "assume."
+            "Check above: a few Grades[].Grade values (symbols like "
+            "5+/4-/bz), whether the Grades/Comments correlation actually "
+            "works once a real commented grade exists, and the Messages "
+            "response field names. (Notes[].Positive is CONFIRMED - "
+            "0=negative/1=positive/else=neutral - no longer needs checking "
+            "here.) Update librus_api/const.py, librus_api/models.py and "
+            "coordinator.py's parsers if anything here differs from what "
+            "they currently assume."
         )
     return 0
 

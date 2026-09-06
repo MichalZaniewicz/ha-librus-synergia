@@ -203,3 +203,76 @@ async def test_school_and_class_sensors(hass) -> None:
     assert class_state.state == "7d"
     assert class_state.attributes["homeroom_teacher"] == "Amelia Marciszak"
     assert class_state.attributes["first_semester_end"] == "2027-01-31"
+
+
+async def test_homework_assignments_sensor(hass) -> None:
+    client = build_mock_client(
+        async_get_homework_assignments={
+            "HomeWorkAssignments": [
+                {
+                    "Id": 1,
+                    "Topic": "Zadanie 5",
+                    "Text": "Strona 42",
+                    "Teacher": {"Id": 200},
+                    "Date": "2026-09-01",
+                    "DueDate": "2026-09-08",
+                }
+            ]
+        },
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Jan", "LastName": "Kowalski"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "homework_assignments")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    assert state.attributes["recent"][0]["topic"] == "Zadanie 5"
+    assert state.attributes["recent"][0]["teacher"] == "Jan Kowalski"
+
+
+async def test_behaviour_grade_sensor(hass) -> None:
+    client = build_mock_client(
+        async_get_behaviour_grade_points={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Value": 5.0,
+                    "ShortName": "wz",
+                    "Category": {"Id": 21823},
+                    "AddDate": "2026-09-05",
+                    "Text": "Wzorowe zachowanie",
+                }
+            ]
+        },
+        async_get_behaviour_grade_point_categories={
+            "Categories": [{"Id": 21823, "Name": "zachowanie"}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "behaviour_grade")
+    state = hass.states.get(entity_id)
+    assert state.state == "wz"
+    assert state.attributes["recent"][0]["category"] == "zachowanie"
+
+
+async def test_descriptive_grades_sensor(hass) -> None:
+    client = build_mock_client(
+        async_get_descriptive_grades={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Subject": {"Id": 100},
+                    "Grade": "Bardzo dobrze",
+                    "AddDate": "2026-09-05",
+                }
+            ]
+        },
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = _entity_id(hass, entry, "descriptive_grades")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    assert state.attributes["recent"][0]["subject"] == "Matematyka"

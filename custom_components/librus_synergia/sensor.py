@@ -12,7 +12,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import LibrusConfigEntry, librus_device_info
 from .const import ATTR_SUBJECT_ID
 from .coordinator import LibrusDataUpdateCoordinator
-from .librus_api.models import AttendanceTypeData, GradeCategoryData, GradeData, LibrusData
+from .librus_api.models import (
+    AttendanceTypeData,
+    BehaviourGradeData,
+    GradeCategoryData,
+    GradeData,
+    LibrusData,
+)
 
 
 def _parse_grade_value(value: str) -> float | None:
@@ -104,6 +110,9 @@ async def async_setup_entry(
             LibrusUnreadMessagesSensor(coordinator, entry),
             LibrusSchoolSensor(coordinator, entry),
             LibrusClassSensor(coordinator, entry),
+            LibrusHomeworkAssignmentsSensor(coordinator, entry),
+            LibrusBehaviourGradeSensor(coordinator, entry),
+            LibrusDescriptiveGradesSensor(coordinator, entry),
         ]
     )
 
@@ -355,11 +364,148 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
             "recent": [
                 {
                     "date": n.date,
-                    "positive": n.positive,
+                    "sentiment": n.sentiment,
                     "category": categories.get(n.category_id) if n.category_id else None,
                     "text": n.text[:200],
                 }
                 for n in recent
+            ]
+        }
+
+
+class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
+    """Count of real homework assignments ("zadania domowe") - distinct
+    from the Agenda calendar's general `HomeWorks` feed (tests/trips/etc.
+    too). Fields CONFIRMED via szkolny-android's reference parser
+    (2026-09-06), but never seen populated - the test account's
+    `HomeWorkAssignments` endpoint has always been empty."""
+
+    _attr_translation_key = "homework_assignments"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:notebook-edit-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "homework_assignments")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return len(self.coordinator.data.homework_assignments)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        teachers = self.coordinator.data.teachers
+        recent = sorted(
+            (a for a in self.coordinator.data.homework_assignments if a.due_date),
+            key=lambda a: a.due_date,
+        )[:10]
+        return {
+            "recent": [
+                {
+                    "topic": a.topic,
+                    "text": a.text[:200],
+                    "due_date": a.due_date,
+                    "date": a.date,
+                    "teacher": teachers.get(a.teacher_id) if a.teacher_id else None,
+                }
+                for a in recent
+            ]
+        }
+
+
+class LibrusBehaviourGradeSensor(LibrusSensorBase):
+    """A formal "ocena zachowania" (behaviour grade) - distinct from the
+    Behaviour notices sensor above ("uwagi", free-text remarks). State is
+    the most recent grade's short name (e.g. "wz" for "wzorowe") if any
+    exist. Fields CONFIRMED via szkolny-android's reference parser
+    (2026-09-06), but never seen populated."""
+
+    _attr_translation_key = "behaviour_grade"
+    _attr_icon = "mdi:medal-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "behaviour_grade")
+
+    def _latest(self) -> BehaviourGradeData | None:
+        if self.coordinator.data is None:
+            return None
+        graded = [g for g in self.coordinator.data.behaviour_grades if g.add_date]
+        if not graded:
+            return None
+        return max(graded, key=lambda g: g.add_date)
+
+    @property
+    def native_value(self) -> str | None:
+        latest = self._latest()
+        return latest.short_name if latest else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        categories = self.coordinator.data.behaviour_grade_categories
+        recent = sorted(
+            (g for g in self.coordinator.data.behaviour_grades if g.add_date),
+            key=lambda g: g.add_date,
+            reverse=True,
+        )[:5]
+        return {
+            "recent": [
+                {
+                    "short_name": g.short_name,
+                    "value": g.value,
+                    "category": categories.get(g.category_id) if g.category_id else None,
+                    "date": g.add_date,
+                    "text": g.text[:200],
+                    "comments": g.comments,
+                }
+                for g in recent
+            ]
+        }
+
+
+class LibrusDescriptiveGradesSensor(LibrusSensorBase):
+    """An alternate, non-numeric grading system - CONFIRMED enabled for
+    this school (via `Units`), unlike `PointGrades`. Fields CONFIRMED via
+    szkolny-android's reference parser (2026-09-06), but never seen
+    populated."""
+
+    _attr_translation_key = "descriptive_grades"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:text-box-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "descriptive_grades")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return len(self.coordinator.data.descriptive_grades)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        subjects = self.coordinator.data.subjects
+        recent = sorted(
+            (g for g in self.coordinator.data.descriptive_grades if g.add_date),
+            key=lambda g: g.add_date,
+            reverse=True,
+        )[:5]
+        return {
+            "recent": [
+                {
+                    "subject": subjects.get(g.subject_id) if g.subject_id else None,
+                    "value": g.value,
+                    "skill_id": g.skill_id,
+                    "category_id": g.category_id,
+                    "date": g.add_date,
+                }
+                for g in recent
             ]
         }
 

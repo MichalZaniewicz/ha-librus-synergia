@@ -137,3 +137,30 @@ async def test_timetable_calendar_resolves_subject_and_teacher_names(hass) -> No
     assert state.attributes["message"] == "Matematyka"
     assert state.attributes["location"] == "12"
     assert state.attributes["description"] == "Anna Kowalska"
+
+
+async def test_parent_teacher_conference_merged_into_agenda(hass) -> None:
+    """Defensive extra merge - ParentTeacherConferences events must show
+    up in the Agenda calendar too, even though HomeWorks already covers
+    this on the real account (see ParentTeacherConferenceData's
+    docstring)."""
+    client = build_mock_client(
+        async_get_parent_teacher_conferences={
+            "ParentTeacherConferences": [
+                {
+                    "Id": 1,
+                    "Topic": "Organizacja roku szkolnego",
+                    "Teacher": {"Id": 200},
+                    "Date": _TOMORROW,
+                    "Time": "17:00:00",
+                }
+            ]
+        },
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Amelia", "LastName": "Marciszak"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "agenda"))
+    assert state.state == "off"
+    assert "[Zebranie z Rodzicami]" in state.attributes["message"]
+    assert "Organizacja roku szkolnego" in state.attributes["message"]

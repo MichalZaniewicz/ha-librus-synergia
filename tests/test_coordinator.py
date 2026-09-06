@@ -202,3 +202,140 @@ async def test_messages_parsed_when_available(hass) -> None:
     assert len(data.messages) == 1
     assert data.messages[0].id == "42"
     assert data.messages[0].content == "Dzień dobry"
+
+
+async def test_notes_positive_resolves_to_sentiment_label(hass) -> None:
+    """CONFIRMED (2026-09-06) via szkolny-android's reference parser:
+    0=negative, 1=positive, else(2)=neutral."""
+    client = build_mock_client(
+        async_get_notes={
+            "Notes": [
+                {"Id": 1, "Text": "a", "Positive": 0, "Date": "2026-09-01"},
+                {"Id": 2, "Text": "b", "Positive": 1, "Date": "2026-09-02"},
+                {"Id": 3, "Text": "c", "Positive": 2, "Date": "2026-09-03"},
+            ]
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    by_id = {n.id: n for n in data.notes}
+    assert by_id[1].sentiment == "negative"
+    assert by_id[2].sentiment == "positive"
+    assert by_id[3].sentiment == "neutral"
+
+
+async def test_grade_comments_resolved_from_separate_endpoint(hass) -> None:
+    """CONFIRMED (2026-09-06): a grade's `Comments` field is a list of ids
+    into the separate Grades/Comments endpoint, not embedded objects."""
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Grade": "5",
+                    "Category": {"Id": 10},
+                    "Subject": {"Id": 100},
+                    "Comments": [501, {"Id": 502}],
+                }
+            ]
+        },
+        async_get_grade_comments={
+            "Comments": [
+                {"Id": 501, "Text": "Świetna praca"},
+                {"Id": 502, "Text": "Popraw pismo"},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.grades[0].comments == ["Świetna praca", "Popraw pismo"]
+
+
+async def test_homework_assignments_parsed(hass) -> None:
+    client = build_mock_client(
+        async_get_homework_assignments={
+            "HomeWorkAssignments": [
+                {
+                    "Id": 1,
+                    "Topic": "Zadanie 5",
+                    "Text": "Strona 42, zadania 1-5",
+                    "Teacher": {"Id": 200},
+                    "Date": "2026-09-01",
+                    "DueDate": "2026-09-08",
+                }
+            ]
+        },
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Jan", "LastName": "Kowalski"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.homework_assignments) == 1
+    assignment = data.homework_assignments[0]
+    assert assignment.topic == "Zadanie 5"
+    assert assignment.due_date == "2026-09-08"
+    assert assignment.teacher_id == 200
+
+
+async def test_behaviour_grades_parsed_with_resolved_category_and_comments(hass) -> None:
+    client = build_mock_client(
+        async_get_behaviour_grade_points={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Value": 5.0,
+                    "ShortName": "wz",
+                    "Semester": 1,
+                    "Category": {"Id": 21823},
+                    "AddedBy": {"Id": 300},
+                    "AddDate": "2026-09-05",
+                    "Text": "Wzorowe zachowanie",
+                    "Comments": [601],
+                }
+            ]
+        },
+        async_get_behaviour_grade_point_categories={
+            "Categories": [{"Id": 21823, "Name": "zachowanie"}]
+        },
+        async_get_behaviour_grade_point_comments={
+            "Comments": [{"Id": 601, "Text": "Brawo"}]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.behaviour_grades) == 1
+    grade = data.behaviour_grades[0]
+    assert grade.short_name == "wz"
+    assert grade.comments == ["Brawo"]
+    assert data.behaviour_grade_categories[21823] == "zachowanie"
+
+
+async def test_descriptive_grades_parsed(hass) -> None:
+    client = build_mock_client(
+        async_get_descriptive_grades={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Subject": {"Id": 100},
+                    "Grade": "Opanował materiał w stopniu bardzo dobrym",
+                    "Skill": {"Id": 55},
+                    "AddDate": "2026-09-05",
+                }
+            ]
+        },
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.descriptive_grades) == 1
+    assert data.descriptive_grades[0].subject_id == 100
+    assert data.descriptive_grades[0].skill_id == 55

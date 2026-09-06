@@ -104,9 +104,12 @@ ENDPOINT_SUBJECTS = "Subjects"
 ENDPOINT_TEACHERS = "Users"
 ENDPOINT_CLASSROOMS = "Classrooms"
 
-# UNVERIFIED - distinct from HomeWorks (the general agenda/events feed,
-# confirmed working). szkolny-android has this implemented then disabled
-# upstream for unknown reliability reasons - probe live before trusting it.
+# CONFIRMED reachable, distinct from HomeWorks (the general agenda/events
+# feed). Field names (Id/DueDate/Topic/Text/Teacher.Id/Date - notably NO
+# Subject field) CONFIRMED (2026-09-06) via szkolny-android's
+# LibrusApiHomework.kt, wired into LibrusHomeworkAssignmentsSensor - but
+# still never seen populated (empty on the test account since it was
+# first probed).
 ENDPOINT_HOMEWORK_ASSIGNMENTS = "HomeWorkAssignments"
 
 # CONFIRMED live (2026-09-05), all real and reachable via a normal
@@ -141,13 +144,22 @@ ENDPOINT_NOTE_CATEGORIES = "Notes/Categories"
 # variant of this.
 ENDPOINT_BEHAVIOUR_GRADES_POINTS = "BehaviourGrades/Points"
 ENDPOINT_BEHAVIOUR_GRADES_POINTS_CATEGORIES = "BehaviourGrades/Points/Categories"
-# CONFIRMED to be a SEPARATE endpoint from /Grades, not embedded per-grade
-# data - coordinator.py's _parse_grades currently assumes comments arrive
-# nested inside each /Grades item (item["Comments"]), which this endpoint's
-# existence casts real doubt on. Flagged, not yet fixed - both are empty on
-# this account so there's no real comment record to check the correlation
-# key against (probably a nested Grade: {Id: ...} per comment, but
-# unconfirmed).
+# CONFIRMED live (2026-09-06) same {"Comments": [{"Id", "Text"}]} shape as
+# ENDPOINT_GRADE_COMMENTS, via szkolny-android's LibrusApiBehaviourGrade
+# Comments.kt - a per-behaviour-grade `Comments` field is a list of ids to
+# resolve against this, same pattern as ENDPOINT_GRADE_COMMENTS.
+ENDPOINT_BEHAVIOUR_GRADES_POINTS_COMMENTS = "BehaviourGrades/Points/Comments"
+# CONFIRMED (2026-09-06) via szkolny-android's LibrusApiGradeComments.kt +
+# LibrusApiBehaviourGrades.kt to be a SEPARATE endpoint from /Grades,
+# root key "Comments", items shaped {"Id", "Text"} - and each /Grades
+# item's own `Comments` field is a list of ids into this, NOT embedded
+# {"Text": ...} objects as coordinator.py's _parse_grades previously
+# assumed (FIXED 2026-09-06, see _resolve_comment_ids). Still not verified
+# against a real populated example (empty on this account either way) -
+# _resolve_comment_ids handles both a bare-int-id list and an
+# {"Id": ...}-object list defensively, and falls back to the old
+# embedded-{"Text"} shape too, so nothing regresses if that turns out
+# right after all.
 ENDPOINT_GRADE_COMMENTS = "Grades/Comments"
 # School/unit configuration - which grade systems are enabled
 # (GradesSettings.{Standard,Point,Descriptive}GradesEnabled), bell schedule,

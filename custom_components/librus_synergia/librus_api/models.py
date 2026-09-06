@@ -51,9 +51,13 @@ class GradeData:
 class NoteData:
     """A behaviour notice ("uwaga").
 
-    `positive`'s exact enum meaning (which of 0/1/2 is positive/neutral/
-    negative) is UNVERIFIED - see manual_smoke_test.py. Kept as the raw int
-    until confirmed against a live account.
+    `positive`'s enum meaning is CONFIRMED (2026-09-06) via
+    szkolny-eu/szkolny-android's actual `LibrusApiNotices.kt` parser (not a
+    live populated example - the test account has zero notes - but the
+    reference implementation's own condition handling Librus's real API is
+    strong enough evidence): `0` = negative, `1` = positive, anything else
+    (`2`, or absent) = neutral. Kept as the raw int for diagnostics; use
+    `sentiment` for the resolved label.
     """
 
     id: int
@@ -62,6 +66,18 @@ class NoteData:
     teacher_id: int | None
     date: str | None
     positive: int | None
+
+    @property
+    def sentiment(self) -> str | None:
+        """Resolved `positive` label - `None` only when `positive` itself
+        is `None` (no value at all), distinct from an explicit neutral."""
+        if self.positive is None:
+            return None
+        if self.positive == 0:
+            return "negative"
+        if self.positive == 1:
+            return "positive"
+        return "neutral"
 
 
 @dataclass(slots=True)
@@ -206,6 +222,76 @@ class FreeDayData:
 
 
 @dataclass(slots=True)
+class HomeworkAssignmentData:
+    """A real homework assignment ("zadanie domowe") - distinct from the
+    general agenda feed (`HomeworkEventData`, from `HomeWorks`), which
+    also covers tests/trips/etc. Fields CONFIRMED (2026-09-06) via
+    szkolny-eu/szkolny-android's `LibrusApiHomework.kt`, but never seen
+    populated (empty on the test account) - unlike `HomeworkEventData`,
+    the reference parser shows NO `Subject` field here."""
+
+    id: int
+    topic: str
+    text: str
+    teacher_id: int | None
+    date: str | None
+    due_date: str | None
+
+
+@dataclass(slots=True)
+class BehaviourGradeData:
+    """A formal "ocena zachowania" (behaviour grade) - distinct from
+    `NoteData` ("uwagi", free-text remarks). Fields CONFIRMED (2026-09-06)
+    via szkolny-eu/szkolny-android's `LibrusApiBehaviourGrades.kt`, but
+    never seen populated (empty on the test account)."""
+
+    id: int
+    value: float | None
+    short_name: str
+    semester: int | None
+    category_id: int | None
+    teacher_id: int | None
+    add_date: str | None
+    text: str
+    comments: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class DescriptiveGradeData:
+    """An alternate, non-numeric grading system - CONFIRMED enabled for
+    this school via the `Units` endpoint (unlike `PointGrades`, which is
+    disabled here). Fields CONFIRMED (2026-09-06) via szkolny-eu/
+    szkolny-android's `LibrusApiDescriptiveGrades.kt`, but never seen
+    populated (empty on the test account). `skill_id`/`category_id` are
+    kept raw - their own name-lookup endpoints weren't probed yet."""
+
+    id: int
+    subject_id: int | None
+    value: str
+    skill_id: int | None
+    category_id: int | None
+    add_date: str | None
+
+
+@dataclass(slots=True)
+class ParentTeacherConferenceData:
+    """A scheduled parent-teacher meeting ("wywiadówka"/"zebranie").
+    Fields CONFIRMED (2026-09-06) via szkolny-eu/szkolny-android's
+    `LibrusApiPtMeetings.kt`. CONFIRMED live (separately) that this kind of
+    meeting already surfaces via the general `HomeWorks` agenda feed too
+    (see `_homework_to_event`) - this is a defensive extra merge into the
+    Agenda calendar in case one exists here without a `HomeWorks`
+    counterpart, not the primary source. Never seen populated on this
+    account either way."""
+
+    id: int
+    topic: str
+    teacher_id: int | None
+    date: str | None
+    time: str | None
+
+
+@dataclass(slots=True)
 class LibrusData:
     """Everything the coordinator fetches in one update cycle."""
 
@@ -231,3 +317,8 @@ class LibrusData:
     free_days: list[FreeDayData] = field(default_factory=list)
     homework_categories: dict[int, str] = field(default_factory=dict)
     note_categories: dict[int, str] = field(default_factory=dict)
+    behaviour_grade_categories: dict[int, str] = field(default_factory=dict)
+    homework_assignments: list[HomeworkAssignmentData] = field(default_factory=list)
+    behaviour_grades: list[BehaviourGradeData] = field(default_factory=list)
+    descriptive_grades: list[DescriptiveGradeData] = field(default_factory=list)
+    parent_teacher_conferences: list[ParentTeacherConferenceData] = field(default_factory=list)

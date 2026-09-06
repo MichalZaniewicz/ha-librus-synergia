@@ -36,10 +36,13 @@ from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSes
 from .librus_api.models import (
     AttendanceData,
     AttendanceTypeData,
+    BehaviourGradeData,
     ClassData,
+    DescriptiveGradeData,
     FreeDayData,
     GradeCategoryData,
     GradeData,
+    HomeworkAssignmentData,
     HomeworkEventData,
     LessonData,
     LibrusData,
@@ -47,6 +50,7 @@ from .librus_api.models import (
     MeData,
     MessageData,
     NoteData,
+    ParentTeacherConferenceData,
     SchoolData,
     SchoolNoticeData,
 )
@@ -84,6 +88,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_homework_categories: dict[int, str] = {}
         self._cached_free_days: list[FreeDayData] = []
         self._cached_note_categories: dict[int, str] = {}
+        self._cached_behaviour_grade_categories: dict[int, str] = {}
 
         # The lucky number is normally published once a day; skip refetching
         # it before LUCKY_NUMBER_PUBLISH_HOUR once today's value is cached.
@@ -159,6 +164,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             me_payload,
             grades_payload,
             categories_payload,
+            grade_comments_payload,
             notes_payload,
             attendances_payload,
             attendance_types_payload,
@@ -166,13 +172,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             timetable_next_week,
             homeworks_payload,
             notices_payload,
+            homework_assignments_payload,
+            behaviour_grades_payload,
+            behaviour_grade_comments_payload,
+            descriptive_grades_payload,
+            parent_teacher_conferences_payload,
         ) = core_payloads
 
         lucky_number = await self._async_get_lucky_number(today)
         await self._async_refresh_reference_data()
         unread_count, unread_by_mailbox, messages = await self._async_get_messages()
 
-        grades = _parse_grades(grades_payload)
+        grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
         self._async_fire_new_item_events(grades, school_notices, notes, messages)
@@ -198,8 +209,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             school=self._cached_school,
             school_class=self._cached_class,
             free_days=self._cached_free_days,
+            homework_assignments=_parse_homework_assignments(homework_assignments_payload),
+            behaviour_grades=_parse_behaviour_grades(
+                behaviour_grades_payload, _parse_comment_text_map(behaviour_grade_comments_payload)
+            ),
             homework_categories=self._cached_homework_categories,
             note_categories=self._cached_note_categories,
+            behaviour_grade_categories=self._cached_behaviour_grade_categories,
+            descriptive_grades=_parse_descriptive_grades(descriptive_grades_payload),
+            parent_teacher_conferences=_parse_parent_teacher_conferences(
+                parent_teacher_conferences_payload
+            ),
         )
 
     async def _async_fetch_core_payloads(
@@ -212,6 +232,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_me(),
             self._client.async_get_grades(),
             self._client.async_get_grade_categories(),
+            self._client.async_get_grade_comments(),
             self._client.async_get_notes(),
             self._client.async_get_attendances(),
             self._client.async_get_attendance_types(),
@@ -219,6 +240,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_timetable(next_week_start),
             self._client.async_get_homeworks(),
             self._client.async_get_school_notices(),
+            self._client.async_get_homework_assignments(),
+            self._client.async_get_behaviour_grade_points(),
+            self._client.async_get_behaviour_grade_point_comments(),
+            self._client.async_get_descriptive_grades(),
+            self._client.async_get_parent_teacher_conferences(),
         )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
@@ -243,7 +269,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     async def _async_refresh_reference_data(self) -> None:
         """Refresh near-static reference data at most once a day: subject/
         teacher/classroom name lookups, school/class identity, homework
-        agenda categories, and the free-days calendar.
+        agenda categories, note categories, behaviour-grade categories, and
+        the free-days calendar.
 
         The Subjects/Teachers/Classrooms endpoint names were UNVERIFIED when
         first written but are now CONFIRMED live, same as everything else
@@ -269,6 +296,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 school_free_days_payload,
                 class_free_days_payload,
                 note_categories_payload,
+                behaviour_grade_categories_payload,
             ) = await asyncio.gather(
                 self._client.async_get_subjects(),
                 self._client.async_get_teachers(),
@@ -279,6 +307,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._client.async_get_school_free_days(),
                 self._client.async_get_class_free_days(),
                 self._client.async_get_note_categories(),
+                self._client.async_get_behaviour_grade_point_categories(),
             )
         except LibrusError:
             _LOGGER.warning(
@@ -302,6 +331,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
         self._cached_note_categories = _parse_id_name_map(
             note_categories_payload, ("Categories",)
+        )
+        self._cached_behaviour_grade_categories = _parse_id_name_map(
+            behaviour_grade_categories_payload, ("Categories",)
         )
         self._reference_data_fetched_at = now
 
@@ -377,6 +409,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             {
                 n.id: {
                     "positive": n.positive,
+                    "sentiment": n.sentiment,
                     "teacher": self._cached_teachers.get(n.teacher_id, str(n.teacher_id))
                     if n.teacher_id is not None
                     else None,
@@ -453,7 +486,62 @@ def _parse_grade_categories(payload: dict[str, Any]) -> dict[int, GradeCategoryD
     return result
 
 
-def _parse_grades(payload: dict[str, Any]) -> list[GradeData]:
+def _parse_comment_text_map(payload: dict[str, Any] | None) -> dict[int, str]:
+    """Parses a `{"Comments": [{"Id", "Text"}, ...]}`-shaped payload (used
+    by both `Grades/Comments` and `BehaviourGrades/Points/Comments`,
+    CONFIRMED live 2026-09-06 to share this shape) into an id->text map."""
+    if not payload:
+        return {}
+    items = payload.get("Comments")
+    if not isinstance(items, list):
+        return {}
+    result: dict[int, str] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        text = item.get("Text")
+        if text:
+            result[int(item["Id"])] = text
+    return result
+
+
+def _resolve_comment_ids(raw: Any, comment_text_by_id: dict[int, str]) -> list[str]:
+    """Resolves a per-grade/-behaviour-grade `Comments` field against a
+    `_parse_comment_text_map` lookup.
+
+    CONFIRMED (2026-09-06) via szkolny-android's reference parsers that
+    this field is a list of ids into the separate Comments endpoint, NOT
+    embedded `{"Text": ...}` objects as previously assumed here - but the
+    exact per-id shape (bare int vs. `{"Id": ...}`) is still unconfirmed
+    (empty on this account either way), so both are handled, plus the old
+    embedded-`Text` shape as a fallback in case that turns out right after
+    all.
+    """
+    if not isinstance(raw, list):
+        return []
+    resolved: list[str] = []
+    for entry in raw:
+        if isinstance(entry, dict):
+            if entry.get("Text"):
+                resolved.append(str(entry["Text"]))
+                continue
+            comment_id = entry.get("Id")
+        else:
+            comment_id = entry
+        if comment_id is None:
+            continue
+        try:
+            text = comment_text_by_id.get(int(comment_id))
+        except (TypeError, ValueError):
+            text = None
+        if text:
+            resolved.append(text)
+    return resolved
+
+
+def _parse_grades(
+    payload: dict[str, Any], comment_text_by_id: dict[int, str] | None = None
+) -> list[GradeData]:
     items = payload.get("Grades")
     if not isinstance(items, list):
         return []
@@ -463,11 +551,7 @@ def _parse_grades(payload: dict[str, Any]) -> list[GradeData]:
             continue
         category = item.get("Category") or {}
         subject = item.get("Subject") or {}
-        comments = [
-            comment.get("Text", "")
-            for comment in (item.get("Comments") or [])
-            if isinstance(comment, dict) and comment.get("Text")
-        ]
+        comments = _resolve_comment_ids(item.get("Comments"), comment_text_by_id or {})
         grades.append(
             GradeData(
                 id=int(item["Id"]),
@@ -631,6 +715,125 @@ def _parse_homeworks(payload: dict[str, Any]) -> list[HomeworkEventData]:
             )
         )
     return events
+
+
+def _parse_homework_assignments(payload: dict[str, Any]) -> list[HomeworkAssignmentData]:
+    """Real homework assignments ("Zadania domowe") - distinct from the
+    general `HomeWorks` agenda feed above (`_parse_homeworks`), which
+    covers tests/trips/etc. too. Fields CONFIRMED (2026-09-06) via
+    szkolny-android's `LibrusApiHomework.kt`. Notably NO `Subject` field
+    appears in the reference parser - unlike the general agenda feed,
+    there's no subject to resolve here. Still empty on this account, so
+    unverified against a real populated example."""
+    items = payload.get("HomeWorkAssignments")
+    if not isinstance(items, list):
+        return []
+    assignments: list[HomeworkAssignmentData] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        teacher = item.get("Teacher") or {}
+        assignments.append(
+            HomeworkAssignmentData(
+                id=int(item["Id"]),
+                topic=item.get("Topic", ""),
+                text=item.get("Text", ""),
+                teacher_id=teacher.get("Id"),
+                date=item.get("Date"),
+                due_date=item.get("DueDate"),
+            )
+        )
+    return assignments
+
+
+def _parse_behaviour_grades(
+    payload: dict[str, Any], comment_text_by_id: dict[int, str] | None = None
+) -> list[BehaviourGradeData]:
+    """A formal "ocena zachowania" (behaviour grade) - distinct from Notes
+    ("uwagi", free-text remarks). Fields CONFIRMED (2026-09-06) via
+    szkolny-android's `LibrusApiBehaviourGrades.kt`. Still empty on this
+    account, so unverified against a real populated example."""
+    items = payload.get("Grades")
+    if not isinstance(items, list):
+        return []
+    grades: list[BehaviourGradeData] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        category = item.get("Category") or {}
+        added_by = item.get("AddedBy") or {}
+        comments = _resolve_comment_ids(item.get("Comments"), comment_text_by_id or {})
+        grades.append(
+            BehaviourGradeData(
+                id=int(item["Id"]),
+                value=item.get("Value"),
+                short_name=item.get("ShortName", ""),
+                semester=item.get("Semester"),
+                category_id=category.get("Id"),
+                teacher_id=added_by.get("Id"),
+                add_date=item.get("AddDate"),
+                text=item.get("Text", ""),
+                comments=comments,
+            )
+        )
+    return grades
+
+
+def _parse_descriptive_grades(payload: dict[str, Any]) -> list[DescriptiveGradeData]:
+    """An alternate, non-numeric grading system - CONFIRMED (via the
+    `Units` endpoint) to be enabled for this school, unlike `PointGrades`.
+    Fields CONFIRMED (2026-09-06) via szkolny-android's
+    `LibrusApiDescriptiveGrades.kt`. `Skill`/`Category` are kept as raw ids
+    - their own name-lookup endpoints (`DescriptiveGrades/Skills`,
+    `/Types`) weren't probed this session, so no name to resolve them to
+    yet. Still empty on this account, so unverified against a real
+    populated example."""
+    items = payload.get("Grades")
+    if not isinstance(items, list):
+        return []
+    grades: list[DescriptiveGradeData] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        subject = item.get("Subject") or {}
+        skill = item.get("Skill") or {}
+        category = item.get("Category") or {}
+        grades.append(
+            DescriptiveGradeData(
+                id=int(item["Id"]),
+                subject_id=subject.get("Id"),
+                value=item.get("Grade", ""),
+                skill_id=skill.get("Id"),
+                category_id=category.get("Id"),
+                add_date=item.get("AddDate"),
+            )
+        )
+    return grades
+
+
+def _parse_parent_teacher_conferences(payload: dict[str, Any]) -> list[ParentTeacherConferenceData]:
+    """Fields CONFIRMED (2026-09-06) via szkolny-android's
+    `LibrusApiPtMeetings.kt`. Live-verified separately that this kind of
+    meeting already surfaces through `HomeWorks` too - see
+    `ParentTeacherConferenceData`'s docstring. Never seen populated here."""
+    items = payload.get("ParentTeacherConferences")
+    if not isinstance(items, list):
+        return []
+    conferences: list[ParentTeacherConferenceData] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        teacher = item.get("Teacher") or {}
+        conferences.append(
+            ParentTeacherConferenceData(
+                id=int(item["Id"]),
+                topic=item.get("Topic", ""),
+                teacher_id=teacher.get("Id"),
+                date=item.get("Date"),
+                time=item.get("Time"),
+            )
+        )
+    return conferences
 
 
 def _parse_school_notices(payload: dict[str, Any]) -> list[SchoolNoticeData]:
