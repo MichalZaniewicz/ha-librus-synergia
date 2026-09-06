@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.15
+
+**Real bug, found live**: the Lucky number sensor always presented its
+value as "today's" number without ever checking Librus's own
+`LuckyNumberDay` field against the actual current date. Confirmed live
+(cross-checked against the real Librus app on a Sunday) that Librus can
+publish the *next* school day's number a day ahead - the sensor was
+showing that value as if it were for today regardless.
+
+The state is still the most recently published number (unchanged), but
+the sensor now also exposes:
+- `day` - the actual date (YYYY-MM-DD) the number applies to.
+- `is_today` - whether that date is really today.
+
+Companion cards updated to use this: the Lucky number card now shows
+"For {date}" instead of "Today" when the number isn't actually for
+today, and the Today summary card omits the lucky-number tile entirely
+in that case (its whole premise is "what matters today").
+
 ## 0.4.14
 
 **Real regression from 0.4.13, found live within hours of shipping**: the

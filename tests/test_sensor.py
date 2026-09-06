@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from custom_components.librus_synergia.const import DOMAIN
 
@@ -21,6 +22,38 @@ async def test_lucky_number_sensor(hass) -> None:
     entity_id = _entity_id(hass, entry, "lucky_number")
     assert entity_id is not None
     assert hass.states.get(entity_id).state == "7"
+
+
+async def test_lucky_number_sensor_flags_whether_it_is_for_today(hass) -> None:
+    """BUG FIX (2026-09-06, found live): the state was always presented as
+    "today's" number without ever checking Librus's own `LuckyNumberDay`
+    against the real current date - confirmed live (user cross-checked
+    against the real Librus app on a Sunday) that Librus can publish the
+    NEXT school day's number a day ahead, and this integration showed
+    that value as if it were for today regardless. `day`/`is_today` let a
+    card label it honestly instead of hardcoding "today"."""
+    today_iso = dt_util.now().date().isoformat()
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 4, "LuckyNumberDay": today_iso}}
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.state == "4"
+    assert state.attributes["day"] == today_iso
+    assert state.attributes["is_today"] is True
+
+
+async def test_lucky_number_sensor_flags_when_published_for_a_future_day(hass) -> None:
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 4, "LuckyNumberDay": "2099-01-01"}}
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.state == "4"
+    assert state.attributes["day"] == "2099-01-01"
+    assert state.attributes["is_today"] is False
 
 
 async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:

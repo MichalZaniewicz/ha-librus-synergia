@@ -8,6 +8,7 @@ from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
 from .const import ATTR_SUBJECT_ID
@@ -348,7 +349,20 @@ class LibrusAttendanceSensor(LibrusSensorBase):
 
 
 class LibrusLuckyNumberSensor(LibrusSensorBase):
-    """Today's "szczęśliwy numerek" (lucky number)."""
+    """The most recently published "szczęśliwy numerek" (lucky number).
+
+    BUG FIX (2026-09-06, found live): the state was always presented as
+    "today's" number (the card's own subtitle literally says so) without
+    ever checking Librus's own `LuckyNumberDay` field against today's real
+    date - CONFIRMED live (user cross-checked against the real Librus app)
+    that Librus can publish the NEXT school day's number a day ahead (e.g.
+    Monday's number visible already on Sunday), and this integration was
+    showing that value as if it were for today regardless. The number
+    itself is still the state (still the single most useful "latest known"
+    value, matching what the raw sensor showed before), but `day`/
+    `is_today` are now exposed so a card can label it honestly instead of
+    hardcoding "today".
+    """
 
     _attr_translation_key = "lucky_number"
     _attr_icon = "mdi:dice-5"
@@ -361,6 +375,16 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         if self.coordinator.data is None or self.coordinator.data.lucky_number is None:
             return None
         return self.coordinator.data.lucky_number.number
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None or self.coordinator.data.lucky_number is None:
+            return None
+        day = self.coordinator.data.lucky_number.day
+        return {
+            "day": day,
+            "is_today": day == dt_util.now().date().isoformat() if day else None,
+        }
 
 
 class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
