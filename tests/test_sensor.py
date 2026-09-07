@@ -101,11 +101,52 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     # total so a consumer can show "N still need attention" separately.
     assert state.attributes["unexcused_count"] == 1
     assert state.attributes["excused_count"] == 1
+    # New (2026-09-07): one status per calendar date, for a "year at a
+    # glance" heatmap card - not per-record, since a single day can carry
+    # several period-level records (untested here, but the worst-status-
+    # wins aggregation is what a multi-record day should collapse to).
+    assert state.attributes["by_date"] == {
+        "2026-09-01": "good",
+        "2026-09-02": "good",
+        "2026-09-03": "bad",
+        "2026-09-04": "warn",
+    }
     # Independent % calculation (librusik-inspired, new 2026-09-06) - 2 of
     # 4 records are presence-kind.
     assert state.attributes["percentage"] == round(100 * 2 / 4, 1)
     assert state.attributes["by_semester"]["1"] == {"total": 2, "present": 2, "percentage": 100.0}
     assert state.attributes["by_semester"]["2"] == {"total": 2, "present": 0, "percentage": 0.0}
+
+
+async def test_attendance_by_date_takes_worst_status_per_day(hass) -> None:
+    """A single calendar date can carry several period-level records
+    (present in period 1, unexcused-absent in period 3 the same day) -
+    `by_date` must collapse each day to its WORST status, since that's
+    what actually needs a parent's attention."""
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": "2026-09-01", "Semester": 1, "Type": {"Id": 100}},  # present
+                {"Id": 2, "Date": "2026-09-01", "Semester": 1, "Type": {"Id": 1}},  # unexcused absence
+                {"Id": 3, "Date": "2026-09-02", "Semester": 1, "Type": {"Id": 100}},  # present
+                {"Id": 4, "Date": "2026-09-02", "Semester": 1, "Type": {"Id": 3}},  # excused absence
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance"))
+    assert state.attributes["by_date"] == {
+        "2026-09-01": "bad",  # present + unexcused -> the unexcused one wins
+        "2026-09-02": "warn",  # present + excused -> the excused one wins
+    }
 
 
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:

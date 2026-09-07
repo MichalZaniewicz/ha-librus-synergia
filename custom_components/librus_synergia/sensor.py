@@ -279,6 +279,21 @@ def _is_excused_type_name(name: str) -> bool:
     return _EXCUSED_TYPE_NAME_RE.search(name) is not None
 
 
+# Same three-way status used by the companion cards' own attendanceStatus()
+# (good=present, warn=excused absence, bad=unexcused absence) - computed
+# once here so a per-day heatmap card doesn't need to re-derive it from
+# raw type names itself.
+_STATUS_RANK = {"good": 0, "warn": 1, "bad": 2}
+
+
+def _record_status(attendance_type: AttendanceTypeData | None) -> str:
+    if attendance_type is None:
+        return "good"  # unknown type - no evidence to flag it as concerning
+    if attendance_type.is_presence_kind:
+        return "good"
+    return "warn" if _is_excused_type_name(attendance_type.name) else "bad"
+
+
 class LibrusAttendanceSensor(LibrusSensorBase):
     """Count of real absences - excludes "present"/"late"/"excused" marks.
 
@@ -357,6 +372,21 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             else:
                 unexcused_count += 1
 
+        # One status per calendar DATE (not per record - a single day can
+        # carry several period-level records), for a "year at a glance"
+        # heatmap card. A day with multiple records takes its WORST status
+        # (bad > warn > good) - one unexcused-absence period that day is
+        # what a parent needs to see, even if the other periods were
+        # present.
+        by_date: dict[str, str] = {}
+        for a in data.attendances:
+            if not a.date:
+                continue
+            status = _record_status(_attendance_type(data, a.type_id))
+            existing = by_date.get(a.date)
+            if existing is None or _STATUS_RANK[status] > _STATUS_RANK[existing]:
+                by_date[a.date] = status
+
         # Independent attendance-percentage calculation - inspired by a
         # feature comparison against dani3l0/librusik (a third-party
         # Librus web client), which computes this itself rather than
@@ -394,6 +424,7 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             "by_semester": by_semester,
             "excused_count": excused_count,
             "unexcused_count": unexcused_count,
+            "by_date": by_date,
         }
 
 

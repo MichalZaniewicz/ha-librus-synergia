@@ -104,7 +104,7 @@ Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 33 purpose-built cards - grade averages, a full
+is a companion HACS repo with 35 purpose-built cards - grade averages, a full
 grade log (per-subject or across every subject), a grade trend chart and a
 grade distribution histogram, attendance (plus a percentage/semester
 breakdown), behaviour notices and the formal behaviour grade, messages,

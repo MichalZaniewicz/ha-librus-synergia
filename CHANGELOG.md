@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.20
+
+Built for the new companion "Attendance heatmap" card (a GitHub-
+contributions-style calendar of the school year so far).
+
+### Added
+- **`by_date` attribute on the Attendance sensor** - one status
+  ("good"/"warn"/"bad") per calendar date, not per record. A single day
+  can carry several period-level attendance records; when it does, the
+  day takes its WORST status (one unexcused-absence period outweighs an
+  otherwise-present day), reusing the same status classification the
+  companion cards already compute client-side.
+
 ## 0.4.19
 
 **Real bug found live**: an excused absence ("Nieobecność uspr.") kept
