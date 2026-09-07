@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.21
+
+Built for the new companion "Absences by weekday" chart card.
+
+### Added
+- **`by_weekday` attribute on the Attendance sensor** - excused/unexcused/
+  late record counts grouped by ISO weekday (1=Monday..7=Sunday), for a
+  "which day of the week is this happening on" chart. Distinct from
+  `by_date`: that attribute holds one blended status per calendar date and
+  folds "late" into plain "good"; this one counts every matching record
+  per weekday across all three categories. "Late" ("Spóźnienie") is a
+  presence-kind type just like plain "Obecność" and has no dedicated API
+  flag either - identified the same best-effort way as excused absences,
+  by matching "późn" in the type's own name.
+
 ## 0.4.20
 
 Built for the new companion "Attendance heatmap" card (a GitHub-

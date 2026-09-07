@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -279,6 +280,21 @@ def _is_excused_type_name(name: str) -> bool:
     return _EXCUSED_TYPE_NAME_RE.search(name) is not None
 
 
+# "Spóźnienie" (late) is a PRESENCE-kind type (IsPresenceKind: true, same
+# flag value as plain "Obecność") - Librus has no separate API flag telling
+# late apart from ordinary presence either, so (same best-effort text-match
+# approach as _is_excused_type_name above) "późn" (rdzeń for "spóźnienie")
+# in the type's own name is the only signal. Needed for by_weekday below -
+# _record_status()/by_date fold "late" into plain "good", which is fine for
+# a single worst-status-per-day heatmap but can't answer "how many lates
+# happened on a given weekday" on its own.
+_LATE_TYPE_NAME_RE = re.compile(r"późn", re.IGNORECASE)
+
+
+def _is_late_type_name(name: str) -> bool:
+    return _LATE_TYPE_NAME_RE.search(name) is not None
+
+
 # Same three-way status used by the companion cards' own attendanceStatus()
 # (good=present, warn=excused absence, bad=unexcused absence) - computed
 # once here so a per-day heatmap card doesn't need to re-derive it from
@@ -415,6 +431,36 @@ class LibrusAttendanceSensor(LibrusSensorBase):
                 round(100 * bucket["present"] / bucket["total"], 1) if bucket["total"] else None
             )
 
+        # Same excused/unexcused/late split as above, but grouped by ISO
+        # WEEKDAY (1=Monday..7=Sunday, string keys for JSON) instead of by
+        # calendar date - for a "which day of the week is this happening
+        # on" chart. Unlike by_date (one status per DAY, and late folds
+        # into "good" there), this counts every matching RECORD, so a day
+        # with two late periods counts twice - by_date intentionally can't
+        # answer this question at all (a single status per day has no room
+        # for a fourth "late" value alongside good/warn/bad).
+        by_weekday: dict[str, dict[str, int]] = {}
+        for a in data.attendances:
+            if not a.date:
+                continue
+            t = _attendance_type(data, a.type_id)
+            if t is None:
+                continue
+            if t.is_presence_kind:
+                if not _is_late_type_name(t.name):
+                    continue  # ordinary presence - not part of this breakdown
+                bucket_key = "late"
+            else:
+                bucket_key = "excused" if _is_excused_type_name(t.name) else "unexcused"
+            try:
+                weekday = date.fromisoformat(a.date).isoweekday()
+            except ValueError:
+                continue
+            day_bucket = by_weekday.setdefault(
+                str(weekday), {"excused": 0, "unexcused": 0, "late": 0}
+            )
+            day_bucket[bucket_key] += 1
+
         return {
             "breakdown": breakdown,
             "presence_by_type": presence_by_type,
@@ -425,6 +471,7 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             "excused_count": excused_count,
             "unexcused_count": unexcused_count,
             "by_date": by_date,
+            "by_weekday": by_weekday,
         }
 
 

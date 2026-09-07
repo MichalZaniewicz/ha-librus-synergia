@@ -149,6 +149,43 @@ async def test_attendance_by_date_takes_worst_status_per_day(hass) -> None:
     }
 
 
+async def test_attendance_by_weekday_splits_excused_unexcused_late(hass) -> None:
+    """`by_weekday` groups by ISO weekday (1=Mon..7=Sun) into excused/
+    unexcused/late buckets - a split `by_date` can't represent, since
+    "late" folds into plain "good" there and `by_date` is one STATUS per
+    day, not one COUNT per category. Built for a "which weekday is this
+    happening on" chart card."""
+    from datetime import date as _date
+
+    day_a = "2026-09-07"
+    day_b = "2026-09-08"
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": day_a, "Semester": 1, "Type": {"Id": 1}},  # unexcused
+                {"Id": 2, "Date": day_a, "Semester": 1, "Type": {"Id": 2}},  # late
+                {"Id": 3, "Date": day_b, "Semester": 1, "Type": {"Id": 3}},  # excused
+                {"Id": 4, "Date": day_b, "Semester": 1, "Type": {"Id": 100}},  # present - ignored
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 2, "Name": "Spóźnienie", "IsPresenceKind": True},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance"))
+    key_a = str(_date.fromisoformat(day_a).isoweekday())
+    key_b = str(_date.fromisoformat(day_b).isoweekday())
+    assert state.attributes["by_weekday"][key_a] == {"excused": 0, "unexcused": 1, "late": 1}
+    assert state.attributes["by_weekday"][key_b] == {"excused": 1, "unexcused": 0, "late": 0}
+
+
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     client = build_mock_client(
         async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
