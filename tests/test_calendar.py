@@ -225,9 +225,6 @@ async def test_agenda_calendar_today_query_excludes_tomorrow(hass) -> None:
     assert response[entity_id]["events"] == []
 
 
-_TODAY = dt_util.now().date().isoformat()
-
-
 async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
     """Calls the real `calendar.get_events` service - the same code path
     Home Assistant's own calendar REST API (and therefore any dashboard
@@ -265,7 +262,7 @@ async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
     return response[entity_id]["events"]
 
 
-async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass) -> None:
+async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass, freezer) -> None:
     """BUG FIX (2026-09-06, found live): `async_get_events` fetching a week
     outside the coordinator's own current+next-week cache used to call
     `client.async_get_timetable` directly, with none of `_async_update_
@@ -274,10 +271,29 @@ async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass) -
     LibrusSessionExpiredError crashed the whole `/api/calendars/<entity>`
     request with an unhandled 500 - confirmed live via
     `ha_config_get_calendar_events` before this fix, traced to this
-    exact exception via the error log. Must now recover silently."""
+    exact exception via the error log. Must now recover silently.
+
+    BUG FIX (2026-09-07, found live via CI): this test itself hit the
+    exact "today"-dependent flakiness class this project has hit multiple
+    times before - it passed for hours, then failed on an unchanged commit
+    with no code difference at all (confirmed: identical dependency
+    versions, identical source, only the wall-clock instant differed).
+    Root cause this time: `pytest-homeassistant-custom-component`'s `hass`
+    fixture defaults to a non-UTC test timezone (observed "-07:00" in CI
+    logs) - depending on the real instant a run happens to execute at, the
+    LOCAL calendar date (what `dt_util.now().date()` actually returns) can
+    differ from what a naive UTC-based mental model would predict, and
+    `_TODAY` (computed once at module import time from the real wall
+    clock) stops being a reliable anchor. Freezing time removes the
+    dependency on the real clock entirely instead of re-deriving safe date
+    math by hand a fourth time - the frozen instant is a boundary-free
+    Wednesday, chosen so neither a UTC/local timezone shift nor an ISO-week
+    edge can move it to a different calendar day or weekday."""
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    today = dt_util.now().date().isoformat()
     good_payload = {
         "Timetable": {
-            _TODAY: [
+            today: [
                 [
                     {
                         "LessonNo": "1",
