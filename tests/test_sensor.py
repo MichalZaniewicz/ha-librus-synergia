@@ -66,12 +66,14 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
                 {"Id": 1, "Date": "2026-09-01", "Semester": 1, "Type": {"Id": 100}},  # present
                 {"Id": 2, "Date": "2026-09-02", "Semester": 1, "Type": {"Id": 100}},  # present
                 {"Id": 3, "Date": "2026-09-03", "Semester": 2, "Type": {"Id": 1}},  # absence
+                {"Id": 4, "Date": "2026-09-04", "Semester": 2, "Type": {"Id": 3}},  # excused absence
             ]
         },
         async_get_attendance_types={
             "Types": [
                 {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
                 {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
             ]
         },
     )
@@ -79,21 +81,31 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
 
     entity_id = _entity_id(hass, entry, "attendance")
     state = hass.states.get(entity_id)
-    assert state.state == "1"
-    assert state.attributes["total_records"] == 3
-    assert state.attributes["breakdown"] == {"Obecność": 2, "Nieobecność": 1}
+    assert state.state == "2"
+    assert state.attributes["total_records"] == 4
+    assert state.attributes["breakdown"] == {"Obecność": 2, "Nieobecność": 1, "Nieobecność uspr.": 1}
     # BUG FIX (2026-09-06, found live): the companion cards used to guess
     # presence from the name text alone (a regex matching "obecno" as a
     # substring - which also matches inside "Nieobecność") and rendered
     # both with the same color. Expose the authoritative flag instead of
     # making every consumer re-guess it from Polish text.
-    assert state.attributes["presence_by_type"] == {"Obecność": True, "Nieobecność": False}
-    assert state.attributes["last_absence_date"] == "2026-09-03"
+    assert state.attributes["presence_by_type"] == {
+        "Obecność": True,
+        "Nieobecność": False,
+        "Nieobecność uspr.": False,
+    }
+    assert state.attributes["last_absence_date"] == "2026-09-04"
+    # BUG FIX (2026-09-07, found live): "1 nieobecności" in a summary/tile
+    # view looked identical whether it was a still-open unexcused absence
+    # or one the parent had already gotten excused - split the blended
+    # total so a consumer can show "N still need attention" separately.
+    assert state.attributes["unexcused_count"] == 1
+    assert state.attributes["excused_count"] == 1
     # Independent % calculation (librusik-inspired, new 2026-09-06) - 2 of
-    # 3 records are presence-kind.
-    assert state.attributes["percentage"] == round(100 * 2 / 3, 1)
+    # 4 records are presence-kind.
+    assert state.attributes["percentage"] == round(100 * 2 / 4, 1)
     assert state.attributes["by_semester"]["1"] == {"total": 2, "present": 2, "percentage": 100.0}
-    assert state.attributes["by_semester"]["2"] == {"total": 1, "present": 0, "percentage": 0.0}
+    assert state.attributes["by_semester"]["2"] == {"total": 2, "present": 0, "percentage": 0.0}
 
 
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.19
+
+**Real bug found live**: an excused absence ("Nieobecność uspr.") kept
+showing identically to a still-open unexcused one in every summary/tile
+view - only the full Attendance card's own per-type legend distinguished
+them at all, and even there both rendered in the same "bad" red color
+(Librus has no separate "is this excused" API flag - `IsPresenceKind`
+only says present/not, so both correctly count as "not present").
+
+The Attendance sensor now exposes `excused_count` and `unexcused_count`
+alongside the existing blended total, splitting on the type name
+containing "uspr." (skrót od "usprawiedliwiona") - the best signal
+available without a real API flag, same best-effort class as this
+codebase's other name-based heuristics. The sensor's own state is
+unchanged (still the blended total - both kinds of absence genuinely mean
+the student wasn't there).
+
 ## 0.4.18
 
 User request: "czy usprawiedliwienia można jakoś pobrać i pokazać?" (can

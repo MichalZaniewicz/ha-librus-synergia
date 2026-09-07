@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -263,6 +264,21 @@ def _attendance_type(data: LibrusData, type_id: int | None) -> AttendanceTypeDat
     return data.attendance_types.get(type_id) if type_id is not None else None
 
 
+# A non-presence type ("Nieobecność uspr.") can still be an EXCUSED absence -
+# Librus has no separate API flag for this (IsPresenceKind only says
+# present/not), so "uspr." (skrót od "usprawiedliwiona") in the type's own
+# name is the only signal available, same best-effort text-match class as
+# the companion cards' own EXCUSED_HINT. Found live: a parent excused a real
+# absence and it kept showing identically to an unexcused one in every
+# summary/tile view, with no way to tell "already resolved" from "still
+# needs attention" without opening the full Attendance card's legend.
+_EXCUSED_TYPE_NAME_RE = re.compile(r"uspr\.?", re.IGNORECASE)
+
+
+def _is_excused_type_name(name: str) -> bool:
+    return _EXCUSED_TYPE_NAME_RE.search(name) is not None
+
+
 class LibrusAttendanceSensor(LibrusSensorBase):
     """Count of real absences - excludes "present"/"late"/"excused" marks.
 
@@ -323,6 +339,24 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             if a.date and (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
         ]
 
+        # Split the main "absences" count into excused/unexcused - found
+        # live: a parent excused a real absence and it kept showing
+        # identically to an unexcused one in every summary/tile view (only
+        # the full card's per-type legend distinguished them at all). The
+        # bare total is still the sensor's own state (unchanged meaning -
+        # both still count as "not present"); this lets a summary/tile
+        # surface "N still need attention" instead of a blended figure.
+        excused_count = 0
+        unexcused_count = 0
+        for a in data.attendances:
+            t = _attendance_type(data, a.type_id)
+            if t is None or t.is_presence_kind:
+                continue
+            if _is_excused_type_name(t.name):
+                excused_count += 1
+            else:
+                unexcused_count += 1
+
         # Independent attendance-percentage calculation - inspired by a
         # feature comparison against dani3l0/librusik (a third-party
         # Librus web client), which computes this itself rather than
@@ -358,6 +392,8 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             "last_absence_date": max(absence_dates) if absence_dates else None,
             "percentage": percentage,
             "by_semester": by_semester,
+            "excused_count": excused_count,
+            "unexcused_count": unexcused_count,
         }
 
 
