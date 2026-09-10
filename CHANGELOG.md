@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- **`id` on each Homework assignments `recent` entry** - so a companion
+  card can track per-item state (e.g. a done/undone checklist).
 - **Unexcused absences sensor** (`sensor.*_unexcused_absences`) - just
   the count of real absences that still need a justification (the
   Attendance sensor blends excused and unexcused into its state).

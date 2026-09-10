@@ -471,6 +471,7 @@ async def test_homework_assignments_sensor(hass) -> None:
     entity_id = _entity_id(hass, entry, "homework_assignments")
     state = hass.states.get(entity_id)
     assert state.state == "1"
+    assert state.attributes["recent"][0]["id"] == 1
     assert state.attributes["recent"][0]["topic"] == "Zadanie 5"
     assert state.attributes["recent"][0]["teacher"] == "Jan Kowalski"
 

@@ -808,6 +808,7 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
         return {
             "recent": [
                 {
+                    "id": a.id,
                     "topic": a.topic,
                     "text": a.text[:200],
                     "due_date": a.due_date,
