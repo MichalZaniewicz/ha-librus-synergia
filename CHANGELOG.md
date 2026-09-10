@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.1
+
+Small fix + a blueprint, both from live use.
+
+### Fixed
+- **Message bodies rendered Librus's link-converter tag soup** - Librus
+  rewrites every link in a message into
+  `<a href="https://liblink.pl/..." title="Link został skonwertowany...">`,
+  and the list endpoint's `content` can carry other light HTML (`<br>`,
+  `<p>`). The Wiadomości card showed it verbatim. `decode_message_content`
+  now flattens it: keeps the link (its visible text, or the bare URL),
+  turns `<br>`/`</p>` into newlines, drops the rest, unescapes entities.
+
+### Added
+- **Subject Average Dropped blueprint** - `numeric_state` trigger on one
+  or more subject-average sensors crossing below a threshold you set
+  (default 3.5). Fires once on the way down, again only after the average
+  recovers above the threshold. Optional "stays below for" guard.
+
 ## 0.5.0
 
 A big round of "surface more from data already fetched" - six new sensors,
