@@ -215,6 +215,7 @@ async def async_setup_entry(
         [
             LibrusOverallAverageSensor(coordinator, entry),
             LibrusAttendanceSensor(coordinator, entry),
+            LibrusUnexcusedAbsencesSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
             LibrusNextExamSensor(coordinator, entry),
@@ -398,26 +399,37 @@ def _attendance_type(data: LibrusData, type_id: int | None) -> AttendanceTypeDat
     return data.attendance_types.get(type_id) if type_id is not None else None
 
 
-# A non-presence type ("Nieobecność uspr.") can still be an EXCUSED absence -
-# Librus has no separate API flag for this (IsPresenceKind only says
-# present/not), so "uspr." (skrót od "usprawiedliwiona") in the type's own
-# name is the only signal available, same best-effort text-match class as
-# the companion cards' own EXCUSED_HINT. Found live: a parent excused a real
-# absence and it kept showing identically to an unexcused one in every
-# summary/tile view, with no way to tell "already resolved" from "still
-# needs attention" without opening the full Attendance card's legend.
-_EXCUSED_TYPE_NAME_RE = re.compile(r"uspr\.?", re.IGNORECASE)
+# Whether a non-presence type is an EXCUSED absence lives on the model now
+# (`AttendanceTypeData.is_excused_absence`) - Librus has no separate API
+# flag for it, so it's a best-effort match on "uspr." in the type name.
+# Found live: a parent excused a real absence and it kept showing
+# identically to an unexcused one in every summary/tile view, with no way
+# to tell "already resolved" from "still needs attention".
 
 
-def _is_excused_type_name(name: str) -> bool:
-    return _EXCUSED_TYPE_NAME_RE.search(name) is not None
+def _absence_split(data: LibrusData) -> tuple[int, int]:
+    """(excused, unexcused) real-absence record counts - non-presence
+    types only, split on `AttendanceTypeData.is_excused_absence`. Shared by
+    the Attendance sensor's attributes and the dedicated Unexcused absences
+    sensor."""
+    excused = unexcused = 0
+    for attendance in data.attendances:
+        attendance_type = _attendance_type(data, attendance.type_id)
+        if attendance_type is None or attendance_type.is_presence_kind:
+            continue
+        if attendance_type.is_excused_absence:
+            excused += 1
+        else:
+            unexcused += 1
+    return excused, unexcused
 
 
 # "Spóźnienie" (late) is a PRESENCE-kind type (IsPresenceKind: true, same
 # flag value as plain "Obecność") - Librus has no separate API flag telling
 # late apart from ordinary presence either, so (same best-effort text-match
-# approach as _is_excused_type_name above) "późn" (rdzeń for "spóźnienie")
-# in the type's own name is the only signal. Needed for by_weekday below -
+# approach as `AttendanceTypeData.is_excused_absence`) "późn" (rdzeń for
+# "spóźnienie") in the type's own name is the only signal. Needed for
+# by_weekday below -
 # _record_status()/by_date fold "late" into plain "good", which is fine for
 # a single worst-status-per-day heatmap but can't answer "how many lates
 # happened on a given weekday" on its own.
@@ -440,7 +452,7 @@ def _record_status(attendance_type: AttendanceTypeData | None) -> str:
         return "good"  # unknown type - no evidence to flag it as concerning
     if attendance_type.is_presence_kind:
         return "good"
-    return "warn" if _is_excused_type_name(attendance_type.name) else "bad"
+    return "warn" if attendance_type.is_excused_absence else "bad"
 
 
 class LibrusAttendanceSensor(LibrusSensorBase):
@@ -510,16 +522,9 @@ class LibrusAttendanceSensor(LibrusSensorBase):
         # bare total is still the sensor's own state (unchanged meaning -
         # both still count as "not present"); this lets a summary/tile
         # surface "N still need attention" instead of a blended figure.
-        excused_count = 0
-        unexcused_count = 0
-        for a in data.attendances:
-            t = _attendance_type(data, a.type_id)
-            if t is None or t.is_presence_kind:
-                continue
-            if _is_excused_type_name(t.name):
-                excused_count += 1
-            else:
-                unexcused_count += 1
+        # There's also a dedicated `sensor.*_unexcused_absences` for the
+        # unexcused figure alone.
+        excused_count, unexcused_count = _absence_split(data)
 
         # One status per calendar DATE (not per record - a single day can
         # carry several period-level records), for a "year at a glance"
@@ -584,7 +589,7 @@ class LibrusAttendanceSensor(LibrusSensorBase):
                     continue  # ordinary presence - not part of this breakdown
                 bucket_key = "late"
             else:
-                bucket_key = "excused" if _is_excused_type_name(t.name) else "unexcused"
+                bucket_key = "excused" if t.is_excused_absence else "unexcused"
             try:
                 weekday = date.fromisoformat(a.date).isoweekday()
             except ValueError:
@@ -606,6 +611,46 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             "by_date": by_date,
             "by_weekday": by_weekday,
         }
+
+
+class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
+    """Just the unexcused real-absence count, as its own entity - the one
+    number a parent actually needs to act on (the Attendance sensor blends
+    excused and unexcused into its state). Pairs with the
+    `librus_synergia_new_absence` event. `recent_dates` in attributes
+    lists the days still needing a justification."""
+
+    _attr_translation_key = "unexcused_absences"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:account-alert-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "unexcused_absences")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return _absence_split(self.coordinator.data)[1]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        data = self.coordinator.data
+        excused, _unexcused = _absence_split(data)
+        recent_dates = sorted(
+            {
+                a.date
+                for a in data.attendances
+                if a.date
+                and (t := _attendance_type(data, a.type_id)) is not None
+                and not t.is_presence_kind
+                and not t.is_excused_absence
+            },
+            reverse=True,
+        )[:10]
+        return {"excused_count": excused, "recent_dates": recent_dates}
 
 
 class LibrusLuckyNumberSensor(LibrusSensorBase):

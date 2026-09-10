@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Unexcused absences sensor** (`sensor.*_unexcused_absences`) - just
+  the count of real absences that still need a justification (the
+  Attendance sensor blends excused and unexcused into its state).
+  `recent_dates` in attributes lists the days involved. Pairs with a new
+  **`librus_synergia_new_absence`** event (fires for any newly-seen
+  absence record, with an `excused` flag) and an **Unexcused Absence
+  Notification** blueprint (only pings for still-open ones).
 - **Next exam sensor** (`sensor.*_next_exam`) - date of the soonest
   future Agenda entry whose category looks like a graded assessment
   ("Sprawdzian", "praca klasowa", "kartkówka", "egzamin", "diagnoza" -

@@ -39,6 +39,9 @@ EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
 # events. Carries the resolved subject + category name so an automation
 # can filter e.g. category == "Sprawdzian" without its own lookup.
 EVENT_NEW_HOMEWORK = f"{DOMAIN}_new_homework"
+# Fires for a newly-seen real absence record (excused or not - `excused`
+# in the payload says which). Seeded silently on the first sync.
+EVENT_NEW_ABSENCE = f"{DOMAIN}_new_absence"
 # Fires when a lesson on today's date or later newly turns up cancelled or
 # as a substitution vs. the previous poll (seeded silently on the first
 # sync, same as the *_new_* events). Signature-keyed on date+period+kind,

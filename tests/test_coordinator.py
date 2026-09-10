@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.librus_synergia.const import (
+    EVENT_NEW_ABSENCE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_TIMETABLE_CHANGED,
@@ -670,6 +671,35 @@ async def test_timetable_change_event_seeds_silently_then_fires(hass, freezer) -
     assert events[0].data["lesson_no"] == 3
     assert events[0].data["date"] == day_iso
     assert events[0].data["subject"] == "Historia"
+
+
+async def test_new_absence_event_fires_with_excused_flag(hass) -> None:
+    events = async_capture_events(hass, EVENT_NEW_ABSENCE)
+    client = build_mock_client(
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()  # seeds silently
+
+    client.async_get_attendances.return_value = {
+        "Attendances": [
+            {"Id": 501, "Date": "2026-09-11", "LessonNo": 3, "Type": {"Id": 1}},
+            {"Id": 502, "Date": "2026-09-11", "Type": {"Id": 100}},  # present - no event
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["id"] == 501
+    assert events[0].data["excused"] is False
+    assert events[0].data["date"] == "2026-09-11"
+    assert events[0].data["lesson_no"] == 3
 
 
 async def test_new_homework_event_carries_resolved_subject_and_category(hass) -> None:

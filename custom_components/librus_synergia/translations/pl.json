@@ -47,6 +47,7 @@
       "overall_average": { "name": "Średnia ocen" },
       "subject_average": { "name": "Średnia - {subject}" },
       "attendance": { "name": "Nieobecności" },
+      "unexcused_absences": { "name": "Nieusprawiedliwione nieobecności" },
       "next_lesson": { "name": "Następna lekcja" },
       "current_lesson": { "name": "Bieżąca lekcja" },
       "next_exam": { "name": "Najbliższy sprawdzian" },

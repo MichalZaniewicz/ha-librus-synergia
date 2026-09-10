@@ -27,6 +27,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
@@ -118,6 +119,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_note_ids: set[int] | None = None
         self._known_message_ids: set[str] | None = None
         self._known_homework_ids: set[int] | None = None
+        self._known_absence_ids: set[int] | None = None
         # Synthetic "date|period|kind|subject" signatures for cancelled /
         # substitution lessons - not a real id from the API, just enough to
         # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
@@ -252,17 +254,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
         homeworks = _parse_homeworks(homeworks_payload)
+        attendances = _parse_attendances(attendances_payload)
+        attendance_types = _parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
         self._async_fire_new_item_events(grades, school_notices, notes, messages, homeworks)
         self._fire_timetable_change_events(timetable, today)
+        self._fire_new_absence_events(attendances, attendance_types)
 
         return LibrusData(
             me=_parse_me(me_payload),
             grades=grades,
             grade_categories=_parse_grade_categories(categories_payload),
             notes=notes,
-            attendances=_parse_attendances(attendances_payload),
-            attendance_types=_parse_attendance_types(attendance_types_payload),
+            attendances=attendances,
+            attendance_types=attendance_types,
             timetable=timetable,
             homeworks=homeworks,
             school_notices=school_notices,
@@ -667,6 +672,35 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 }
         self._known_timetable_disruptions = self._fire_for_new_ids(
             EVENT_TIMETABLE_CHANGED, entry_id, self._known_timetable_disruptions, items
+        )
+
+    def _fire_new_absence_events(
+        self,
+        attendances: list[AttendanceData],
+        attendance_types: dict[int, AttendanceTypeData],
+    ) -> None:
+        """Fire EVENT_NEW_ABSENCE for a newly-seen real absence record
+        (any non-presence type - excused or not, `excused` in the payload
+        says which). Seeded silently on the first sync like the other
+        events."""
+        entry_id = self.config_entry.entry_id if self.config_entry else None
+        items: dict[int, dict[str, Any]] = {}
+        for attendance in attendances:
+            attendance_type = (
+                attendance_types.get(attendance.type_id)
+                if attendance.type_id is not None
+                else None
+            )
+            if attendance_type is None or attendance_type.is_presence_kind:
+                continue
+            items[attendance.id] = {
+                "date": attendance.date,
+                "type": attendance_type.name,
+                "excused": attendance_type.is_excused_absence,
+                "lesson_no": attendance.lesson_no,
+            }
+        self._known_absence_ids = self._fire_for_new_ids(
+            EVENT_NEW_ABSENCE, entry_id, self._known_absence_ids, items
         )
 
     def _fire_for_new_ids(

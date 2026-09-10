@@ -609,6 +609,32 @@ async def test_next_lesson_skips_cancelled_slot(hass, freezer) -> None:
     assert nxt.state == "unknown"  # only remaining upcoming slot is cancelled
 
 
+async def test_unexcused_absences_sensor(hass) -> None:
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": "2026-09-01", "Type": {"Id": 100}},  # present
+                {"Id": 2, "Date": "2026-09-02", "Type": {"Id": 1}},  # unexcused
+                {"Id": 3, "Date": "2026-09-05", "Type": {"Id": 1}},  # unexcused
+                {"Id": 4, "Date": "2026-09-04", "Type": {"Id": 3}},  # excused
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "unexcused_absences"))
+    assert state.state == "2"
+    assert state.attributes["excused_count"] == 1
+    assert state.attributes["recent_dates"] == ["2026-09-05", "2026-09-02"]
+
+
 async def test_averages_expose_arithmetic_and_per_semester(hass) -> None:
     """State stays the weighted average; attributes add the plain
     arithmetic mean and a per-semester weighted average."""

@@ -1,0 +1,39 @@
+blueprint:
+  name: "Librus: Unexcused Absence Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone -
+    whenever a new *unexcused* absence appears via the
+    `librus_synergia_new_absence` event, so you know there's a day that
+    still needs a justification. Absences that are already excused are
+    ignored.
+
+
+    Inside your chosen action, use `{{ absence_summary }}` for a ready-made
+    one-liner, or the fields directly: `{{ trigger.event.data.date }}`,
+    `{{ trigger.event.data.type }}`, `{{ trigger.event.data.lesson_no }}`.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/unexcused_absence_notification.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: The action to run for each new unexcused absence.
+      selector:
+        action: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_absence
+
+conditions:
+  - condition: template
+    value_template: "{{ not trigger.event.data.excused }}"
+
+actions:
+  - variables:
+      absence_summary: >-
+        Nieusprawiedliwiona nieobecność: {{ trigger.event.data.date }}
+        {{ ('(lekcja ' ~ trigger.event.data.lesson_no ~ ')') if trigger.event.data.lesson_no else '' }}
+  - !input notify_action
+
+mode: queued
+max: 10

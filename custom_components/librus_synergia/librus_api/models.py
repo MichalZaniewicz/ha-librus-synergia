@@ -10,6 +10,7 @@ errors/warnings").
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -90,6 +91,9 @@ class AttendanceData:
     type_id: int | None
 
 
+_EXCUSED_ABSENCE_NAME_RE = re.compile(r"uspr\.?", re.IGNORECASE)
+
+
 @dataclass(slots=True)
 class AttendanceTypeData:
     """CONFIRMED live: `IsPresenceKind` is real and meaningful - e.g. Id 100
@@ -102,6 +106,15 @@ class AttendanceTypeData:
     id: int
     name: str
     is_presence_kind: bool
+
+    @property
+    def is_excused_absence(self) -> bool:
+        """Best-effort: Librus has no explicit "excused" flag
+        (`IsPresenceKind` only says present/not), so a non-presence type
+        whose name contains "uspr." (skrót od "usprawiedliwiona") is taken
+        as an excused absence. Shared by the sensor layer and the
+        new-absence event so both classify the same way."""
+        return not self.is_presence_kind and _EXCUSED_ABSENCE_NAME_RE.search(self.name) is not None
 
 
 @dataclass(slots=True)
