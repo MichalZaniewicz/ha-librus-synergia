@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **`librus_synergia.refresh` service** - force an immediate data refresh
+  (e.g. right before a morning-briefing automation). Optional `device_id`;
+  omit to refresh all students.
 - **Low Grade Alert blueprint** - runs your action only for a new grade
   at or below a threshold (default 2), ignoring a trailing +/- and any
   non-numeric mark.

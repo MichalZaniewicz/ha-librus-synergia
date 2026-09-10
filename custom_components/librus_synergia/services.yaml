@@ -1,3 +1,11 @@
+refresh:
+  fields:
+    device_id:
+      required: false
+      selector:
+        device:
+          integration: librus_synergia
+
 get_message:
   fields:
     device_id:

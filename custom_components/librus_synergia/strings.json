@@ -70,6 +70,16 @@
     }
   },
   "services": {
+    "refresh": {
+      "name": "Refresh now",
+      "description": "Force an immediate data refresh instead of waiting for the next poll.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The student to refresh. Leave empty to refresh every configured student."
+        }
+      }
+    },
     "get_message": {
       "name": "Get message",
       "description": "Fetches ONE message's full, untruncated content from Librus. This marks the message as read on Librus's servers, exactly like opening it in the Librus app or website - only call this for a message a person has actually chosen to open, never automatically or on a schedule.",

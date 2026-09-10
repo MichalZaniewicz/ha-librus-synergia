@@ -88,6 +88,13 @@ Blueprint, and paste a blueprint's GitHub URL.
 
 ## Services
 
+### `librus_synergia.refresh`
+
+Forces an immediate data refresh instead of waiting for the next poll - handy
+right before a morning-briefing automation. Optional `device_id` targets one
+student; omit it to refresh every configured student. Uses the coordinator's
+debounced refresh, so it's safe to call often.
+
 ### `librus_synergia.get_message`
 
 Fetches ONE message's full, untruncated content (the Unread messages sensor's

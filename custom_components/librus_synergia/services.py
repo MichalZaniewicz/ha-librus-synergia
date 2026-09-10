@@ -1,8 +1,10 @@
 """Service registrations for the Librus Synergia (unofficial) integration.
 
-Currently just `get_message` - see its handler's docstring for why this is
-deliberately a service (explicit user action) rather than anything wired
-into the coordinator's routine polling.
+- `get_message` - see its handler's docstring for why this is deliberately
+  a service (explicit user action) rather than anything wired into routine
+  polling.
+- `refresh` - force an immediate data refresh (e.g. right before a morning
+  briefing automation, instead of waiting for the next poll).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from .librus_api import LibrusError
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_GET_MESSAGE = "get_message"
+SERVICE_REFRESH = "refresh"
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
     {
@@ -30,6 +33,8 @@ _GET_MESSAGE_SCHEMA = vol.Schema(
         vol.Optional("mailbox", default="inbox"): cv.string,
     }
 )
+
+_REFRESH_SCHEMA = vol.Schema({vol.Optional("device_id"): cv.string})
 
 
 def _resolve_coordinator(hass: HomeAssistant, device_id: str) -> LibrusDataUpdateCoordinator:
@@ -59,6 +64,26 @@ def async_setup_services(hass: HomeAssistant) -> None:
     second config entry being set up doesn't try to double-register."""
     if hass.services.has_service(DOMAIN, SERVICE_GET_MESSAGE):
         return
+
+    async def _async_handle_refresh(call: ServiceCall) -> None:
+        """Force an immediate data refresh. With `device_id` set, just that
+        student; otherwise every loaded Librus Synergia entry. Uses the
+        coordinator's debounced request, so spamming it is harmless."""
+        device_id = call.data.get("device_id")
+        if device_id:
+            coordinators = [_resolve_coordinator(hass, device_id)]
+        else:
+            coordinators = [
+                entry.runtime_data
+                for entry in hass.config_entries.async_entries(DOMAIN)
+                if entry.state is ConfigEntryState.LOADED
+            ]
+        for coordinator in coordinators:
+            await coordinator.async_request_refresh()
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_REFRESH, _async_handle_refresh, schema=_REFRESH_SCHEMA
+    )
 
     async def _async_handle_get_message(call: ServiceCall) -> ServiceResponse:
         """Fetch ONE message's full, untruncated content.
@@ -114,5 +139,6 @@ def async_unload_services(hass: HomeAssistant) -> None:
     entry is about to be unloaded (see __init__.py::async_unload_entry),
     so a second student's entry doesn't lose the service while the first
     one is just being reloaded."""
-    if hass.services.has_service(DOMAIN, SERVICE_GET_MESSAGE):
-        hass.services.async_remove(DOMAIN, SERVICE_GET_MESSAGE)
+    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH):
+        if hass.services.has_service(DOMAIN, service):
+            hass.services.async_remove(DOMAIN, service)

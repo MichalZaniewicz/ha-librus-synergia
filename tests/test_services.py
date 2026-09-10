@@ -115,3 +115,28 @@ async def test_get_message_service_unregistered_after_last_entry_unloaded(hass) 
     await hass.async_block_till_done()
 
     assert not hass.services.has_service(DOMAIN, "get_message")
+
+
+async def test_refresh_service_triggers_a_coordinator_update(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client)
+    assert hass.services.has_service(DOMAIN, "refresh")
+    before = client.async_get_grades.await_count
+
+    await hass.services.async_call(
+        DOMAIN, "refresh", {"device_id": _device_id(hass, entry)}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert client.async_get_grades.await_count > before
+
+
+async def test_refresh_service_without_device_refreshes_all(hass) -> None:
+    client = build_mock_client()
+    await setup_integration(hass, client)
+    before = client.async_get_grades.await_count
+
+    await hass.services.async_call(DOMAIN, "refresh", {}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert client.async_get_grades.await_count > before

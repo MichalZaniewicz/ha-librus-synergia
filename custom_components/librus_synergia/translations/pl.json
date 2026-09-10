@@ -70,6 +70,16 @@
     }
   },
   "services": {
+    "refresh": {
+      "name": "Odśwież teraz",
+      "description": "Wymuś natychmiastowe odświeżenie danych, bez czekania na kolejne odpytanie.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Uczeń do odświeżenia. Zostaw puste, aby odświeżyć wszystkich skonfigurowanych uczniów."
+        }
+      }
+    },
     "get_message": {
       "name": "Pobierz wiadomość",
       "description": "Pobiera pełną, nieobciętą treść JEDNEJ wiadomości z Librusa. Oznacza to wiadomość jako przeczytaną na serwerach Librusa, dokładnie tak jak otwarcie jej w aplikacji lub na stronie Librusa - wywołuj to tylko dla wiadomości, którą ktoś faktycznie chce otworzyć, nigdy automatycznie ani wg harmonogramu.",
