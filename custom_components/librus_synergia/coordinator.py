@@ -27,6 +27,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_MESSAGES_ENABLED,
+    DEFAULT_MESSAGES_ENABLED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -504,6 +506,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         Any other failure here is also non-fatal - messages are a bonus
         feature, not core data, and must never fail the whole update cycle.
         """
+        if self.config_entry is not None and not self.config_entry.options.get(
+            CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED
+        ):
+            # Turned off in the options flow - don't bootstrap the separate
+            # wiadomosci.librus.pl session or make any messages calls.
+            self._messages_available = False
+            return 0, {}, [], [], [], []
+
         if not self._messages_bootstrapped:
             try:
                 self._messages_available = await self._client.async_bootstrap_messages()

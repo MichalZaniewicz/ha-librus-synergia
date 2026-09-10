@@ -34,10 +34,12 @@
       "init": {
         "title": "Opcje Librus Synergia",
         "data": {
-          "scan_interval": "Częstotliwość odpytywania (minuty)"
+          "scan_interval": "Częstotliwość odpytywania (minuty)",
+          "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)"
         },
         "data_description": {
-          "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API."
+          "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
+          "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa."
         }
       }
     }

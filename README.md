@@ -62,7 +62,7 @@ Each child/student is a separate login and a separate integration entry.
 
 New grades, announcements, behaviour notices, messages, Agenda entries and absences fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`, `librus_synergia_new_homework`, `librus_synergia_new_absence`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/homework/timetable events include the resolved subject/teacher/category name alongside the raw id, so an automation doesn't need its own lookup. Ready-made [blueprints](#automation-blueprints) wrap these for you.
 
-The poll interval (default 20 minutes) is configurable via the integration's **Configure** option.
+The integration's **Configure** option sets the poll interval (default 20 minutes) and whether to fetch private messages at all - turn *Fetch private messages* off if your school doesn't use Wiadomości or you don't want those extra requests (the Unread messages sensor then reports `unavailable`).
 
 ### Automation blueprints
 

@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **"Fetch private messages" option** - a toggle in the integration's
+  Configure dialog. Off = the coordinator skips the whole Wiadomości
+  subsystem (its separate session bootstrap + the per-cycle unread-count
+  / list calls) and the Unread messages sensor reports `unavailable`,
+  for schools without the module or anyone wanting fewer requests.
 - **`id` on each Homework assignments `recent` entry** - so a companion
   card can track per-item state (e.g. a done/undone checklist).
 - **Unexcused absences sensor** (`sensor.*_unexcused_absences`) - just

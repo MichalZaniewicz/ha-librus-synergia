@@ -34,10 +34,12 @@
       "init": {
         "title": "Librus Synergia options",
         "data": {
-          "scan_interval": "Poll interval (minutes)"
+          "scan_interval": "Poll interval (minutes)",
+          "messages_enabled": "Fetch private messages (Wiadomości)"
         },
         "data_description": {
-          "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API."
+          "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API.",
+          "messages_enabled": "When off, the Unread messages sensor goes unavailable and no messages calls are made - fewer requests to Librus."
         }
       }
     }

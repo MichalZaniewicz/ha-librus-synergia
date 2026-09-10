@@ -6,11 +6,15 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.librus_synergia.const import CONF_COOKIES, DOMAIN
+from custom_components.librus_synergia.const import (
+    CONF_COOKIES,
+    CONF_MESSAGES_ENABLED,
+    DOMAIN,
+)
 from custom_components.librus_synergia.librus_api import (
     LibrusAccountActionRequiredError,
     LibrusCaptchaRequiredError,
@@ -136,3 +140,18 @@ async def test_reauth_flow_still_captcha_gated(hass) -> None:
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "captcha_needed"}
+
+
+async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCAN_INTERVAL: 45, CONF_MESSAGES_ENABLED: False},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {CONF_SCAN_INTERVAL: 45, CONF_MESSAGES_ENABLED: False}

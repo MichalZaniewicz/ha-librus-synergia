@@ -21,6 +21,14 @@ DEFAULT_SCAN_INTERVAL_MINUTES = 20
 MIN_SCAN_INTERVAL_MINUTES = 10
 MAX_SCAN_INTERVAL_MINUTES = 180
 
+# When False (set via the options flow), the coordinator skips the whole
+# Wiadomości (private messages) subsystem - its separate wiadomosci.librus.pl
+# session bootstrap plus the per-cycle unread-count/list calls. The Unread
+# messages sensor then reports `unavailable`, exactly as it already does for
+# a school that hasn't enabled the module.
+CONF_MESSAGES_ENABLED = "messages_enabled"
+DEFAULT_MESSAGES_ENABLED = True
+
 # The daily lucky number ("szczęśliwy numerek") is normally published by this
 # local hour; the coordinator avoids re-polling it before then once today's
 # value is already cached. Mirrors ha-suunto's approach of special-casing a

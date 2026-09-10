@@ -27,6 +27,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -37,7 +38,9 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_COOKIES,
+    CONF_MESSAGES_ENABLED,
     CONF_SESSION_LOGGED_IN_AT,
+    DEFAULT_MESSAGES_ENABLED,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MAX_SCAN_INTERVAL_MINUTES,
@@ -198,7 +201,7 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class LibrusSynergiaOptionsFlow(OptionsFlow):
-    """Handle the polling-interval option."""
+    """Poll interval + which optional feature groups to fetch."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -207,12 +210,13 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        current = self.config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
-        )
+        options = self.config_entry.options
         schema = vol.Schema(
             {
-                vol.Required(CONF_SCAN_INTERVAL, default=current): NumberSelector(
+                vol.Required(
+                    CONF_SCAN_INTERVAL,
+                    default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
+                ): NumberSelector(
                     NumberSelectorConfig(
                         min=MIN_SCAN_INTERVAL_MINUTES,
                         max=MAX_SCAN_INTERVAL_MINUTES,
@@ -221,6 +225,10 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         mode=NumberSelectorMode.BOX,
                     )
                 ),
+                vol.Required(
+                    CONF_MESSAGES_ENABLED,
+                    default=options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED),
+                ): BooleanSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

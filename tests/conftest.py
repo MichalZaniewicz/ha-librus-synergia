@@ -104,10 +104,11 @@ def build_mock_client(**overrides) -> AsyncMock:
     return client
 
 
-def make_config_entry(**data) -> MockConfigEntry:
+def make_config_entry(*, options: dict | None = None, **data) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={CONF_USERNAME: "1234567u", CONF_PASSWORD: "pw", **data},
+        options=options or {},
     )
 
 

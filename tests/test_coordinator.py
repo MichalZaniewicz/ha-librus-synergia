@@ -41,8 +41,8 @@ GRADE_PAYLOAD = {
 }
 
 
-def _make_coordinator(hass, client) -> LibrusDataUpdateCoordinator:
-    entry = make_config_entry()
+def _make_coordinator(hass, client, *, options: dict | None = None) -> LibrusDataUpdateCoordinator:
+    entry = make_config_entry(options=options)
     entry.add_to_hass(hass)
     # async_config_entry_first_refresh() asserts the entry is mid-setup -
     # true when HA drives it via async_setup_entry, but this suite calls it
@@ -175,6 +175,23 @@ async def test_messages_unavailable_school_is_non_fatal(hass) -> None:
     assert data.unread_messages_by_mailbox == {}
     assert data.messages == []
     client.async_get_unread_messages_count.assert_not_called()
+
+
+async def test_messages_disabled_via_options_skips_all_message_calls(hass) -> None:
+    """`messages_enabled: False` in the options must skip the Wiadomości
+    bootstrap and every messages call entirely, leaving the sensor
+    unavailable - same end state as a school without the module."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True  # would work if asked
+    coordinator = _make_coordinator(hass, client, options={"messages_enabled": False})
+
+    data = await coordinator._async_update_data()
+
+    assert data.messages_available is False
+    assert data.unread_message_count == 0
+    client.async_bootstrap_messages.assert_not_called()
+    client.async_get_unread_messages_count.assert_not_called()
+    client.async_get_messages.assert_not_called()
 
 
 async def test_messages_parsed_when_available(hass) -> None:
