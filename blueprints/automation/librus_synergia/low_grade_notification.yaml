@@ -1,0 +1,51 @@
+blueprint:
+  name: "Librus: Low Grade Alert"
+  description: >
+    Runs your action only when a new grade is at or below a threshold you
+    set - so you hear about a 1 or a 2 without a ping for every single
+    grade. A trailing "+"/"-" is ignored ("2+" counts as 2); non-numeric
+    marks (bz, np, nk, ...) never trigger it.
+
+
+    Use `{{ grade_summary }}` in your action, or the raw fields:
+    `{{ trigger.event.data.value }}`, `{{ trigger.event.data.subject }}`.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/low_grade_notification.yaml
+  input:
+    threshold:
+      name: Alert at or below
+      description: Grades this value or lower trigger the action.
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 5
+          step: 1
+          mode: slider
+    notify_action:
+      name: Notification action
+      description: The action to run for each low grade.
+      selector:
+        action: {}
+
+variables:
+  threshold: !input threshold
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_grade
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set v = (trigger.event.data.value | string | trim | regex_replace('[+\-]$', '')) %}
+      {{ v is match('^[1-6]$') and (v | int) <= (threshold | int(2)) }}
+
+actions:
+  - variables:
+      grade_summary: >-
+        Słaba ocena: {{ trigger.event.data.value }}{{ (' z ' ~ trigger.event.data.subject) if trigger.event.data.subject else '' }}
+  - !input notify_action
+
+mode: queued
+max: 10

@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **Low Grade Alert blueprint** - runs your action only for a new grade
+  at or below a threshold (default 2), ignoring a trailing +/- and any
+  non-numeric mark.
 - **Morning Briefing blueprint** - at a set time on school days, builds a
   one-line briefing (first lesson + room, today's lucky number, any test
   within 3 days) from the Next lesson / Lucky number / Next exam sensors
