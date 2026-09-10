@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+A big round of "surface more from data already fetched" - six new sensors,
+three new bus events, four new blueprints, an options toggle and a
+`refresh` service. Everything client-side over the existing poll data, so
+no extra load on Librus. All of it also feeds a matching batch of
+companion cards.
 
 ### Added
 - **`librus_synergia.refresh` service** - force an immediate data refresh
