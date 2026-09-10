@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- **Morning Briefing blueprint** - at a set time on school days, builds a
+  one-line briefing (first lesson + room, today's lucky number, any test
+  within 3 days) from the Next lesson / Lucky number / Next exam sensors
+  and runs your action (speak it on a media player, or notify).
 - **"Fetch private messages" option** - a toggle in the integration's
   Configure dialog. Off = the coordinator skips the whole Wiadomości
   subsystem (its separate session bootstrap + the per-cycle unread-count

@@ -1,0 +1,86 @@
+blueprint:
+  name: "Librus: Morning Briefing"
+  description: >
+    At a set time on school days, builds a short briefing - the first
+    lesson and room, the lucky number (if it's today's), and whether a
+    test is coming up in the next few days - and runs your action, e.g.
+    "speak on a media player" or "send a notification".
+
+
+    Use `{{ briefing_text }}` in your action. Nothing runs on weekends, or
+    on a day the Next lesson sensor has no lesson.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/morning_briefing_notification.yaml
+  input:
+    briefing_time:
+      name: Time
+      description: When to run, on Mon-Fri.
+      default: "07:15:00"
+      selector:
+        time: {}
+    next_lesson_entity:
+      name: Next lesson sensor
+      description: The Librus "Next lesson" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    lucky_number_entity:
+      name: Lucky number sensor (optional)
+      description: Include today's lucky number when it's genuinely for today.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    next_exam_entity:
+      name: Next exam sensor (optional)
+      description: Mention an upcoming test when it's within 3 days.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    notify_action:
+      name: Action
+      description: What to do with the briefing (e.g. send a notification, or speak it).
+      selector:
+        action: {}
+
+variables:
+  next_lesson_entity: !input next_lesson_entity
+  lucky_number_entity: !input lucky_number_entity
+  next_exam_entity: !input next_exam_entity
+
+triggers:
+  - trigger: time
+    at: !input briefing_time
+
+conditions:
+  - condition: template
+    value_template: "{{ now().weekday() < 5 }}"
+  - condition: template
+    value_template: "{{ states(next_lesson_entity) not in ['unknown', 'unavailable', 'none', 'None'] }}"
+
+actions:
+  - variables:
+      first_lesson: "{{ states(next_lesson_entity) }}"
+      first_start: "{{ state_attr(next_lesson_entity, 'start') | default('', true) }}"
+      first_room: "{{ state_attr(next_lesson_entity, 'classroom') | default('', true) }}"
+      lucky: >-
+        {{ states(lucky_number_entity)
+           if lucky_number_entity
+           and states(lucky_number_entity) not in ['unknown', 'unavailable', 'none']
+           and state_attr(lucky_number_entity, 'is_today')
+           else '' }}
+      exam_days: >-
+        {{ state_attr(next_exam_entity, 'days_until')
+           if next_exam_entity and states(next_exam_entity) not in ['unknown', 'unavailable', 'none']
+           else none }}
+      briefing_text: >-
+        Pierwsza lekcja: {{ first_lesson }}{{ (' o ' ~ first_start[11:16]) if first_start else '' }}{{ (', sala ' ~ first_room) if first_room else '' }}.
+        {{ ('Szczęśliwy numerek: ' ~ lucky ~ '.') if lucky else '' }}
+        {{ ('Sprawdzian za ' ~ exam_days ~ ' dni!') if (exam_days is not none and exam_days | int(99) <= 3) else '' }}
+  - !input notify_action
+
+mode: single
