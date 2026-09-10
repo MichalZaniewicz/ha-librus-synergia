@@ -609,6 +609,66 @@ async def test_next_lesson_skips_cancelled_slot(hass, freezer) -> None:
     assert nxt.state == "unknown"  # only remaining upcoming slot is cancelled
 
 
+async def test_averages_expose_arithmetic_and_per_semester(hass) -> None:
+    """State stays the weighted average; attributes add the plain
+    arithmetic mean and a per-semester weighted average."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "3", "Category": {"Id": 20}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-05"},
+                {"Id": 3, "Grade": "4", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 2, "AddDate": "2027-02-01"},
+            ]
+        },
+        async_get_grade_categories={
+            "Categories": [
+                {"Id": 10, "Name": "odpowiedź", "CountToTheAverage": True, "Weight": 1},
+                {"Id": 20, "Name": "sprawdzian", "CountToTheAverage": True, "Weight": 3},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    overall = hass.states.get(_entity_id(hass, entry, "overall_average"))
+    assert float(overall.state) == 3.6  # (5*1 + 3*3 + 4*1) / 5
+    assert overall.attributes["average_arithmetic"] == 4.0  # (5 + 3 + 4) / 3
+    assert overall.attributes["average_semester_1"] == 3.5  # (5*1 + 3*3) / 4
+    assert overall.attributes["average_semester_2"] == 4.0
+
+    subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
+    assert subject.attributes["average_semester_1"] == 3.5
+    assert subject.attributes["average_semester_2"] == 4.0
+
+
+async def test_next_exam_sensor(hass) -> None:
+    """Picks the soonest future Agenda entry whose category looks like a
+    graded assessment; a trip/other category is ignored."""
+    today = dt_util.now().date()
+    exam_day = (today + timedelta(days=3)).isoformat()
+    trip_day = (today + timedelta(days=1)).isoformat()
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_homework_categories={
+            "Categories": [{"Id": 1, "Name": "Sprawdzian"}, {"Id": 2, "Name": "Wycieczka"}]
+        },
+        async_get_homeworks={
+            "HomeWorks": [
+                {"Id": 1, "Content": "Wycieczka do muzeum", "Date": trip_day, "Category": {"Id": 2}, "Subject": None},
+                {"Id": 2, "Content": "Dział 3 - ułamki", "Date": exam_day, "Category": {"Id": 1}, "Subject": {"Id": 100}},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "next_exam"))
+    assert state.state == exam_day  # date device_class -> ISO date string
+    assert state.attributes["days_until"] == 3
+    assert state.attributes["subject"] == "Matematyka"
+    assert state.attributes["category"] == "Sprawdzian"
+    assert [e["date"] for e in state.attributes["upcoming"]] == [exam_day]
+
+
 async def test_school_sensor_exposes_bell_schedule(hass) -> None:
     """bell_schedule just echoes back whatever HourFrom/HourTo strings the
     timetable carries, so fixed clock times are fine here (no dependency on

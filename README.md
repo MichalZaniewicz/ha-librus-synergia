@@ -40,11 +40,12 @@ Each child/student is a separate login and a separate integration entry.
 
 | Type | Entity | Notes |
 |---|---|---|
-| `sensor` | Overall grade average | Weighted average across every subject |
-| `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, latest grade (with any teacher comments), proposed/final semester grades |
+| `sensor` | Overall grade average | Weighted average across every subject; attributes add `average_arithmetic` and `average_semester_1`/`average_semester_2` |
+| `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, full grade log, latest grade (with any teacher comments), proposed/final semester grades and per-semester / arithmetic averages |
 | `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown, total record count, an independently-computed `percentage` (works even if your school hides this), and a `by_semester` breakdown (count/percentage per semester) in attributes |
 | `sensor` | Next lesson | Subject name of the next lesson that will actually take place (cancelled slots skipped); attributes carry `start`/`end`, `minutes_until`, teacher, classroom, period number and substitution flag |
 | `sensor` | Current lesson | Subject name of the lesson happening right now (`unknown` during breaks / outside school hours); attributes include `minutes_left` and the same period detail |
+| `sensor` | Next exam | Date of the next graded assessment on the Agenda (`device_class: date`); attributes carry `days_until`, subject, category and an `upcoming` list |
 | `sensor` | Lucky number | The most recently published "szczęśliwy numerek" - Librus can publish the *next* school day's number a day ahead, so check the `is_today`/`day` attributes rather than assuming the state is always for today |
 | `sensor` | Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
 | `sensor` | Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
@@ -58,7 +59,7 @@ Each child/student is a separate login and a separate integration entry.
 | `calendar` | Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
 | `calendar` | Free days | The whole school year's holidays/breaks |
 
-New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/timetable events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Ready-made [blueprints](#automation-blueprints) wrap these for you.
+New grades, announcements, behaviour notices, messages and Agenda entries fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`, `librus_synergia_new_homework`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/homework/timetable events include the resolved subject/teacher/category name alongside the raw id, so an automation doesn't need its own lookup. Ready-made [blueprints](#automation-blueprints) wrap these for you.
 
 The poll interval (default 20 minutes) is configurable via the integration's **Configure** option.
 
@@ -76,6 +77,7 @@ the events above so you don't have to write the YAML yourself - each just asks f
 | [New Announcement Notification](blueprints/automation/librus_synergia/new_announcement_notification.yaml) | Runs your action with the title whenever `librus_synergia_new_announcement` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_announcement_notification.yaml) |
 | [New Message Notification](blueprints/automation/librus_synergia/new_message_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_message` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_message_notification.yaml) |
 | [Lesson Change Notification](blueprints/automation/librus_synergia/lesson_change_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_timetable_changed` fires (a lesson newly cancelled or moved to a substitution). | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Flesson_change_notification.yaml) |
+| [New Agenda Entry Notification](blueprints/automation/librus_synergia/new_homework_notification.yaml) | Runs your action whenever `librus_synergia_new_homework` fires - optionally filtered to one category (e.g. only "Sprawdzian"). | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_homework_notification.yaml) |
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.

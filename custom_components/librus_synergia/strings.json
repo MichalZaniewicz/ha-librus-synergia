@@ -49,6 +49,7 @@
       "attendance": { "name": "Absences" },
       "next_lesson": { "name": "Next lesson" },
       "current_lesson": { "name": "Current lesson" },
+      "next_exam": { "name": "Next exam" },
       "lucky_number": { "name": "Lucky number" },
       "unread_announcements": { "name": "Unread announcements" },
       "behaviour_notices": { "name": "Behaviour notices" },

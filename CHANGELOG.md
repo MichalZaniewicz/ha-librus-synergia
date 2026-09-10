@@ -3,6 +3,23 @@
 ## Unreleased
 
 ### Added
+- **Next exam sensor** (`sensor.*_next_exam`) - date of the soonest
+  future Agenda entry whose category looks like a graded assessment
+  ("Sprawdzian", "praca klasowa", "kartkówka", "egzamin", "diagnoza" -
+  matched on the category name, deliberately conservative). State is a
+  date (`device_class: date`); attributes carry `days_until`, subject,
+  category, description and an `upcoming` list.
+- **Per-semester and arithmetic grade averages** - the Overall grade
+  average and each subject average sensor now expose
+  `average_arithmetic` (plain mean of the same counted grades) and
+  `average_semester_1` / `average_semester_2` (weighted, scoped to that
+  semester) as attributes. The state is unchanged - still the weighted
+  all-time average.
+- **`librus_synergia_new_homework` event** - fires for a new Agenda
+  ("HomeWorks") entry (tests, trips, events), carrying the resolved
+  subject and category name so an automation can filter e.g.
+  `category == "Sprawdzian"`. New **New Agenda Entry Notification**
+  blueprint wraps it, with an optional category filter.
 - **Next lesson / Current lesson sensors** - state is the subject name;
   attributes carry the start/end time, `minutes_until` / `minutes_left`,
   teacher, classroom, period number and whether it's a substitution.

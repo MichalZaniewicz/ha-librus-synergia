@@ -35,6 +35,10 @@ EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
 EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
+# Fires for a new entry in the Agenda ("HomeWorks") feed - tests, trips,
+# events. Carries the resolved subject + category name so an automation
+# can filter e.g. category == "Sprawdzian" without its own lookup.
+EVENT_NEW_HOMEWORK = f"{DOMAIN}_new_homework"
 # Fires when a lesson on today's date or later newly turns up cancelled or
 # as a substitution vs. the previous poll (seeded silently on the first
 # sync, same as the *_new_* events). Signature-keyed on date+period+kind,

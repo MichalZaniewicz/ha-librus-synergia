@@ -10,7 +10,11 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import async_capture_events
 
-from custom_components.librus_synergia.const import EVENT_NEW_GRADE, EVENT_TIMETABLE_CHANGED
+from custom_components.librus_synergia.const import (
+    EVENT_NEW_GRADE,
+    EVENT_NEW_HOMEWORK,
+    EVENT_TIMETABLE_CHANGED,
+)
 from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
 from custom_components.librus_synergia.librus_api import (
     LibrusConnectionError,
@@ -666,6 +670,36 @@ async def test_timetable_change_event_seeds_silently_then_fires(hass, freezer) -
     assert events[0].data["lesson_no"] == 3
     assert events[0].data["date"] == day_iso
     assert events[0].data["subject"] == "Historia"
+
+
+async def test_new_homework_event_carries_resolved_subject_and_category(hass) -> None:
+    events = async_capture_events(hass, EVENT_NEW_HOMEWORK)
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_homework_categories={"Categories": [{"Id": 1, "Name": "Sprawdzian"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    client.async_get_homeworks.return_value = {
+        "HomeWorks": [
+            {
+                "Id": 77,
+                "Content": "Dział 3",
+                "Date": "2026-09-20",
+                "Category": {"Id": 1},
+                "Subject": {"Id": 100},
+            }
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["id"] == 77
+    assert events[0].data["subject"] == "Matematyka"
+    assert events[0].data["category"] == "Sprawdzian"
+    assert events[0].data["date"] == "2026-09-20"
 
 
 async def test_timetable_change_event_not_re_fired_for_known_disruption(hass, freezer) -> None:

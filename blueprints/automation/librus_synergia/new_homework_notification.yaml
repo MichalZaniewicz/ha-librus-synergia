@@ -1,0 +1,56 @@
+blueprint:
+  name: "Librus: New Agenda Entry Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone -
+    whenever a new entry appears in the Agenda feed (tests, trips, events)
+    via the `librus_synergia_new_homework` event.
+
+
+    Optionally filter to one category (e.g. `Sprawdzian`) so you only get
+    pinged about exams. Leave the filter empty to be notified about every
+    new agenda entry.
+
+
+    Inside your chosen action, use `{{ agenda_summary }}` for a ready-made
+    one-liner, or the individual fields:
+    `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.category }}`,
+    `{{ trigger.event.data.date }}`, `{{ trigger.event.data.content }}`.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_homework_notification.yaml
+  input:
+    category_filter:
+      name: Category filter (optional)
+      description: >
+        Only run for agenda entries whose category matches this text
+        (case-insensitive). Leave blank for all categories.
+      default: ""
+      selector:
+        text: {}
+    notify_action:
+      name: Notification action
+      description: The action to run for each matching agenda entry.
+      selector:
+        action: {}
+
+variables:
+  cat_filter: !input category_filter
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_homework
+
+conditions:
+  - condition: template
+    value_template: >-
+      {% set f = (cat_filter | string | trim | lower) %}
+      {{ f == '' or (trigger.event.data.category or '') | lower == f }}
+
+actions:
+  - variables:
+      agenda_summary: >-
+        {{ ('[' ~ trigger.event.data.category ~ '] ') if trigger.event.data.category else '' }}{{ (trigger.event.data.subject ~ ': ') if trigger.event.data.subject else '' }}{{ trigger.event.data.content }}
+        ({{ trigger.event.data.date }})
+  - !input notify_action
+
+mode: queued
+max: 10

@@ -49,6 +49,7 @@
       "attendance": { "name": "Nieobecności" },
       "next_lesson": { "name": "Następna lekcja" },
       "current_lesson": { "name": "Bieżąca lekcja" },
+      "next_exam": { "name": "Najbliższy sprawdzian" },
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },
       "behaviour_notices": { "name": "Uwagi" },

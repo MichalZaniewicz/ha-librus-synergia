@@ -6,7 +6,11 @@ import re
 from datetime import date, datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -20,6 +24,7 @@ from .librus_api.models import (
     BehaviourGradeData,
     GradeCategoryData,
     GradeData,
+    HomeworkEventData,
     LessonData,
     LibrusData,
     MessageData,
@@ -60,15 +65,22 @@ def _calculate_average(
     categories: dict[int, GradeCategoryData],
     *,
     subject_id: int | None = None,
+    semester: int | None = None,
+    weighted: bool = True,
 ) -> float | None:
-    """Weighted grade average, excluding semester/final proposition entries
-    and categories marked as not counting toward the average."""
-    weighted_sum = 0.0
+    """Grade average, excluding semester/final proposition entries and
+    categories marked as not counting toward the average. Weighted by the
+    grade category's weight unless `weighted=False` (plain arithmetic
+    mean of the same counted grades). `semester` restricts to grades from
+    that semester when given."""
+    running = 0.0
     weight_total = 0.0
     for grade in grades:
         if grade.is_semester_proposition or grade.is_final_proposition:
             continue
         if subject_id is not None and grade.subject_id != subject_id:
+            continue
+        if semester is not None and grade.semester != semester:
             continue
         category = categories.get(grade.category_id) if grade.category_id is not None else None
         if category is not None and not category.count_to_average:
@@ -76,12 +88,12 @@ def _calculate_average(
         numeric = _parse_grade_value(grade.value)
         if numeric is None:
             continue
-        weight = category.weight if category is not None else 1
-        weighted_sum += numeric * weight
+        weight = (category.weight if category is not None else 1) if weighted else 1
+        running += numeric * weight
         weight_total += weight
     if weight_total <= 0:
         return None
-    return round(weighted_sum / weight_total, 2)
+    return round(running / weight_total, 2)
 
 
 def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> GradeData | None:
@@ -161,6 +173,17 @@ def _lesson_attrs(
     }
 
 
+# Agenda ("HomeWorks") category names that mark a graded assessment worth
+# counting down to. `Sprawdzian` and `Diagnoza` are confirmed-live real
+# category names for this account; "praca klasowa"/"kartkówka"/"egzamin"
+# are the other standard Polish assessment names. Best-effort by design -
+# a school naming a test category something else just won't be picked up
+# (no false positives is the priority over catching every one).
+_EXAM_CATEGORY_RE = re.compile(
+    r"sprawdzian|praca\s+klasowa|kartków|egzamin|diagnoz", re.IGNORECASE
+)
+
+
 def _bell_schedule(timetable: dict[date, list[LessonData]]) -> list[dict[str, Any]]:
     """A period-number -> {start, end} table derived from whatever times
     actually appear in the timetable. Per lesson number, the most commonly
@@ -194,6 +217,7 @@ async def async_setup_entry(
             LibrusAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
+            LibrusNextExamSensor(coordinator, entry),
             LibrusLuckyNumberSensor(coordinator, entry),
             LibrusUnreadAnnouncementsSensor(coordinator, entry),
             LibrusBehaviourNoticesSensor(coordinator, entry),
@@ -259,6 +283,20 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         return _calculate_average(self.coordinator.data.grades, self.coordinator.data.grade_categories)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        grades = self.coordinator.data.grades
+        cats = self.coordinator.data.grade_categories
+        return {
+            # The state is the weighted average - these are the same figure
+            # under different rules, for anyone who wants them.
+            "average_arithmetic": _calculate_average(grades, cats, weighted=False),
+            "average_semester_1": _calculate_average(grades, cats, semester=1),
+            "average_semester_2": _calculate_average(grades, cats, semester=2),
+        }
 
 
 class LibrusSubjectAverageSensor(LibrusSensorBase):
@@ -344,6 +382,15 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "grades": grade_log,
             "proposed_semester_grade": proposed.value if proposed else None,
             "final_grade": final.value if final else None,
+            "average_arithmetic": _calculate_average(
+                grades, categories, subject_id=self._subject_id, weighted=False
+            ),
+            "average_semester_1": _calculate_average(
+                grades, categories, subject_id=self._subject_id, semester=1
+            ),
+            "average_semester_2": _calculate_average(
+                grades, categories, subject_id=self._subject_id, semester=2
+            ),
         }
 
 
@@ -1039,3 +1086,85 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
         attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
         attrs["minutes_left"] = max(0, int((end - dt_util.now()).total_seconds() // 60))
         return attrs
+
+
+class LibrusNextExamSensor(LibrusSensorBase):
+    """Date of the next graded assessment ("sprawdzian" and friends) from
+    the Agenda feed. State is a date (`device_class: date`); attributes
+    carry `days_until`, the subject, the category name, the description and
+    an `upcoming` list. `unknown` when nothing assessment-like is on the
+    agenda. Exam detection is by the Agenda category name (see
+    `_EXAM_CATEGORY_RE`) - deliberately conservative."""
+
+    _attr_translation_key = "next_exam"
+    _attr_device_class = SensorDeviceClass.DATE
+    _attr_icon = "mdi:file-document-alert-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "next_exam")
+
+    def _upcoming(self) -> list[tuple[date, HomeworkEventData]]:
+        if self.coordinator.data is None:
+            return []
+        data = self.coordinator.data
+        today = dt_util.now().date()
+        out: list[tuple[date, HomeworkEventData]] = []
+        for item in data.homeworks:
+            if not item.date:
+                continue
+            category = (
+                data.homework_categories.get(item.category_id)
+                if item.category_id is not None
+                else None
+            )
+            if not category or _EXAM_CATEGORY_RE.search(category) is None:
+                continue
+            try:
+                day = date.fromisoformat(item.date[:10])
+            except ValueError:
+                continue
+            if day < today:
+                continue
+            out.append((day, item))
+        out.sort(key=lambda pair: pair[0])
+        return out
+
+    @property
+    def native_value(self) -> date | None:
+        upcoming = self._upcoming()
+        return upcoming[0][0] if upcoming else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        upcoming = self._upcoming()
+        if not upcoming:
+            return None
+        data = self.coordinator.data
+        today = dt_util.now().date()
+        day, item = upcoming[0]
+
+        def _subject(it: HomeworkEventData) -> str | None:
+            return data.subjects.get(it.subject_id) if it.subject_id is not None else None
+
+        def _category(it: HomeworkEventData) -> str | None:
+            return (
+                data.homework_categories.get(it.category_id)
+                if it.category_id is not None
+                else None
+            )
+
+        return {
+            "days_until": (day - today).days,
+            "subject": _subject(item),
+            "category": _category(item),
+            "content": item.content,
+            "upcoming": [
+                {
+                    "date": d.isoformat(),
+                    "subject": _subject(it),
+                    "category": _category(it),
+                    "content": it.content[:200],
+                }
+                for d, it in upcoming[:10]
+            ],
+        }

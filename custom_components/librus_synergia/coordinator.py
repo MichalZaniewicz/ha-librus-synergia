@@ -29,6 +29,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
+    EVENT_NEW_HOMEWORK,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
@@ -116,6 +117,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_notice_ids: set[str] | None = None
         self._known_note_ids: set[int] | None = None
         self._known_message_ids: set[str] | None = None
+        self._known_homework_ids: set[int] | None = None
         # Synthetic "date|period|kind|subject" signatures for cancelled /
         # substitution lessons - not a real id from the API, just enough to
         # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
@@ -249,8 +251,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
+        homeworks = _parse_homeworks(homeworks_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
-        self._async_fire_new_item_events(grades, school_notices, notes, messages)
+        self._async_fire_new_item_events(grades, school_notices, notes, messages, homeworks)
         self._fire_timetable_change_events(timetable, today)
 
         return LibrusData(
@@ -261,7 +264,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             attendances=_parse_attendances(attendances_payload),
             attendance_types=_parse_attendance_types(attendance_types_payload),
             timetable=timetable,
-            homeworks=_parse_homeworks(homeworks_payload),
+            homeworks=homeworks,
             school_notices=school_notices,
             lucky_number=lucky_number,
             subjects=self._cached_subjects,
@@ -559,6 +562,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         notices: list[SchoolNoticeData],
         notes: list[NoteData],
         messages: list[MessageData],
+        homeworks: list[HomeworkEventData],
     ) -> None:
         entry_id = self.config_entry.entry_id if self.config_entry else None
         # Resolved names are included alongside the raw ids so an automation
@@ -608,6 +612,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             entry_id,
             self._known_message_ids,
             {m.id: {"sender": m.sender_name, "topic": m.topic} for m in messages},
+        )
+        self._known_homework_ids = self._fire_for_new_ids(
+            EVENT_NEW_HOMEWORK,
+            entry_id,
+            self._known_homework_ids,
+            {
+                h.id: {
+                    "subject_id": h.subject_id,
+                    "subject": self._cached_subjects.get(h.subject_id, str(h.subject_id))
+                    if h.subject_id is not None
+                    else None,
+                    "category": self._cached_homework_categories.get(h.category_id)
+                    if h.category_id is not None
+                    else None,
+                    "date": h.date,
+                    "content": (h.content or "")[:200],
+                }
+                for h in homeworks
+            },
         )
 
     def _fire_timetable_change_events(
