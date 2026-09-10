@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
@@ -519,3 +521,117 @@ async def test_descriptive_grades_sensor(hass) -> None:
     state = hass.states.get(entity_id)
     assert state.state == "1"
     assert state.attributes["recent"][0]["subject"] == "Matematyka"
+
+
+def _tt_lesson(no: int, hour_from: str, hour_to: str, subject_id: int, **flags) -> dict:
+    return {
+        "LessonNo": str(no),
+        "HourFrom": hour_from,
+        "HourTo": hour_to,
+        "Subject": {"Id": str(subject_id)},
+        "Teacher": {"Id": "500"},
+        "Classroom": {"Id": "12"},
+        "IsCanceled": flags.get("canceled", False),
+        "IsSubstitutionClass": flags.get("substitution", False),
+    }
+
+
+_LESSON_SUBJECTS = {
+    "Subjects": [
+        {"Id": 100, "Name": "Matematyka"},
+        {"Id": 200, "Name": "Polski"},
+        {"Id": 300, "Name": "Historia"},
+    ]
+}
+
+# Fixed instant safely inside a single US/Pacific calendar date (the tz the
+# HA test harness pins) - 12:00Z is ~05:00 local, far from either midnight.
+_FROZEN = "2026-09-09T12:00:00+00:00"
+
+
+def _hhmm(offset_minutes: int) -> str:
+    """A "HH:MM" string `offset_minutes` from the frozen local now - lets a
+    test say "a lesson from 15 min ago to 30 min ahead" without caring what
+    the harness's timezone does to a hard-coded clock time."""
+    return (dt_util.now() + timedelta(minutes=offset_minutes)).strftime("%H:%M")
+
+
+async def test_next_and_current_lesson_sensors(hass, freezer) -> None:
+    """Mid-period: current = the lesson spanning now, next = the following
+    one, with the countdown attributes both consumers need."""
+    freezer.move_to(_FROZEN)
+    day_iso = dt_util.now().date().isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                [_tt_lesson(1, _hhmm(-90), _hhmm(-45), 100)],  # earlier, done
+                [_tt_lesson(2, _hhmm(-15), _hhmm(30), 200)],  # happening now
+                [_tt_lesson(3, _hhmm(45), _hhmm(90), 300)],  # up next
+            ]
+        }
+    }
+    client = build_mock_client(
+        async_get_timetable=payload,
+        async_get_subjects=_LESSON_SUBJECTS,
+        async_get_teachers={"Users": [{"Id": 500, "FirstName": "Anna", "LastName": "Nowak"}]},
+        async_get_classrooms={"Classrooms": [{"Id": 12, "Name": "12"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    current = hass.states.get(_entity_id(hass, entry, "current_lesson"))
+    assert current.state == "Polski"
+    assert current.attributes["lesson_no"] == 2
+    assert current.attributes["minutes_left"] == 30
+    assert current.attributes["classroom"] == "12"
+
+    nxt = hass.states.get(_entity_id(hass, entry, "next_lesson"))
+    assert nxt.state == "Historia"
+    assert nxt.attributes["lesson_no"] == 3
+    assert nxt.attributes["minutes_until"] == 45
+    assert nxt.attributes["teacher"] == "Anna Nowak"
+
+
+async def test_next_lesson_skips_cancelled_slot(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    day_iso = dt_util.now().date().isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                [_tt_lesson(2, _hhmm(-15), _hhmm(30), 200)],  # happening now
+                [_tt_lesson(3, _hhmm(45), _hhmm(90), 300, canceled=True)],  # only upcoming - off
+            ]
+        }
+    }
+    client = build_mock_client(async_get_timetable=payload, async_get_subjects=_LESSON_SUBJECTS)
+    entry = await setup_integration(hass, client)
+
+    nxt = hass.states.get(_entity_id(hass, entry, "next_lesson"))
+    assert nxt.state == "unknown"  # only remaining upcoming slot is cancelled
+
+
+async def test_school_sensor_exposes_bell_schedule(hass) -> None:
+    """bell_schedule just echoes back whatever HourFrom/HourTo strings the
+    timetable carries, so fixed clock times are fine here (no dependency on
+    "now")."""
+    day_iso = (dt_util.now().date()).isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                [_tt_lesson(1, "08:00", "08:45", 100)],
+                [_tt_lesson(2, "09:00", "09:45", 200)],
+                [_tt_lesson(3, "10:00", "10:45", 300)],
+            ]
+        }
+    }
+    client = build_mock_client(
+        async_get_timetable=payload,
+        async_get_schools={"School": {"Name": "SP 32"}},
+    )
+    entry = await setup_integration(hass, client)
+
+    school = hass.states.get(_entity_id(hass, entry, "school"))
+    assert school.attributes["bell_schedule"] == [
+        {"lesson_no": 1, "start": "08:00", "end": "08:45"},
+        {"lesson_no": 2, "start": "09:00", "end": "09:45"},
+        {"lesson_no": 3, "start": "10:00", "end": "10:45"},
+    ]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -20,6 +20,7 @@ from .librus_api.models import (
     BehaviourGradeData,
     GradeCategoryData,
     GradeData,
+    LessonData,
     LibrusData,
     MessageData,
 )
@@ -97,6 +98,89 @@ def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> 
     return max(candidates, key=lambda g: g.add_date)
 
 
+# ----------------------------------------------------------------------
+# Timetable-derived helpers (shared by the Next/Current lesson sensors and
+# the School sensor's bell-schedule attribute). All client-side over the
+# coordinator's already-fetched current+next-week timetable - no extra API
+# calls.
+# ----------------------------------------------------------------------
+
+
+def _lesson_bounds(day: date, lesson: LessonData) -> tuple[datetime, datetime] | None:
+    """Local-timezone (start, end) datetimes for one lesson, or None if it
+    has no usable HourFrom/HourTo (mirrors calendar.py's `_lesson_to_event`
+    parsing)."""
+    if not lesson.hour_from or not lesson.hour_to:
+        return None
+    try:
+        start_t = datetime.strptime(lesson.hour_from, "%H:%M").time()
+        end_t = datetime.strptime(lesson.hour_to, "%H:%M").time()
+    except ValueError:
+        return None
+    return (
+        dt_util.as_local(datetime.combine(day, start_t)),
+        dt_util.as_local(datetime.combine(day, end_t)),
+    )
+
+
+def _sorted_lessons(data: LibrusData) -> list[tuple[datetime, datetime, date, LessonData]]:
+    """Every timetable lesson with a valid time, flattened and sorted by
+    start. Keeps parallel-group lessons (a single period split into two
+    language classes, say) - both appear, ordered by start then arbitrarily."""
+    out: list[tuple[datetime, datetime, date, LessonData]] = []
+    for day, lessons in data.timetable.items():
+        for lesson in lessons:
+            bounds = _lesson_bounds(day, lesson)
+            if bounds is not None:
+                out.append((bounds[0], bounds[1], day, lesson))
+    out.sort(key=lambda item: item[0])
+    return out
+
+
+def _lesson_subject(lesson: LessonData, data: LibrusData) -> str:
+    if lesson.subject_id is None:
+        return "Lekcja"
+    return data.subjects.get(lesson.subject_id, f"Lekcja {lesson.subject_id}")
+
+
+def _lesson_attrs(
+    start: datetime, end: datetime, day: date, lesson: LessonData, data: LibrusData
+) -> dict[str, Any]:
+    return {
+        ATTR_SUBJECT_ID: lesson.subject_id,
+        "subject": _lesson_subject(lesson, data),
+        "lesson_no": lesson.lesson_no,
+        "date": day.isoformat(),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "teacher": data.teachers.get(lesson.teacher_id) if lesson.teacher_id is not None else None,
+        "classroom": (
+            data.classrooms.get(lesson.classroom_id) if lesson.classroom_id is not None else None
+        ),
+        "is_substitution": lesson.is_substitution,
+    }
+
+
+def _bell_schedule(timetable: dict[date, list[LessonData]]) -> list[dict[str, Any]]:
+    """A period-number -> {start, end} table derived from whatever times
+    actually appear in the timetable. Per lesson number, the most commonly
+    seen HourFrom/HourTo pair wins (handles the odd shortened day without
+    letting it redefine the normal bell times)."""
+    seen: dict[int, dict[tuple[str, str], int]] = {}
+    for lessons in timetable.values():
+        for lesson in lessons:
+            if lesson.lesson_no is None or not lesson.hour_from or not lesson.hour_to:
+                continue
+            slot = seen.setdefault(lesson.lesson_no, {})
+            key = (lesson.hour_from, lesson.hour_to)
+            slot[key] = slot.get(key, 0) + 1
+    schedule: list[dict[str, Any]] = []
+    for lesson_no in sorted(seen):
+        (hour_from, hour_to), _count = max(seen[lesson_no].items(), key=lambda kv: kv[1])
+        schedule.append({"lesson_no": lesson_no, "start": hour_from, "end": hour_to})
+    return schedule
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LibrusConfigEntry,
@@ -108,6 +192,8 @@ async def async_setup_entry(
         [
             LibrusOverallAverageSensor(coordinator, entry),
             LibrusAttendanceSensor(coordinator, entry),
+            LibrusNextLessonSensor(coordinator, entry),
+            LibrusCurrentLessonSensor(coordinator, entry),
             LibrusLuckyNumberSensor(coordinator, entry),
             LibrusUnreadAnnouncementsSensor(coordinator, entry),
             LibrusBehaviourNoticesSensor(coordinator, entry),
@@ -837,6 +923,10 @@ class LibrusSchoolSensor(LibrusSensorBase):
             "head_teacher": school.head_teacher_name,
             "email": school.email,
             "phone_number": school.phone_number,
+            # Bell schedule (period number -> start/end time), derived from
+            # the times that actually appear in this student's timetable -
+            # lets a card show "period 3 = 09:40-10:25" without hardcoding.
+            "bell_schedule": _bell_schedule(self.coordinator.data.timetable),
         }
 
 
@@ -869,3 +959,83 @@ class LibrusClassSensor(LibrusSensorBase):
             "first_semester_end": cls.end_first_semester,
             "school_year_end": cls.end_school_year,
         }
+
+
+class LibrusNextLessonSensor(LibrusSensorBase):
+    """The next lesson that will actually take place (cancelled slots are
+    skipped). State is the subject name; attributes carry the start/end
+    time, `minutes_until`, teacher, classroom and whether it's a
+    substitution - everything a "leaving for school" TTS or a countdown
+    card needs, without each consumer re-deriving it from the timetable
+    calendar. Client-side over the coordinator's current+next-week window,
+    so it can see through to Monday from a Friday evening but not further."""
+
+    _attr_translation_key = "next_lesson"
+    _attr_icon = "mdi:clock-start"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "next_lesson")
+
+    def _pick(self) -> tuple[datetime, datetime, date, LessonData] | None:
+        if self.coordinator.data is None:
+            return None
+        now = dt_util.now()
+        for start, end, day, lesson in _sorted_lessons(self.coordinator.data):
+            if lesson.is_canceled or start <= now:
+                continue
+            return start, end, day, lesson
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        picked = self._pick()
+        return _lesson_subject(picked[3], self.coordinator.data) if picked else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        picked = self._pick()
+        if picked is None:
+            return None
+        start, end, day, lesson = picked
+        attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
+        attrs["minutes_until"] = max(0, int((start - dt_util.now()).total_seconds() // 60))
+        return attrs
+
+
+class LibrusCurrentLessonSensor(LibrusSensorBase):
+    """The lesson happening right now (`unknown` during breaks / outside
+    school hours). State is the subject name; attributes carry `minutes_left`
+    and the same teacher/classroom/period detail as the Next lesson
+    sensor."""
+
+    _attr_translation_key = "current_lesson"
+    _attr_icon = "mdi:clock-time-four-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "current_lesson")
+
+    def _pick(self) -> tuple[datetime, datetime, date, LessonData] | None:
+        if self.coordinator.data is None:
+            return None
+        now = dt_util.now()
+        for start, end, day, lesson in _sorted_lessons(self.coordinator.data):
+            if lesson.is_canceled:
+                continue
+            if start <= now <= end:
+                return start, end, day, lesson
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        picked = self._pick()
+        return _lesson_subject(picked[3], self.coordinator.data) if picked else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        picked = self._pick()
+        if picked is None:
+            return None
+        start, end, day, lesson = picked
+        attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
+        attrs["minutes_left"] = max(0, int((end - dt_util.now()).total_seconds() // 60))
+        return attrs

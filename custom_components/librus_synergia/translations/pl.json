@@ -47,6 +47,8 @@
       "overall_average": { "name": "Średnia ocen" },
       "subject_average": { "name": "Średnia - {subject}" },
       "attendance": { "name": "Nieobecności" },
+      "next_lesson": { "name": "Następna lekcja" },
+      "current_lesson": { "name": "Bieżąca lekcja" },
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },
       "behaviour_notices": { "name": "Uwagi" },

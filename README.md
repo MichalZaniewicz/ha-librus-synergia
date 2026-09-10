@@ -43,11 +43,13 @@ Each child/student is a separate login and a separate integration entry.
 | `sensor` | Overall grade average | Weighted average across every subject |
 | `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, latest grade (with any teacher comments), proposed/final semester grades |
 | `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown, total record count, an independently-computed `percentage` (works even if your school hides this), and a `by_semester` breakdown (count/percentage per semester) in attributes |
+| `sensor` | Next lesson | Subject name of the next lesson that will actually take place (cancelled slots skipped); attributes carry `start`/`end`, `minutes_until`, teacher, classroom, period number and substitution flag |
+| `sensor` | Current lesson | Subject name of the lesson happening right now (`unknown` during breaks / outside school hours); attributes include `minutes_left` and the same period detail |
 | `sensor` | Lucky number | The most recently published "szczęśliwy numerek" - Librus can publish the *next* school day's number a day ahead, so check the `is_today`/`day` attributes rather than assuming the state is always for today |
 | `sensor` | Unread announcements | Count, with a `recent` attribute (subject/content preview/dates) |
 | `sensor` | Behaviour notices | Count, with a short recent-items attribute including the resolved category name and sentiment (positive/negative/neutral) |
 | `sensor` | Unread messages | Count of unread Wiadomości in your main inbox, with sender/topic/preview for the most recent ones (including each message's `id`/`mailbox`, for the [`get_message` service](#services)) and a `mailbox_breakdown` attribute (inbox/notes/alerts/substitutions/absences/justifications/trash unread counts). Also carries full preview content (not just a count) for the two secondary mailboxes worth actually reading - `substitutions_recent` and `alerts_recent`. The routine poll never marks anything read - only the message list/count endpoints are used for that. Shows `unavailable` (not `0`) if your school hasn't enabled the messages module |
-| `sensor` | School | Name, town/street, head teacher, contact details |
+| `sensor` | School | Name, town/street, head teacher, contact details, and a `bell_schedule` attribute (period number -> start/end time, derived from the timetable) |
 | `sensor` | Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `sensor` | Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (topic/text/due date/teacher) |
 | `sensor` | Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade's short code (e.g. "wz"), with a `recent` attribute (value/category/date/comments) |
@@ -56,13 +58,13 @@ Each child/student is a separate login and a separate integration entry.
 | `calendar` | Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
 | `calendar` | Free days | The whole school year's holidays/breaks |
 
-New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`) for building notification automations - nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Four ready-made [blueprints](#automation-blueprints) wrap these for you.
+New grades, announcements, behaviour notices and messages also fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/timetable events include the resolved subject/teacher name alongside the raw id, so an automation doesn't need its own lookup. Ready-made [blueprints](#automation-blueprints) wrap these for you.
 
 The poll interval (default 20 minutes) is configurable via the integration's **Configure** option.
 
 ### Automation blueprints
 
-Four ready-to-import blueprints under
+Ready-to-import blueprints under
 [`blueprints/automation/librus_synergia/`](blueprints/automation/librus_synergia/) wrap
 the events above so you don't have to write the YAML yourself - each just asks for an
 *action* (e.g. "Send a notification"):
@@ -73,6 +75,7 @@ the events above so you don't have to write the YAML yourself - each just asks f
 | [New Behaviour Notice Notification](blueprints/automation/librus_synergia/new_note_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_note` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_note_notification.yaml) |
 | [New Announcement Notification](blueprints/automation/librus_synergia/new_announcement_notification.yaml) | Runs your action with the title whenever `librus_synergia_new_announcement` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_announcement_notification.yaml) |
 | [New Message Notification](blueprints/automation/librus_synergia/new_message_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_message` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_message_notification.yaml) |
+| [Lesson Change Notification](blueprints/automation/librus_synergia/lesson_change_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_timetable_changed` fires (a lesson newly cancelled or moved to a substitution). | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Flesson_change_notification.yaml) |
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.

@@ -31,6 +31,7 @@ from .const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
+    EVENT_TIMETABLE_CHANGED,
     LUCKY_NUMBER_PUBLISH_HOUR,
 )
 from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSessionExpiredError
@@ -115,6 +116,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_notice_ids: set[str] | None = None
         self._known_note_ids: set[int] | None = None
         self._known_message_ids: set[str] | None = None
+        # Synthetic "date|period|kind|subject" signatures for cancelled /
+        # substitution lessons - not a real id from the API, just enough to
+        # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
+        self._known_timetable_disruptions: set[str] | None = None
 
     @property
     def client(self) -> LibrusApiClient:
@@ -244,7 +249,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
+        timetable = merge_timetables(timetable_this_week, timetable_next_week)
         self._async_fire_new_item_events(grades, school_notices, notes, messages)
+        self._fire_timetable_change_events(timetable, today)
 
         return LibrusData(
             me=_parse_me(me_payload),
@@ -253,7 +260,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             notes=notes,
             attendances=_parse_attendances(attendances_payload),
             attendance_types=_parse_attendance_types(attendance_types_payload),
-            timetable=merge_timetables(timetable_this_week, timetable_next_week),
+            timetable=timetable,
             homeworks=_parse_homeworks(homeworks_payload),
             school_notices=school_notices,
             lucky_number=lucky_number,
@@ -601,6 +608,42 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             entry_id,
             self._known_message_ids,
             {m.id: {"sender": m.sender_name, "topic": m.topic} for m in messages},
+        )
+
+    def _fire_timetable_change_events(
+        self, timetable: dict[date, list[LessonData]], today: date
+    ) -> None:
+        """Fire EVENT_TIMETABLE_CHANGED for any cancelled/substitution
+        lesson on today or a later date that wasn't already known. Reuses
+        the exact seed-silently-then-diff machinery of the *_new_* events -
+        the "id" here is a synthetic date+period+kind+subject signature, so
+        a disruption that scrolls out of the fetch window and back doesn't
+        re-announce (union, not replace)."""
+        entry_id = self.config_entry.entry_id if self.config_entry else None
+        items: dict[str, dict[str, Any]] = {}
+        for day, lessons in timetable.items():
+            if day < today:
+                continue
+            for lesson in lessons:
+                if not (lesson.is_canceled or lesson.is_substitution):
+                    continue
+                kind = "canceled" if lesson.is_canceled else "substitution"
+                signature = f"{day.isoformat()}|{lesson.lesson_no}|{kind}|{lesson.subject_id}"
+                subject = (
+                    self._cached_subjects.get(lesson.subject_id, str(lesson.subject_id))
+                    if lesson.subject_id is not None
+                    else None
+                )
+                items[signature] = {
+                    "date": day.isoformat(),
+                    "lesson_no": lesson.lesson_no,
+                    "kind": kind,
+                    "subject_id": lesson.subject_id,
+                    "subject": subject,
+                    "hour_from": lesson.hour_from,
+                }
+        self._known_timetable_disruptions = self._fire_for_new_ids(
+            EVENT_TIMETABLE_CHANGED, entry_id, self._known_timetable_disruptions, items
         )
 
     def _fire_for_new_ids(

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Next lesson / Current lesson sensors** - state is the subject name;
+  attributes carry the start/end time, `minutes_until` / `minutes_left`,
+  teacher, classroom, period number and whether it's a substitution.
+  Cancelled slots are skipped. All client-side over the existing
+  current+next-week timetable - no extra API calls - so a "leaving for
+  school" TTS or a countdown card doesn't have to re-derive it from the
+  Timetable calendar.
+- **`bell_schedule` attribute on the School sensor** - period number ->
+  start/end time, derived from the times that actually appear in the
+  student's timetable (most common pair per period wins, so an odd
+  shortened day can't redefine the normal bell times).
+- **`librus_synergia_timetable_changed` event** - fires when a lesson on
+  today or a later date newly turns up cancelled or as a substitution vs.
+  the previous poll. Seeded silently on the first sync, same as the other
+  `*_new_*` events, and signature-keyed on date+period+kind so a known
+  disruption isn't re-announced every cycle. Carries the resolved subject
+  name, date, period number, kind and start time. A new **Lesson Change
+  Notification** blueprint wraps it.
+
 ## 0.4.21
 
 Built for the new companion "Absences by weekday" chart card.

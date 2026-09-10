@@ -35,5 +35,10 @@ EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
 EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
+# Fires when a lesson on today's date or later newly turns up cancelled or
+# as a substitution vs. the previous poll (seeded silently on the first
+# sync, same as the *_new_* events). Signature-keyed on date+period+kind,
+# so re-announcing the same known disruption every cycle doesn't happen.
+EVENT_TIMETABLE_CHANGED = f"{DOMAIN}_timetable_changed"
 
 ATTR_SUBJECT_ID = "subject_id"

@@ -47,6 +47,8 @@
       "overall_average": { "name": "Overall grade average" },
       "subject_average": { "name": "{subject} average" },
       "attendance": { "name": "Absences" },
+      "next_lesson": { "name": "Next lesson" },
+      "current_lesson": { "name": "Current lesson" },
       "lucky_number": { "name": "Lucky number" },
       "unread_announcements": { "name": "Unread announcements" },
       "behaviour_notices": { "name": "Behaviour notices" },

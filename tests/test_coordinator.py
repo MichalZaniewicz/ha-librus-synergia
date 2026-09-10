@@ -10,7 +10,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import async_capture_events
 
-from custom_components.librus_synergia.const import EVENT_NEW_GRADE
+from custom_components.librus_synergia.const import EVENT_NEW_GRADE, EVENT_TIMETABLE_CHANGED
 from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
 from custom_components.librus_synergia.librus_api import (
     LibrusConnectionError,
@@ -620,3 +620,65 @@ async def test_descriptive_grades_parsed(hass) -> None:
     assert len(data.descriptive_grades) == 1
     assert data.descriptive_grades[0].subject_id == 100
     assert data.descriptive_grades[0].skill_id == 55
+
+
+def _timetable_with_disruption(day_iso: str, *, canceled: bool = False, substitution: bool = False) -> dict:
+    return {
+        "Timetable": {
+            day_iso: [
+                [
+                    {
+                        "LessonNo": "3",
+                        "HourFrom": "10:00",
+                        "HourTo": "10:45",
+                        "Subject": {"Id": "300"},
+                        "IsCanceled": canceled,
+                        "IsSubstitutionClass": substitution,
+                    }
+                ]
+            ]
+        }
+    }
+
+
+async def test_timetable_change_event_seeds_silently_then_fires(hass, freezer) -> None:
+    """First sync only establishes the baseline (no event); a lesson newly
+    turning up cancelled on the next sync fires EVENT_TIMETABLE_CHANGED
+    once, with the resolved subject and enough detail for a notification."""
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    day_iso = dt_util.now().date().isoformat()
+    events = async_capture_events(hass, EVENT_TIMETABLE_CHANGED)
+    client = build_mock_client(
+        async_get_timetable=_timetable_with_disruption(day_iso),
+        async_get_subjects={"Subjects": [{"Id": 300, "Name": "Historia"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+    assert events == []
+
+    client.async_get_timetable.return_value = _timetable_with_disruption(day_iso, canceled=True)
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["kind"] == "canceled"
+    assert events[0].data["lesson_no"] == 3
+    assert events[0].data["date"] == day_iso
+    assert events[0].data["subject"] == "Historia"
+
+
+async def test_timetable_change_event_not_re_fired_for_known_disruption(hass, freezer) -> None:
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    day_iso = dt_util.now().date().isoformat()
+    events = async_capture_events(hass, EVENT_TIMETABLE_CHANGED)
+    client = build_mock_client(
+        async_get_timetable=_timetable_with_disruption(day_iso, substitution=True),
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert events == []  # substitution present from the very first (seeding) sync
