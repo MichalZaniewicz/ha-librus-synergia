@@ -418,6 +418,34 @@ def test_decode_message_content_leaves_plain_text_untouched() -> None:
     assert decode_message_content(encoded) == plain
 
 
+def test_decode_message_content_flattens_librus_link_converter_html() -> None:
+    """BUG FIX (2026-09-10, found live): Librus rewrites every link in a
+    message into an <a href="https://liblink.pl/..." title="Link został
+    skonwertowany...">...</a> tag. Rendered as plain text in the Wiadomości
+    card it read as raw tag soup - flatten it to just the URL, and turn
+    <br> into newlines."""
+    import base64
+
+    from custom_components.librus_synergia.coordinator import decode_message_content
+
+    body = (
+        "Proszę przynieść flet.<br>"
+        'Kup tu: <a href="https://liblink.pl/VAQE883If2" target="_blank" '
+        'title="Link został skonwertowany ze względów bezpieczeństwa systemu.">'
+        "https://liblink.pl/VAQE883If2</a><br>"
+        'sklep &amp; serwis: <a href="https://liblink.pl/lJGRzdksvR">tutaj</a>'
+    )
+    encoded = base64.b64encode(body.encode("utf-8")).decode("ascii")
+
+    result = decode_message_content(encoded)
+
+    assert "<a " not in result and "href=" not in result
+    assert "https://liblink.pl/VAQE883If2" in result
+    assert "tutaj (https://liblink.pl/lJGRzdksvR)" in result
+    assert "&amp;" not in result and "sklep & serwis" in result
+    assert result.startswith("Proszę przynieść flet.\n")
+
+
 async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) -> None:
     """CONFIRMED live (2026-09-06): Librus truncates the list endpoint's
     base64 `content` field to a fixed byte length, which can land mid a

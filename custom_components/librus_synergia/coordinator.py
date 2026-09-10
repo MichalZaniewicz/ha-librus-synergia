@@ -17,6 +17,7 @@ import base64
 import logging
 import re
 from datetime import date, datetime, timedelta
+from html import unescape as html_unescape
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -1175,6 +1176,38 @@ _MESSAGE_XML_CDATA_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
 # off mid-sentence" beats showing raw XML markup either way).
 _MESSAGE_XML_CDATA_OPEN_RE = re.compile(r"<!\[CDATA\[(.*)$", re.DOTALL)
 
+# CONFIRMED live (2026-09-10): Librus rewrites every link in a message
+# body into an <a href="https://liblink.pl/..." title="Link został
+# skonwertowany...">...</a> tag (its own "link converter"), and the list
+# endpoint's content can carry other light HTML (<br>, <p>). Rendered as
+# plain text in the Wiadomości card that reads as raw tag soup. Flatten
+# it: keep the link (its visible text, or the href), turn <br>/</p> into
+# newlines, drop the rest, unescape entities.
+_A_TAG_RE = re.compile(r'<a\b[^>]*?\bhref="([^"]*)"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_BLOCK_END_RE = re.compile(r"</(?:p|div|li|h[1-6])>", re.IGNORECASE)
+_ANY_TAG_RE = re.compile(r"<[^>]+>")
+_MULTI_NL_RE = re.compile(r"\n{3,}")
+
+
+def _flatten_message_html(text: str) -> str:
+    if "<" not in text:
+        return text
+
+    def _anchor(match: re.Match[str]) -> str:
+        href = match.group(1).strip()
+        inner = _ANY_TAG_RE.sub("", match.group(2)).strip()
+        if not inner or inner == href:
+            return href
+        return f"{inner} ({href})"
+
+    text = _A_TAG_RE.sub(_anchor, text)
+    text = _BR_RE.sub("\n", text)
+    text = _BLOCK_END_RE.sub("\n", text)
+    text = _ANY_TAG_RE.sub("", text)
+    text = html_unescape(text)
+    return _MULTI_NL_RE.sub("\n\n", text).strip()
+
 
 def decode_message_content(raw: str) -> str:
     """The list endpoint's `content` field (and the single-message
@@ -1207,10 +1240,10 @@ def decode_message_content(raw: str) -> str:
         text = decoded_bytes.decode("utf-8", errors="ignore")
 
     if (match := _MESSAGE_XML_CDATA_RE.search(text)) is not None:
-        return match.group(1)
-    if (match := _MESSAGE_XML_CDATA_OPEN_RE.search(text)) is not None:
-        return match.group(1)
-    return text
+        text = match.group(1)
+    elif (match := _MESSAGE_XML_CDATA_OPEN_RE.search(text)) is not None:
+        text = match.group(1)
+    return _flatten_message_html(text)
 
 
 # CONFIRMED live: the unread-count response is a per-mailbox breakdown
