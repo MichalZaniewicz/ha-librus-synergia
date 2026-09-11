@@ -27,6 +27,8 @@ Unlike some cloud-polling integrations, **your Librus password is stored** in Ho
 
 A long-lived device-recognition cookie is also persisted and re-sent on every login - this is believed to be why a normal login skips any captcha/2FA challenge, so treat it as load-bearing, not just a convenience.
 
+If you change your Librus password or mistype the login, use the integration's **Reconfigure** option (⋮ menu on the entry, in Settings → Devices & services) rather than deleting and re-adding it - that keeps your entity ids, dashboards and automations intact. Reconfigure refuses to repoint an entry at a genuinely different Librus account; add a new integration entry instead if you want to add another student.
+
 ## Installation
 
 1. HACS → ⋮ → **Custom repositories** → add this repo as category **Integration** (or use the badge above).
@@ -84,6 +86,7 @@ the events above so you don't have to write the YAML yourself - each just asks f
 | [Low Grade Alert](blueprints/automation/librus_synergia/low_grade_notification.yaml) | Runs your action only for a new grade at or below a threshold you set (default 2) - non-numeric marks are ignored. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Flow_grade_notification.yaml) |
 | [Subject Average Dropped](blueprints/automation/librus_synergia/subject_average_drop_notification.yaml) | Runs your action when a subject-average sensor crosses below a value you set (default 3.5) - once on the way down, again only after it recovers. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fsubject_average_drop_notification.yaml) |
 | [Weekly Digest](blueprints/automation/librus_synergia/weekly_digest_notification.yaml) | Every Sunday at a set time, builds a `{{ digest_text }}` (tests due in the next 7 days, optionally homework due and any unexcused absence count) and runs your action. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fweekly_digest_notification.yaml) |
+| [Time to Leave](blueprints/automation/librus_synergia/time_to_leave_notification.yaml) | Runs your action once, right when it's time to leave for the next lesson (its start time minus your travel time), checked every minute for accuracy regardless of your poll interval. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Ftime_to_leave_notification.yaml) |
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.

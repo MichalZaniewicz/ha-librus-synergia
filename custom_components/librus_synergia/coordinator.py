@@ -16,7 +16,7 @@ import asyncio
 import base64
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from html import unescape as html_unescape
 from typing import Any
 
@@ -34,11 +34,17 @@ from .const import (
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
     CONF_MESSAGES_ENABLED,
+    CONF_QUIET_HOURS_ENABLED,
+    CONF_QUIET_HOURS_END,
+    CONF_QUIET_HOURS_START,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MESSAGES_ENABLED,
+    DEFAULT_QUIET_HOURS_ENABLED,
+    DEFAULT_QUIET_HOURS_END,
+    DEFAULT_QUIET_HOURS_START,
     DOMAIN,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
@@ -220,6 +226,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     async def _async_update_data(self) -> LibrusData:
         assert self.config_entry is not None
+        # `self.data is not None` guard: the FIRST refresh always runs for
+        # real, even if it happens to land inside the quiet-hours window -
+        # there's nothing to fall back to yet, and every other coordinator
+        # in this codebase expects async_config_entry_first_refresh to
+        # actually populate data. Subsequent cycles during the window just
+        # return the last-known data unchanged - a normal, supported
+        # DataUpdateCoordinator pattern (entities keep their last state,
+        # nothing goes stale/unavailable) and skips the network round-trip
+        # entirely, not just the parsing - see _in_quiet_hours.
+        if self.data is not None and self._in_quiet_hours():
+            return self.data
         try:
             await self._client.async_ensure_session_valid(self.config_entry.data[CONF_PASSWORD])
         except LibrusAuthError as err:
@@ -344,6 +361,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         if self.config_entry is None:
             return default
         return bool(self.config_entry.options.get(key, default))
+
+    def _in_quiet_hours(self) -> bool:
+        """Whether `dt_util.now()` currently falls inside the configured
+        quiet-hours window (off by default - see CONF_QUIET_HOURS_ENABLED).
+        Handles a window that wraps midnight (e.g. 23:00 -> 06:00, the
+        default) the same way any "overnight range" check has to: it's
+        NOT simply start <= now <= end once start > end."""
+        if not self._feature_enabled(CONF_QUIET_HOURS_ENABLED, DEFAULT_QUIET_HOURS_ENABLED):
+            return False
+        start = self._option_time(CONF_QUIET_HOURS_START, DEFAULT_QUIET_HOURS_START)
+        end = self._option_time(CONF_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_END)
+        now = dt_util.now().time()
+        if start <= end:
+            return start <= now < end
+        return now >= start or now < end
+
+    def _option_time(self, key: str, default: str) -> time:
+        raw = self.config_entry.options.get(key, default) if self.config_entry else default
+        return dt_util.parse_time(raw) or dt_util.parse_time(default)
 
     async def _maybe(self, enabled: bool, factory: Any) -> Any:
         """Skip a network call entirely when a feature is toggled off in the

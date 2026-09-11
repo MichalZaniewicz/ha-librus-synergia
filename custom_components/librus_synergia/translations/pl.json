@@ -15,6 +15,14 @@
         "data": {
           "password": "Hasło"
         }
+      },
+      "reconfigure": {
+        "title": "Rekonfiguracja - Librus Synergia",
+        "description": "Popraw login lub hasło dla tego wpisu. Login musi nadal należeć do tego samego konta Librus, dla którego skonfigurowano ten wpis.",
+        "data": {
+          "username": "Login",
+          "password": "Hasło"
+        }
       }
     },
     "error": {
@@ -26,7 +34,9 @@
     },
     "abort": {
       "already_configured": "To konto Librus jest już skonfigurowane.",
-      "reauth_successful": "Ponowne uwierzytelnienie powiodło się."
+      "reauth_successful": "Ponowne uwierzytelnienie powiodło się.",
+      "reconfigure_successful": "Rekonfiguracja powiodła się.",
+      "unique_id_mismatch": "Ten login należy do innego konta Librus niż to, dla którego skonfigurowano ten wpis. Jeśli chodziło Ci o dodanie nowego ucznia, usuń i dodaj integrację ponownie."
     }
   },
   "options": {
@@ -39,7 +49,10 @@
           "announcements_enabled": "Pobieraj ogłoszenia",
           "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
           "descriptive_grades_enabled": "Pobieraj oceny opisowe",
-          "free_days_enabled": "Pobieraj kalendarz dni wolnych"
+          "free_days_enabled": "Pobieraj kalendarz dni wolnych",
+          "quiet_hours_enabled": "Włącz ciszę nocną (bez odpytywania w nocy)",
+          "quiet_hours_start": "Początek ciszy nocnej",
+          "quiet_hours_end": "Koniec ciszy nocnej"
         },
         "data_description": {
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
@@ -47,7 +60,10 @@
           "announcements_enabled": "Gdy wyłączone, sensor Nieprzeczytane ogłoszenia staje się niedostępny i nie są wykonywane żadne zapytania o ogłoszenia.",
           "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
-          "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne."
+          "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne.",
+          "quiet_hours_enabled": "Gdy włączone, w oknie poniżej nie są pobierane żadne dane z Librusa - encje po prostu zachowują ostatni znany stan przez noc.",
+          "quiet_hours_start": "Używane tylko, gdy cisza nocna jest włączona powyżej.",
+          "quiet_hours_end": "Używane tylko, gdy cisza nocna jest włączona powyżej. Może być wcześniejsze niż godzina początku (np. 23:00 -> 06:00), aby obejmować północ."
         }
       }
     }

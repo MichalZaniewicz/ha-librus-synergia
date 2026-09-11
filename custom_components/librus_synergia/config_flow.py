@@ -34,6 +34,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .const import (
@@ -43,12 +44,18 @@ from .const import (
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
     CONF_MESSAGES_ENABLED,
+    CONF_QUIET_HOURS_ENABLED,
+    CONF_QUIET_HOURS_END,
+    CONF_QUIET_HOURS_START,
     CONF_SESSION_LOGGED_IN_AT,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MESSAGES_ENABLED,
+    DEFAULT_QUIET_HOURS_ENABLED,
+    DEFAULT_QUIET_HOURS_END,
+    DEFAULT_QUIET_HOURS_START,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MAX_SCAN_INTERVAL_MINUTES,
@@ -201,6 +208,62 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Let the user fix their login/password from the entry's own
+        "Reconfigure" menu item, without deleting and re-adding the whole
+        entry (which would lose the entity ids/history/dashboard
+        references/automations built on top of it). Reauth (above) only
+        ever triggers automatically on a session failure and only ever
+        asks for the password again - this covers the "I want to fix a
+        typo'd login" or "I changed my Librus password on purpose" cases,
+        proactively, from the UI.
+
+        The login field IS editable here (unlike reauth) since a typo'd
+        login is exactly one of the two things this step exists to fix -
+        `_abort_if_unique_id_mismatch` below is the safety net that stops
+        someone from accidentally reconfiguring this entry into pointing
+        at a genuinely different Librus account."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            username = user_input[CONF_USERNAME].strip()
+            try:
+                info = await self._login(username, user_input[CONF_PASSWORD])
+            except LibrusCaptchaRequiredError:
+                errors["base"] = "captcha_needed"
+            except LibrusAccountActionRequiredError:
+                errors["base"] = "account_action_required"
+            except LibrusInvalidCredentialsError:
+                errors["base"] = "invalid_auth"
+            except LibrusConnectionError:
+                errors["base"] = "cannot_connect"
+            except (LibrusUnexpectedResponseError, LibrusError):
+                errors["base"] = "unknown"
+            else:
+                await self.async_set_unique_id(info["unique_id"])
+                self._abort_if_unique_id_mismatch()
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry,
+                    title=info["title"],
+                    data={**reconfigure_entry.data, **info["data"]},
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_USERNAME, default=reconfigure_entry.data[CONF_USERNAME]
+                    ): TextSelector(TextSelectorConfig()),
+                    vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
+                }
+            ),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(entry: ConfigEntry) -> LibrusSynergiaOptionsFlow:
@@ -257,6 +320,22 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_FREE_DAYS_ENABLED,
                     default=options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED),
                 ): BooleanSelector(),
+                vol.Required(
+                    CONF_QUIET_HOURS_ENABLED,
+                    default=options.get(CONF_QUIET_HOURS_ENABLED, DEFAULT_QUIET_HOURS_ENABLED),
+                ): BooleanSelector(),
+                # The two fields below are only meaningful while the toggle
+                # above is on - shown unconditionally regardless (options
+                # flow forms have no native conditional-field visibility),
+                # same tradeoff already accepted for the feature toggles.
+                vol.Required(
+                    CONF_QUIET_HOURS_START,
+                    default=options.get(CONF_QUIET_HOURS_START, DEFAULT_QUIET_HOURS_START),
+                ): TimeSelector(),
+                vol.Required(
+                    CONF_QUIET_HOURS_END,
+                    default=options.get(CONF_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_END),
+                ): TimeSelector(),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

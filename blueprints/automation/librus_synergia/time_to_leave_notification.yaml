@@ -1,0 +1,69 @@
+blueprint:
+  name: "Librus: Time to Leave"
+  description: >
+    Runs your action once, right when it's time to leave for the next
+    lesson - computed from the Next lesson sensor's own `start` time minus
+    your travel time, re-checked every minute against the real clock
+    rather than only once per Librus poll cycle, so the timing stays
+    accurate even with a longer poll interval.
+
+
+    Use `{{ leave_text }}` in your action.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/time_to_leave_notification.yaml
+  input:
+    next_lesson_entity:
+      name: Next lesson sensor
+      description: The Librus "Next lesson" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    travel_minutes:
+      name: Travel time (minutes)
+      description: How long it takes to get to school.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 120
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    notify_action:
+      name: Action
+      description: What to do when it's time to leave (e.g. send a notification).
+      selector:
+        action: {}
+
+variables:
+  next_lesson_entity: !input next_lesson_entity
+  travel_minutes: !input travel_minutes
+
+triggers:
+  - trigger: time_pattern
+    minutes: "/1"
+
+conditions:
+  # A single expression on purpose (not a {% if %}/{% else %} block) - any
+  # whitespace BETWEEN separate {% %}/{{ }} tags becomes literal template
+  # output, which would break a plain-string boolean comparison; keeping
+  # this as one {{ }} avoids that class of bug entirely (see the Weekly
+  # Digest blueprint's own comment for the same lesson learned the hard
+  # way). `and` short-circuits, so as_datetime(None) is never evaluated
+  # when there's no next lesson. The `0 <= ... < 1` band matches the
+  # trigger's own 1-minute cadence - true for exactly one tick per lesson.
+  - condition: template
+    value_template: >-
+      {{ state_attr(next_lesson_entity, 'start') is not none
+         and 0 <= ((travel_minutes | float(15)) - ((as_datetime(state_attr(next_lesson_entity, 'start')) - now()).total_seconds() / 60)) < 1 }}
+
+actions:
+  - variables:
+      leave_text: >-
+        {{ 'Czas wyjść na lekcję: ' ~ states(next_lesson_entity)
+           ~ (' (sala ' ~ state_attr(next_lesson_entity, 'classroom') ~ ')' if state_attr(next_lesson_entity, 'classroom') else '')
+           ~ '.' }}
+  - !input notify_action
+
+mode: single

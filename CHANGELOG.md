@@ -28,6 +28,20 @@
   `{{ digest_text }}` summary (tests due in the next 7 days from the Next
   exam sensor's own `upcoming` list, optionally homework due this week and
   any still-unexcused absence count) and runs your action.
+- **Reconfigure support** - fix a typo'd login or an intentionally-changed
+  password from the entry's own "Reconfigure" menu item, without deleting
+  and re-adding the whole integration (which would lose entity ids,
+  dashboard references and automations built on them). Refuses to
+  silently repoint an entry at a genuinely different Librus account.
+- **Quiet hours** - an off-by-default options-flow toggle + start/end time
+  (wraps midnight; default 23:00 -> 06:00). While enabled and inside the
+  window, the coordinator skips the network round-trip entirely and
+  returns its last-known data unchanged - entities keep their last state,
+  nothing goes stale/unavailable, and Librus gets no requests overnight.
+- **Time to Leave blueprint** - fires once, timed from the Next lesson
+  sensor's own `start` time minus a travel time you set, re-checked every
+  minute against the real clock so the timing is accurate regardless of
+  your poll interval.
 
 ## 0.5.1
 

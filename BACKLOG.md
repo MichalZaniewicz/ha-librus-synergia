@@ -36,7 +36,21 @@ these can't be built or verified against a real shape:
   behaviour grade / descriptive grades / free-days calendar can each be
   turned off individually now, same "sensor goes unavailable, endpoint
   never called" shape as the pre-existing `messages_enabled`. Calendar
-  weeks-ahead and a quiet-hours polling window are still open, if wanted.
+  weeks-ahead is still open, if wanted.
+- ~~**Quiet-hours polling window**~~ — done (Unreleased): an off-by-default
+  toggle + start/end time (wraps midnight, default 23:00->06:00) - the
+  coordinator skips the network round-trip entirely while inside the
+  window and returns its last-known data unchanged, except on the very
+  first refresh (nothing to fall back to yet).
+- ~~**Reconfigure flow**~~ — done (Unreleased): the entry's own
+  "Reconfigure" menu item now lets you fix a typo'd login or an
+  intentionally-changed password without deleting and re-adding the
+  entry. `_abort_if_unique_id_mismatch` stops it from silently repointing
+  an entry at a genuinely different Librus account.
+- ~~**"Time to leave" blueprint**~~ — done (Unreleased): fires once, timed
+  from the Next lesson sensor's own `start` minus a configurable travel
+  time, re-checked every minute against the real clock (not just once per
+  Librus poll cycle) for accurate timing regardless of poll interval.
 - **`Units` data** — surface the bell schedule (`LessonsRange`), the more
   specific school-unit name ("Szkoła Podstawowa 32" vs the broad "Zespół
   Szkolno-Przedszkolny nr 21"), grade-system flags. Client method

@@ -15,6 +15,14 @@
         "data": {
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Librus Synergia",
+        "description": "Fix the login or password for this entry. The login must still belong to the same Librus account this entry was set up for.",
+        "data": {
+          "username": "Login",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -26,7 +34,9 @@
     },
     "abort": {
       "already_configured": "This Librus account is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful.",
+      "unique_id_mismatch": "This login belongs to a different Librus account than the one this entry was set up for. Remove and re-add the integration instead if you meant to add a new student."
     }
   },
   "options": {
@@ -39,7 +49,10 @@
           "announcements_enabled": "Fetch announcements (ogłoszenia)",
           "behaviour_grades_enabled": "Fetch behaviour grade (ocena zachowania)",
           "descriptive_grades_enabled": "Fetch descriptive grades",
-          "free_days_enabled": "Fetch free days calendar"
+          "free_days_enabled": "Fetch free days calendar",
+          "quiet_hours_enabled": "Enable quiet hours (skip polling overnight)",
+          "quiet_hours_start": "Quiet hours start",
+          "quiet_hours_end": "Quiet hours end"
         },
         "data_description": {
           "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API.",
@@ -47,7 +60,10 @@
           "announcements_enabled": "When off, the Unread announcements sensor goes unavailable and no SchoolNotices calls are made.",
           "behaviour_grades_enabled": "When off, the Behaviour grade sensor goes unavailable and no BehaviourGrades calls are made.",
           "descriptive_grades_enabled": "When off, the Descriptive grades sensor goes unavailable and no DescriptiveGrades calls are made.",
-          "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made."
+          "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
+          "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
+          "quiet_hours_start": "Only used while quiet hours are enabled above.",
+          "quiet_hours_end": "Only used while quiet hours are enabled above. Can be earlier than the start time (e.g. 23:00 -> 06:00) to span midnight."
         }
       }
     }

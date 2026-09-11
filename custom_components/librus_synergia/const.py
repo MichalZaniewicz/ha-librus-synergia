@@ -21,6 +21,19 @@ DEFAULT_SCAN_INTERVAL_MINUTES = 20
 MIN_SCAN_INTERVAL_MINUTES = 10
 MAX_SCAN_INTERVAL_MINUTES = 180
 
+# Optional overnight window (off by default) where the coordinator skips
+# the network round-trip entirely and just returns its last-known data -
+# nothing meaningful changes while a family is asleep, and this is an
+# unofficial API worth being modest with (same spirit as the scan_interval
+# option's own "keep this modest" description). Off by default so nobody's
+# entities silently go stale overnight without having opted in.
+CONF_QUIET_HOURS_ENABLED = "quiet_hours_enabled"
+DEFAULT_QUIET_HOURS_ENABLED = False
+CONF_QUIET_HOURS_START = "quiet_hours_start"
+DEFAULT_QUIET_HOURS_START = "23:00:00"
+CONF_QUIET_HOURS_END = "quiet_hours_end"
+DEFAULT_QUIET_HOURS_END = "06:00:00"
+
 # When False (set via the options flow), the coordinator skips the whole
 # Wiadomości (private messages) subsystem - its separate wiadomosci.librus.pl
 # session bootstrap plus the per-cycle unread-count/list calls. The Unread

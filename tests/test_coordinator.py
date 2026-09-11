@@ -1011,3 +1011,108 @@ async def test_async_remove_entry_clears_repair_issues(hass, freezer, issue_regi
 
     assert issue_registry.async_get_issue(DOMAIN, school_year_id) is None
     assert issue_registry.async_get_issue(DOMAIN, endpoint_id) is None
+
+
+# ----------------------------------------------------------------------
+# Quiet hours - off by default; when on, the coordinator skips the whole
+# network round-trip (not just the parsing) while `dt_util.now()` falls
+# inside the configured window, returning `self.data` unchanged. Every
+# window boundary below is computed RELATIVE to `dt_util.now()` after
+# freezing, rather than a hardcoded clock time - this test suite's HA
+# instance runs in US/Pacific (see test_sensor.py's own `_hhmm` helper and
+# its comment), so a fixed "23:00" string would silently mean something
+# different depending on the freezer's UTC offset for that date.
+# ----------------------------------------------------------------------
+
+
+async def test_quiet_hours_disabled_by_default(hass) -> None:
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client)
+
+    assert coordinator._in_quiet_hours() is False
+
+
+async def test_quiet_hours_first_refresh_always_fetches_even_inside_window(hass, freezer) -> None:
+    """There's nothing to fall back to yet on the very first refresh - it
+    must run for real regardless of the window, exactly like every other
+    coordinator in this codebase expects async_config_entry_first_refresh
+    to actually populate data."""
+    freezer.move_to("2026-09-10T12:00:00+00:00")
+    now_local = dt_util.now()
+    client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
+    coordinator = _make_coordinator(
+        hass,
+        client,
+        options={
+            "quiet_hours_enabled": True,
+            "quiet_hours_start": (now_local - timedelta(minutes=30)).strftime("%H:%M:%S"),
+            "quiet_hours_end": (now_local + timedelta(minutes=30)).strftime("%H:%M:%S"),
+        },
+    )
+    assert coordinator._in_quiet_hours() is True  # sanity check the window itself
+
+    await coordinator.async_config_entry_first_refresh()
+
+    assert len(coordinator.data.grades) == 1
+    client.async_get_grades.assert_called_once()
+
+
+async def test_quiet_hours_skips_fetch_during_window_and_resumes_after(hass, freezer) -> None:
+    freezer.move_to("2026-09-10T12:00:00+00:00")
+    now_local = dt_util.now()
+    client = build_mock_client()
+    coordinator = _make_coordinator(
+        hass,
+        client,
+        options={
+            "quiet_hours_enabled": True,
+            "quiet_hours_start": (now_local + timedelta(hours=2)).strftime("%H:%M:%S"),
+            "quiet_hours_end": (now_local + timedelta(hours=4)).strftime("%H:%M:%S"),
+        },
+    )
+    await coordinator.async_config_entry_first_refresh()
+    assert coordinator.data.grades == []
+    client.async_get_grades.assert_called_once()
+
+    # Inside the window: no network call, data stays exactly as it was -
+    # give the mock a DIFFERENT payload so a stray fetch would be obvious
+    # in the assertion below rather than silently matching by accident.
+    freezer.move_to(now_local + timedelta(hours=3))
+    client.async_get_grades.return_value = GRADE_PAYLOAD
+    await coordinator.async_refresh()
+    assert coordinator.data.grades == []
+    client.async_get_grades.assert_called_once()
+
+    # Window over: fetches for real again.
+    freezer.move_to(now_local + timedelta(hours=5))
+    await coordinator.async_refresh()
+    assert len(coordinator.data.grades) == 1
+    assert client.async_get_grades.call_count == 2
+
+
+async def test_quiet_hours_detects_wrapping_window(hass, freezer) -> None:
+    """start > end (e.g. the default 23:00 -> 06:00) means the window
+    wraps midnight - `_in_quiet_hours` must treat that as "outside
+    [end, start)", not naively as "start <= now <= end" (which would never
+    be true at all once start > end)."""
+    freezer.move_to("2026-09-10T12:00:00+00:00")
+    now_local = dt_util.now()
+    start = (now_local + timedelta(hours=2)).strftime("%H:%M:%S")
+    end = (now_local + timedelta(hours=1)).strftime("%H:%M:%S")
+    client = build_mock_client()
+    coordinator = _make_coordinator(
+        hass,
+        client,
+        options={
+            "quiet_hours_enabled": True,
+            "quiet_hours_start": start,
+            "quiet_hours_end": end,
+        },
+    )
+
+    freezer.move_to(now_local + timedelta(hours=3))  # after start
+    assert coordinator._in_quiet_hours() is True
+    freezer.move_to(now_local + timedelta(minutes=30))  # before end
+    assert coordinator._in_quiet_hours() is True
+    freezer.move_to(now_local + timedelta(hours=1.5))  # between end and start
+    assert coordinator._in_quiet_hours() is False
