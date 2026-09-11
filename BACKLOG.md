@@ -50,8 +50,18 @@ these can't be built or verified against a real shape:
   Homework assignments' `recent`, Unexcused absences) rather than a
   `calendar.get_events` service-call template — sidesteps the templating
   complexity originally blocking this.
-- **More blueprints** — "lucky number == the child's roll number" (needs
-  the child's own number, not exposed).
+- **"Lucky number == the child's roll number" blueprint** — investigated,
+  genuinely NOT just "data not exposed yet": szkolny-android's own
+  `LibrusFeatures.kt` lists `STUDENT_NUMBER` as available only via
+  `ENDPOINT_LIBRUS_SYNERGIA_INFO` / `LoginMethod.LIBRUS_SYNERGIA` - the
+  OLD HTML-scraping mechanism against the classic synergia.librus.pl
+  portal, not the modern JSON REST API this whole integration is built on
+  (and deliberately moved TO, away from fragile scraping - see CLAUDE.md's
+  own "History / why it looks like this"). `Me`/`Users`/`Classes`'
+  reference parsers confirm no roll number anywhere in the JSON API. Not
+  worth building a second, fragile HTML-scraping subsystem for one minor
+  notification idea - staying blocked is the right call here, not a gap
+  to close later.
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   `librus_synergia.download_attachment` service (`LibrusMessagesGetAttachment`
@@ -67,5 +77,9 @@ these can't be built or verified against a real shape:
   the fix just reloads the entry) and an informational "\<endpoint\> has
   not responded in over a week" issue for a supplementary endpoint failing
   on every attempt for 7 straight days.
-- **`manual_smoke_test.py`** — extend to the newer endpoints (behaviour
-  grades, justifications, `next_exam`-relevant).
+- ~~**`manual_smoke_test.py`**~~ — done (Unreleased): behaviour grades/
+  next_exam-relevant (`HomeWorks/Categories`) endpoints turned out to
+  already be probed - the real gap was the secondary message mailboxes
+  (substitutions/alerts/justifications content, not just the unread
+  count), plus next week's timetable. All added, mirroring exactly what
+  `coordinator.py` itself fetches every cycle.

@@ -82,6 +82,7 @@ async def main() -> int:
             ("Attendances", client.async_get_attendances()),
             ("AttendanceTypes", client.async_get_attendance_types()),
             ("Timetables (this week)", client.async_get_timetable(week_start)),
+            ("Timetables (next week)", client.async_get_timetable(week_start + timedelta(days=7))),
             ("HomeWorks", client.async_get_homeworks()),
             ("HomeWorkAssignments", client.async_get_homework_assignments()),
             ("SchoolNotices", client.async_get_school_notices()),
@@ -138,9 +139,29 @@ async def main() -> int:
             # real account without side effects. If you need to re-verify
             # that endpoint, do it in a throwaway scratchpad script instead
             # (see CLAUDE.md's 2026-09-06 session note), never here.
+            #
+            # The three secondary mailboxes (substitutions/alerts/
+            # justifications) mirror exactly what coordinator.py's own
+            # _async_get_messages() fetches every cycle - "justifications"
+            # in particular is still flagged UNVERIFIED there (whether a
+            # submitted justification's accept/reject status actually shows
+            # up here, vs. only arriving as a normal inbox message - see
+            # coordinator.py's docstring). Listing them (not just the
+            # unread COUNT already covered by the call above) is what
+            # actually closes that gap, next time this is run against an
+            # account with something in one of these mailboxes.
             for label, coro in [
-                ("Unread messages count", client.async_get_unread_messages_count()),
+                ("Unread messages count (all mailboxes)", client.async_get_unread_messages_count()),
                 ("Messages (inbox, limit 10)", client.async_get_messages(limit=10)),
+                (
+                    "Messages (substitutions, limit 10)",
+                    client.async_get_messages(mailbox="substitutions", limit=10),
+                ),
+                ("Messages (alerts, limit 10)", client.async_get_messages(mailbox="alerts", limit=10)),
+                (
+                    "Messages (justifications, limit 10)",
+                    client.async_get_messages(mailbox="justifications", limit=10),
+                ),
             ]:
                 _print_section(label)
                 try:
@@ -154,8 +175,13 @@ async def main() -> int:
         print(
             "Check above: a few Grades[].Grade values (symbols like "
             "5+/4-/bz), whether the Grades/Comments correlation actually "
-            "works once a real commented grade exists, and the Messages "
-            "response field names. (Notes[].Positive is CONFIRMED - "
+            "works once a real commented grade exists, whether a real "
+            "PointGrades/TextGrades/DescriptiveGrades/BehaviourGrades entry "
+            "matches the field names coordinator.py already assumes, and "
+            "whether a real justification's accept/reject status shows up "
+            "in the justifications mailbox above (vs. only arriving as a "
+            "normal inbox message - see coordinator.py's own docstring for "
+            "this open question). (Notes[].Positive is CONFIRMED - "
             "0=negative/1=positive/else=neutral - no longer needs checking "
             "here.) Update librus_api/const.py, librus_api/models.py and "
             "coordinator.py's parsers if anything here differs from what "
