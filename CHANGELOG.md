@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 ### Added
 - **Repair issues** - two new, deliberately conservative repairs: a fixable
