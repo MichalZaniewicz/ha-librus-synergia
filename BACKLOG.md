@@ -45,17 +45,19 @@ these can't be built or verified against a real shape:
   payoff (bell schedule is already derived from the timetable).
 - **More response services** — `get_timetable`, `get_grades` (so a card
   can pull data without it sitting in an attribute).
-- **More blueprints** — "subject average dropped below X" (numeric_state
-  trigger on a `subject_average` sensor), weekly Sunday digest (needs
-  calendar templating), "lucky number == the child's roll number" (needs
-  the child's own number, not exposed).
+- **More blueprints** — weekly Sunday digest (needs calendar templating),
+  "lucky number == the child's roll number" (needs the child's own number,
+  not exposed).
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   `librus_synergia.download_attachment` service (`LibrusMessagesGetAttachment`
   is a real endpoint) not built; a `mark_message_read` service (would just
   wrap `get_message`, low value).
-- **Teacher directory** — only the homeroom teacher is surfaced anywhere;
-  subject teachers aren't in any attribute.
+- ~~**Teacher directory**~~ — done (Unreleased): `sensor.*_school` gained a
+  `subject_teachers` attribute (subject name -> sorted teacher name list),
+  derived client-side from the already-fetched timetable, same approach as
+  `bell_schedule`. Previously only the homeroom teacher (Class sensor) was
+  surfaced anywhere.
 - ~~**`repairs.py`**~~ — done (Unreleased): a fixable "school year end date
   looks out of date" issue (cached `end_school_year` >30 days in the past;
   the fix just reloads the entry) and an informational "\<endpoint\> has

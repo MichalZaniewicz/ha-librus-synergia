@@ -212,6 +212,26 @@ def _bell_schedule(timetable: dict[date, list[LessonData]]) -> list[dict[str, An
     return schedule
 
 
+def _subject_teachers(data: LibrusData) -> dict[str, list[str]]:
+    """subject name -> sorted list of distinct teacher names, derived from
+    every current+next-week timetable lesson - the closest thing to a
+    "who teaches what" directory this API exposes. A subject taught by more
+    than one teacher (parallel groups, e.g. split language classes) lists
+    all of them. Previously the homeroom teacher (Class sensor) was the
+    only teacher surfaced anywhere - subject teachers never were."""
+    seen: dict[str, set[str]] = {}
+    for lessons in data.timetable.values():
+        for lesson in lessons:
+            if lesson.subject_id is None or lesson.teacher_id is None:
+                continue
+            teacher_name = data.teachers.get(lesson.teacher_id)
+            if not teacher_name:
+                continue
+            subject_name = data.subjects.get(lesson.subject_id, f"Lekcja {lesson.subject_id}")
+            seen.setdefault(subject_name, set()).add(teacher_name)
+    return {subject: sorted(names) for subject, names in sorted(seen.items())}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LibrusConfigEntry,
@@ -1058,6 +1078,12 @@ class LibrusSchoolSensor(LibrusSensorBase):
             # the times that actually appear in this student's timetable -
             # lets a card show "period 3 = 09:40-10:25" without hardcoding.
             "bell_schedule": _bell_schedule(self.coordinator.data.timetable),
+            # Subject -> teacher(s) directory, same timetable-derived
+            # approach as bell_schedule above. Previously the ONLY teacher
+            # surfaced anywhere was the homeroom teacher (Class sensor) -
+            # subject teachers never were, despite the data already being
+            # fetched every cycle for the Next/Current lesson sensors.
+            "subject_teachers": _subject_teachers(self.coordinator.data),
         }
 
 

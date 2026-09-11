@@ -18,6 +18,12 @@
   feature's sensor goes `unavailable` (the free days calendar entity isn't
   created at all) and its endpoint is never called - fewer requests to
   Librus for families that don't use a given module.
+- **Subject teachers directory** - the School sensor gained a
+  `subject_teachers` attribute (subject name -> sorted list of teacher
+  names), derived client-side from the timetable already being fetched
+  every cycle - no extra API calls. A subject taught by more than one
+  teacher (parallel/split groups) lists all of them. Previously the
+  homeroom teacher (Class sensor) was the only teacher surfaced anywhere.
 
 ## 0.5.1
 

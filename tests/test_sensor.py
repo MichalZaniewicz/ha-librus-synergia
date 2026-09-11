@@ -749,3 +749,72 @@ async def test_school_sensor_exposes_bell_schedule(hass) -> None:
         {"lesson_no": 2, "start": "09:00", "end": "09:45"},
         {"lesson_no": 3, "start": "10:00", "end": "10:45"},
     ]
+
+
+async def test_school_sensor_exposes_subject_teachers_directory(hass) -> None:
+    """Previously the ONLY teacher surfaced anywhere was the homeroom
+    teacher (Class sensor) - subject teachers never were, despite the data
+    already being fetched every cycle for the Next/Current lesson sensors."""
+    day_iso = dt_util.now().date().isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                [{"LessonNo": "1", "HourFrom": "08:00", "HourTo": "08:45",
+                  "Subject": {"Id": "100"}, "Teacher": {"Id": "500"}}],
+                [{"LessonNo": "2", "HourFrom": "09:00", "HourTo": "09:45",
+                  "Subject": {"Id": "200"}, "Teacher": {"Id": "600"}}],
+            ]
+        }
+    }
+    client = build_mock_client(
+        async_get_timetable=payload,
+        async_get_subjects={
+            "Subjects": [{"Id": 100, "Name": "Matematyka"}, {"Id": 200, "Name": "Polski"}]
+        },
+        async_get_teachers={
+            "Users": [
+                {"Id": 500, "FirstName": "Anna", "LastName": "Kowalska"},
+                {"Id": 600, "FirstName": "Jan", "LastName": "Nowak"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    school = hass.states.get(_entity_id(hass, entry, "school"))
+    assert school.attributes["subject_teachers"] == {
+        "Matematyka": ["Anna Kowalska"],
+        "Polski": ["Jan Nowak"],
+    }
+
+
+async def test_school_sensor_subject_teachers_lists_every_teacher_for_split_groups(hass) -> None:
+    """A subject taught by more than one teacher (parallel groups, e.g.
+    split language classes) must list all of them, sorted - not just
+    whichever lesson happened to be seen last."""
+    day_iso = dt_util.now().date().isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                [
+                    {"LessonNo": "1", "HourFrom": "08:00", "HourTo": "08:45",
+                     "Subject": {"Id": "100"}, "Teacher": {"Id": "600"}},
+                    {"LessonNo": "1", "HourFrom": "08:00", "HourTo": "08:45",
+                     "Subject": {"Id": "100"}, "Teacher": {"Id": "500"}},
+                ],
+            ]
+        }
+    }
+    client = build_mock_client(
+        async_get_timetable=payload,
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Angielski"}]},
+        async_get_teachers={
+            "Users": [
+                {"Id": 500, "FirstName": "Anna", "LastName": "Kowalska"},
+                {"Id": 600, "FirstName": "Jan", "LastName": "Nowak"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    school = hass.states.get(_entity_id(hass, entry, "school"))
+    assert school.attributes["subject_teachers"] == {"Angielski": ["Anna Kowalska", "Jan Nowak"]}
