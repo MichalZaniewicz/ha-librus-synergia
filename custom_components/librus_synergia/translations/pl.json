@@ -102,7 +102,19 @@
       "school_class": { "name": "Klasa" },
       "homework_assignments": { "name": "Zadania domowe" },
       "behaviour_grade": { "name": "Ocena zachowania" },
-      "descriptive_grades": { "name": "Oceny opisowe" }
+      "descriptive_grades": { "name": "Oceny opisowe" },
+      "attendance_streak": { "name": "Passa obecności" },
+      "behaviour_streak": { "name": "Passa dobrego zachowania" },
+      "good_grade_streak": { "name": "Passa dobrych ocen" },
+      "rank": {
+        "name": "Ranga",
+        "state": {
+          "bronze": "Brąz",
+          "silver": "Srebro",
+          "gold": "Złoto",
+          "diamond": "Diament"
+        }
+      }
     },
     "calendar": {
       "timetable": { "name": "Plan lekcji" },

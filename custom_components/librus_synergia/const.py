@@ -104,5 +104,12 @@ EVENT_NEW_ABSENCE = f"{DOMAIN}_new_absence"
 # sync, same as the *_new_* events). Signature-keyed on date+period+kind,
 # so re-announcing the same known disruption every cycle doesn't happen.
 EVENT_TIMETABLE_CHANGED = f"{DOMAIN}_timetable_changed"
+# Fires for a handful of objective, data-derived gamification milestones
+# (first 6, N good grades in a row, N days without an absence/negative
+# note - see coordinator.py::_check_achievements) - deliberately NOT an
+# invented points/scoring system, which would have no basis in anything
+# Librus actually reports. Each achievement key fires at most once (seeded
+# silently on the first sync, same as every other *_new_*/_changed event).
+EVENT_ACHIEVEMENT_UNLOCKED = f"{DOMAIN}_achievement_unlocked"
 
 ATTR_SUBJECT_ID = "subject_id"

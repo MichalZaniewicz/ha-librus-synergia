@@ -42,6 +42,16 @@
   sensor's own `start` time minus a travel time you set, re-checked every
   minute against the real clock so the timing is accurate regardless of
   your poll interval.
+- **Gamification** - three new "passa" (streak) sensors (days without an
+  absence, days without a negative behaviour note, consecutive good
+  grades in a row) and a cosmetic Bronze/Silver/Gold/Diamond Rank sensor
+  derived from your overall average. Plus a new
+  `librus_synergia_achievement_unlocked` event and matching Achievement
+  Unlocked blueprint, firing at most once each for a handful of objective
+  milestones (first six, grade/attendance/behaviour streaks reaching
+  5/10/20 grades or 7/30/90 days) - deliberately not an invented points
+  system, every number here is a plain fact derived from data already
+  being fetched.
 
 ## 0.5.1
 

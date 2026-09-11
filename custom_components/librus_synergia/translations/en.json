@@ -102,7 +102,19 @@
       "school_class": { "name": "Class" },
       "homework_assignments": { "name": "Homework assignments" },
       "behaviour_grade": { "name": "Behaviour grade" },
-      "descriptive_grades": { "name": "Descriptive grades" }
+      "descriptive_grades": { "name": "Descriptive grades" },
+      "attendance_streak": { "name": "Attendance streak" },
+      "behaviour_streak": { "name": "Good behaviour streak" },
+      "good_grade_streak": { "name": "Good grades streak" },
+      "rank": {
+        "name": "Rank",
+        "state": {
+          "bronze": "Bronze",
+          "silver": "Silver",
+          "gold": "Gold",
+          "diamond": "Diamond"
+        }
+      }
     },
     "calendar": {
       "timetable": { "name": "Timetable" },

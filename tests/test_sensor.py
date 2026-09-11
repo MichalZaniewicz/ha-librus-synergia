@@ -818,3 +818,100 @@ async def test_school_sensor_subject_teachers_lists_every_teacher_for_split_grou
 
     school = hass.states.get(_entity_id(hass, entry, "school"))
     assert school.attributes["subject_teachers"] == {"Angielski": ["Anna Kowalska", "Jan Nowak"]}
+
+
+# ----------------------------------------------------------------------
+# Gamification sensors - streaks ("passy") + the cosmetic rank tier.
+# ----------------------------------------------------------------------
+
+
+async def test_attendance_streak_sensor_counts_from_last_absence(hass) -> None:
+    absence_date = (dt_util.now().date() - timedelta(days=5)).isoformat()
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": absence_date, "Type": {"Id": 1}, "LessonNo": 1, "Semester": 1},
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [{"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance_streak"))
+    assert state.state == "5"
+
+
+async def test_attendance_streak_sensor_falls_back_to_school_year_start(hass) -> None:
+    """No absences on record at all yet - a perfect-attendance student
+    should still see a real, growing number, not `unknown`."""
+    start_date = (dt_util.now().date() - timedelta(days=9)).isoformat()
+    client = build_mock_client(
+        async_get_classes={"Class": {"Number": 7, "Symbol": "d", "BeginSchoolYear": start_date}},
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance_streak"))
+    assert state.state == "9"
+
+
+async def test_behaviour_streak_sensor_ignores_positive_notes(hass) -> None:
+    negative_date = (dt_util.now().date() - timedelta(days=3)).isoformat()
+    positive_date = (dt_util.now().date() - timedelta(days=1)).isoformat()
+    client = build_mock_client(
+        async_get_notes={
+            "Notes": [
+                {"Id": 1, "Date": positive_date, "Positive": 1, "Text": "dobra robota"},
+                {"Id": 2, "Date": negative_date, "Positive": 0, "Text": "spóźnienie"},
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "behaviour_streak"))
+    assert state.state == "3"
+
+
+async def test_good_grade_streak_sensor_skips_non_numeric_marks(hass) -> None:
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 100},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "bz", "Category": {"Id": 10}, "Subject": {"Id": 100},
+                 "Semester": 1, "AddDate": "2026-09-03"},
+                {"Id": 3, "Grade": "4+", "Category": {"Id": 10}, "Subject": {"Id": 100},
+                 "Semester": 1, "AddDate": "2026-09-05"},
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "good_grade_streak"))
+    assert state.state == "2"
+
+
+async def test_rank_sensor_tier_and_points_to_next(hass) -> None:
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "4", "Category": {"Id": 10}, "Subject": {"Id": 100},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "rank"))
+    assert state.state == "gold"
+    assert state.attributes["average"] == 4.0
+    assert state.attributes["points_to_next_tier"] == 1.0
+
+
+async def test_rank_sensor_unknown_without_any_grades(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "rank"))
+    assert state.state == "unknown"

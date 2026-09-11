@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import async_capture_events
 from custom_components.librus_synergia import async_remove_entry
 from custom_components.librus_synergia.const import (
     DOMAIN,
+    EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
@@ -22,6 +23,9 @@ from custom_components.librus_synergia.const import (
 )
 from custom_components.librus_synergia.coordinator import (
     LibrusDataUpdateCoordinator,
+    days_since_last_absence,
+    days_since_last_negative_note,
+    good_grade_streak,
     optional_endpoint_issue_id,
     school_year_issue_id,
 )
@@ -30,6 +34,13 @@ from custom_components.librus_synergia.librus_api import (
     LibrusInvalidCredentialsError,
     LibrusSessionExpiredError,
     LibrusUnexpectedResponseError,
+)
+from custom_components.librus_synergia.librus_api.models import (
+    AttendanceData,
+    AttendanceTypeData,
+    ClassData,
+    GradeData,
+    NoteData,
 )
 
 from .conftest import build_mock_client, make_config_entry
@@ -1116,3 +1127,196 @@ async def test_quiet_hours_detects_wrapping_window(hass, freezer) -> None:
     assert coordinator._in_quiet_hours() is True
     freezer.move_to(now_local + timedelta(hours=1.5))  # between end and start
     assert coordinator._in_quiet_hours() is False
+
+
+# ----------------------------------------------------------------------
+# Gamification - streak/rank helper functions (pure, no coordinator/hass
+# needed) and the EVENT_ACHIEVEMENT_UNLOCKED firing/seeding behaviour.
+# ----------------------------------------------------------------------
+
+
+def _grade(value: str, add_date: str, **flags) -> GradeData:
+    return GradeData(
+        id=hash((value, add_date)) & 0xFFFF,
+        value=value,
+        category_id=None,
+        subject_id=1,
+        semester=1,
+        add_date=add_date,
+        is_semester_proposition=flags.get("is_semester_proposition", False),
+        is_final_proposition=flags.get("is_final_proposition", False),
+    )
+
+
+def test_good_grade_streak_skips_non_numeric_and_stops_at_low_grade() -> None:
+    grades = [
+        _grade("5", "2026-09-01"),
+        _grade("bz", "2026-09-03"),  # non-numeric - skipped, doesn't break the streak
+        _grade("4+", "2026-09-05"),
+        _grade("2", "2026-08-20"),  # below threshold - would break it, but it's already stopped
+    ]
+
+    assert good_grade_streak(grades) == 2
+
+
+def test_good_grade_streak_ignores_semester_and_final_propositions() -> None:
+    grades = [
+        _grade("6", "2026-09-05", is_semester_proposition=True),
+        _grade("5", "2026-09-01"),
+    ]
+
+    assert good_grade_streak(grades) == 1
+
+
+def test_days_since_last_absence_falls_back_to_school_year_start() -> None:
+    types = {1: AttendanceTypeData(id=1, name="Nieobecność", is_presence_kind=False)}
+    cls = ClassData(
+        number=7,
+        symbol="d",
+        tutor_id=None,
+        begin_school_year="2026-09-01",
+        end_first_semester=None,
+        end_school_year=None,
+    )
+
+    assert days_since_last_absence([], types, cls, date(2026, 9, 10)) == 9
+    assert days_since_last_absence([], types, None, date(2026, 9, 10)) is None
+
+
+def test_days_since_last_absence_uses_most_recent_real_absence() -> None:
+    types = {
+        1: AttendanceTypeData(id=1, name="Nieobecność", is_presence_kind=False),
+        2: AttendanceTypeData(id=2, name="Obecność", is_presence_kind=True),
+    }
+    attendances = [
+        AttendanceData(id=1, lesson_id=None, lesson_no=1, date="2026-08-25", semester=1, type_id=1),
+        AttendanceData(id=2, lesson_id=None, lesson_no=2, date="2026-09-05", semester=1, type_id=1),
+        # A presence record on a later date must not count as "the last
+        # absence" - only non-presence types matter here.
+        AttendanceData(id=3, lesson_id=None, lesson_no=3, date="2026-09-09", semester=1, type_id=2),
+    ]
+
+    assert days_since_last_absence(attendances, types, None, date(2026, 9, 10)) == 5
+
+
+def test_days_since_last_negative_note_ignores_positive_and_neutral() -> None:
+    notes = [
+        NoteData(id=1, text="dobra robota", category_id=None, teacher_id=None, date="2026-09-08", positive=1),
+        NoteData(id=2, text="spóźnienie", category_id=None, teacher_id=None, date="2026-09-02", positive=0),
+    ]
+
+    assert days_since_last_negative_note(notes, None, date(2026, 9, 10)) == 8
+
+
+async def test_achievement_first_six_seeds_silently_then_fires_on_new_six(hass) -> None:
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    client = build_mock_client(async_get_grades={"Grades": []})
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+    assert events == []
+
+    client.async_get_grades.return_value = {
+        "Grades": [
+            {
+                "Id": 1,
+                "Grade": "6",
+                "Category": {"Id": 10},
+                "Subject": {"Id": 100},
+                "Semester": 1,
+                "AddDate": "2026-09-05",
+            }
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    titles = {e.data["title"] for e in events}
+    assert "Pierwsza szóstka!" in titles
+
+    # A second, identical refresh must not fire it again.
+    events.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert events == []
+
+
+async def test_achievement_first_six_not_fired_when_already_present_on_first_sync(hass) -> None:
+    """A 6 that already existed before this integration was ever installed
+    must not be retroactively celebrated - same "seed silently" rule as
+    every other new-item event."""
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Grade": "6",
+                    "Category": {"Id": 10},
+                    "Subject": {"Id": 100},
+                    "Semester": 1,
+                    "AddDate": "2026-09-01",
+                }
+            ]
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+
+    assert events == []
+
+
+async def test_achievement_good_grade_streak_milestone_fires_once(hass) -> None:
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    client = build_mock_client(async_get_grades={"Grades": []})
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+
+    client.async_get_grades.return_value = {
+        "Grades": [
+            {
+                "Id": i,
+                "Grade": "5",
+                "Category": {"Id": 10},
+                "Subject": {"Id": 100},
+                "Semester": 1,
+                "AddDate": f"2026-09-{i:02d}",
+            }
+            for i in range(1, 6)  # 5 good grades in a row
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    titles = {e.data["title"] for e in events}
+    assert "5 dobrych ocen z rzędu" in titles
+
+    events.clear()
+    await coordinator.async_refresh()  # same 5-grade streak again
+    await hass.async_block_till_done()
+    assert events == []
+
+
+async def test_achievement_attendance_and_behaviour_streaks_fire_at_day_milestones(
+    hass, freezer
+) -> None:
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    client = build_mock_client(
+        async_get_classes={"Class": {"Number": 7, "Symbol": "d", "BeginSchoolYear": "2026-09-01"}},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+    assert events == []  # 0 days elapsed - nowhere near the 7-day milestone
+
+    freezer.move_to("2026-09-09T12:00:00+00:00")  # 8 days, no absences/notes ever
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    titles = {e.data["title"] for e in events}
+    assert "Tydzień bez nieobecności" in titles
+    assert "Tydzień bez uwagi" in titles

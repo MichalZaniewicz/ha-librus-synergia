@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -26,7 +27,13 @@ from .const import (
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
 )
-from .coordinator import LibrusDataUpdateCoordinator
+from .coordinator import (
+    LibrusDataUpdateCoordinator,
+    days_since_last_absence,
+    days_since_last_negative_note,
+    good_grade_streak,
+    parse_grade_value,
+)
 from .librus_api.models import (
     AttendanceTypeData,
     BehaviourGradeData,
@@ -37,35 +44,6 @@ from .librus_api.models import (
     LibrusData,
     MessageData,
 )
-
-
-def _parse_grade_value(value: str) -> float | None:
-    """Convert a Librus grade string ("5+", "4-", "3", "bz"...) to a number.
-
-    The "+"/"-" modifiers (+0.5 / -0.25) follow the convention used by most
-    third-party Polish gradebook average calculators. CONFIRMED live
-    (2026-09-05) via the `Grades/Types` reference endpoint that every
-    non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
-    `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
-    returning None here and is excluded from the average - the numeric
-    +/- MODIFIER convention itself is still a third-party inference, not
-    something Librus documents, since no real numeric grade has been
-    issued on the test account yet to check the exact value it produces.
-    """
-    value = value.strip()
-    if not value:
-        return None
-    modifier = 0.0
-    if value.endswith("+"):
-        modifier = 0.5
-        value = value[:-1]
-    elif value.endswith("-"):
-        modifier = -0.25
-        value = value[:-1]
-    try:
-        return float(value.replace(",", ".")) + modifier
-    except ValueError:
-        return None
 
 
 def _calculate_average(
@@ -93,7 +71,7 @@ def _calculate_average(
         category = categories.get(grade.category_id) if grade.category_id is not None else None
         if category is not None and not category.count_to_average:
             continue
-        numeric = _parse_grade_value(grade.value)
+        numeric = parse_grade_value(grade.value)
         if numeric is None:
             continue
         weight = (category.weight if category is not None else 1) if weighted else 1
@@ -256,6 +234,10 @@ async def async_setup_entry(
             LibrusHomeworkAssignmentsSensor(coordinator, entry),
             LibrusBehaviourGradeSensor(coordinator, entry),
             LibrusDescriptiveGradesSensor(coordinator, entry),
+            LibrusAttendanceStreakSensor(coordinator, entry),
+            LibrusBehaviourStreakSensor(coordinator, entry),
+            LibrusGoodGradeStreakSensor(coordinator, entry),
+            LibrusRankSensor(coordinator, entry),
         ]
     )
 
@@ -679,6 +661,146 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
             reverse=True,
         )[:10]
         return {"excused_count": excused, "recent_dates": recent_dates}
+
+
+# ----------------------------------------------------------------------
+# Gamification - "passy" (streaks) and a cosmetic rank derived from data
+# already fetched every cycle. Deliberately NOT an invented points/scoring
+# system (see coordinator.py's own note on this) - every number here is a
+# plain, honest count or day-tally a student/parent can verify by hand.
+# ----------------------------------------------------------------------
+
+
+class LibrusAttendanceStreakSensor(LibrusSensorBase):
+    """Days since the last real absence - "passa obecności". Falls back to
+    days since the school year started for a student with a perfect
+    record so far, rather than showing `unknown`."""
+
+    _attr_translation_key = "attendance_streak"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_icon = "mdi:fire"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "attendance_streak")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        data = self.coordinator.data
+        return days_since_last_absence(
+            data.attendances, data.attendance_types, data.school_class, dt_util.now().date()
+        )
+
+
+class LibrusBehaviourStreakSensor(LibrusSensorBase):
+    """Days since the last negative behaviour note - "passa dobrego
+    zachowania". Same start-of-school-year fallback as the attendance
+    streak above."""
+
+    _attr_translation_key = "behaviour_streak"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_icon = "mdi:fire"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "behaviour_streak")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        data = self.coordinator.data
+        return days_since_last_negative_note(data.notes, data.school_class, dt_util.now().date())
+
+
+class LibrusGoodGradeStreakSensor(LibrusSensorBase):
+    """Consecutive most-recent numeric grades of 4 ("dobry") or better -
+    "passa dobrych ocen". A non-numeric mark (bz/np/...) doesn't break the
+    streak, only an actual low grade does - see
+    `coordinator.good_grade_streak`'s own docstring for why."""
+
+    _attr_translation_key = "good_grade_streak"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:fire"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "good_grade_streak")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return good_grade_streak(self.coordinator.data.grades)
+
+
+# Tiers for LibrusRankSensor, ordered highest-first so the first threshold
+# an average clears wins. Purely cosmetic and entirely this integration's
+# own invention (Librus has no rank/tier concept) - a bit of extra polish
+# on top of the Overall average sensor's own raw number. `SensorDeviceClass
+# .ENUM` + these internal (untranslated) keys, with the actual display text
+# coming from `entity.sensor.rank.state.<key>` in strings.json/en/pl, is
+# the idiomatic HA way to get a properly localized state value here.
+_RANK_TIERS: list[tuple[float, str, str]] = [
+    (5.0, "diamond", "mdi:diamond-stone"),
+    (4.0, "gold", "mdi:trophy"),
+    (3.0, "silver", "mdi:trophy-outline"),
+    (0.0, "bronze", "mdi:medal-outline"),
+]
+
+
+def _rank_for_average(average: float | None) -> tuple[str, str] | None:
+    if average is None:
+        return None
+    for threshold, key, icon in _RANK_TIERS:
+        if average >= threshold:
+            return key, icon
+    return None  # unreachable - the last tier's threshold is 0.0
+
+
+class LibrusRankSensor(LibrusSensorBase):
+    """A cosmetic Bronze/Silver/Gold/Diamond tier derived from the Overall
+    average sensor's own weighted average - turns a raw number into
+    something a bit more game-like on a dashboard. No extra API calls."""
+
+    _attr_translation_key = "rank"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [key for _, key, _ in _RANK_TIERS]
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "rank")
+
+    def _average(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        return _calculate_average(self.coordinator.data.grades, self.coordinator.data.grade_categories)
+
+    @property
+    def icon(self) -> str | None:
+        tier = _rank_for_average(self._average())
+        return tier[1] if tier else "mdi:trophy-outline"
+
+    @property
+    def native_value(self) -> str | None:
+        tier = _rank_for_average(self._average())
+        return tier[0] if tier else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        average = self._average()
+        if average is None:
+            return None
+        # How far above the CURRENT tier's own threshold, and how much
+        # more average is needed to reach the next one up - `None` once
+        # already at Diamond, the top tier.
+        next_threshold = next((t for t, _, _ in reversed(_RANK_TIERS) if t > average), None)
+        return {
+            "average": average,
+            "points_to_next_tier": round(next_threshold - average, 2)
+            if next_threshold is not None
+            else None,
+        }
 
 
 class LibrusLuckyNumberSensor(LibrusSensorBase):

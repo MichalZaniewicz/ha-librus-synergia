@@ -46,6 +46,7 @@ from .const import (
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
     DOMAIN,
+    EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -96,6 +97,140 @@ def school_year_issue_id(entry_id: str) -> str:
     """Stable repair-issue id for one entry's school-year-rollover check -
     see `optional_endpoint_issue_id`'s docstring for why this is public."""
     return f"{ISSUE_SCHOOL_YEAR_ROLLOVER}_{entry_id}"
+
+
+def parse_grade_value(value: str) -> float | None:
+    """Convert a Librus grade string ("5+", "4-", "3", "bz"...) to a number.
+
+    The "+"/"-" modifiers (+0.5 / -0.25) follow the convention used by most
+    third-party Polish gradebook average calculators. CONFIRMED live
+    (2026-09-05) via the `Grades/Types` reference endpoint that every
+    non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
+    `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
+    returning None here and is excluded from the average - the numeric
+    +/- MODIFIER convention itself is still a third-party inference, not
+    something Librus documents, since no real numeric grade has been
+    issued on the test account yet to check the exact value it produces.
+
+    Public (not underscore-prefixed) - shared by sensor.py's average
+    calculation AND the good-grade-streak/achievement logic below, which
+    is why it lives here rather than in sensor.py (coordinator.py must
+    never import from sensor.py - the dependency only runs the other way).
+    """
+    value = value.strip()
+    if not value:
+        return None
+    modifier = 0.0
+    if value.endswith("+"):
+        modifier = 0.5
+        value = value[:-1]
+    elif value.endswith("-"):
+        modifier = -0.25
+        value = value[:-1]
+    try:
+        return float(value.replace(",", ".")) + modifier
+    except ValueError:
+        return None
+
+
+# "Dobra" ocena, for the good-grade-streak sensor/achievements below - 4
+# ("dobry") and up. Not user-configurable (unlike e.g. the Low Grade Alert
+# blueprint's own threshold input) - keeping this one fixed avoids a
+# second, subtly different "what counts as good" knob to document.
+_GOOD_GRADE_STREAK_THRESHOLD = 4.0
+
+
+def good_grade_streak(grades: list[GradeData]) -> int:
+    """Consecutive most-recent NUMERIC grades >= _GOOD_GRADE_STREAK_THRESHOLD,
+    counting back from the newest until the first one below it. Semester/
+    final propositions excluded (not day-to-day grades, same as the
+    average calculation). A non-numeric mark (bz/np/...) is SKIPPED, not
+    counted as breaking the streak - it isn't really a "bad grade", just
+    an administrative mark, and penalizing it would feel unfair for what
+    this is meant to be: a small, motivating "passa" a student can watch
+    grow."""
+    dated = sorted(
+        (
+            g
+            for g in grades
+            if g.add_date and not g.is_semester_proposition and not g.is_final_proposition
+        ),
+        key=lambda g: g.add_date,
+        reverse=True,
+    )
+    streak = 0
+    for grade in dated:
+        value = parse_grade_value(grade.value)
+        if value is None:
+            continue
+        if value < _GOOD_GRADE_STREAK_THRESHOLD:
+            break
+        streak += 1
+    return streak
+
+
+def _days_since(dates: list[str], school_class: ClassData | None, today: date) -> int | None:
+    """Shared by days_since_last_absence/days_since_last_negative_note
+    below - falls back to days since the school year started
+    (`ClassData.begin_school_year`) when `dates` is empty, so a student
+    with a genuinely perfect record shows a real, growing streak instead
+    of `unknown`. `None` only when there's truly nothing to anchor to."""
+    reference = max(dates) if dates else (school_class.begin_school_year if school_class else None)
+    if not reference:
+        return None
+    try:
+        reference_date = date.fromisoformat(reference[:10])
+    except ValueError:
+        return None
+    return max(0, (today - reference_date).days)
+
+
+def days_since_last_absence(
+    attendances: list[AttendanceData],
+    attendance_types: dict[int, AttendanceTypeData],
+    school_class: ClassData | None,
+    today: date,
+) -> int | None:
+    dates = [
+        a.date
+        for a in attendances
+        if a.date and (t := attendance_types.get(a.type_id)) is not None and not t.is_presence_kind
+    ]
+    return _days_since(dates, school_class, today)
+
+
+def days_since_last_negative_note(
+    notes: list[NoteData], school_class: ClassData | None, today: date
+) -> int | None:
+    dates = [n.date for n in notes if n.date and n.sentiment == "negative"]
+    return _days_since(dates, school_class, today)
+
+
+# Milestone thresholds for the streak-based achievements fired by
+# `LibrusDataUpdateCoordinator._check_achievements` - crossing one fires
+# EVENT_ACHIEVEMENT_UNLOCKED exactly once.
+_GOOD_GRADE_STREAK_MILESTONES = (5, 10, 20)
+_STREAK_DAY_MILESTONES = (7, 30, 90)
+
+# Human-readable Polish titles carried in the event payload
+# (`{{ trigger.event.data.title }}`). Achievements are this integration's
+# own invention - Librus has no such concept, so there's no "real" name to
+# resolve from account data the way EVENT_NEW_GRADE etc. resolve a subject
+# name - hardcoded Polish, matching every blueprint's own briefing/digest
+# text elsewhere in this codebase (this integration is Poland-only by
+# nature, Librus itself being Polish-schools-only).
+_ACHIEVEMENT_TITLES: dict[str, str] = {
+    "first_six": "Pierwsza szóstka!",
+    "good_grade_streak_5": "5 dobrych ocen z rzędu",
+    "good_grade_streak_10": "10 dobrych ocen z rzędu",
+    "good_grade_streak_20": "20 dobrych ocen z rzędu",
+    "attendance_streak_7": "Tydzień bez nieobecności",
+    "attendance_streak_30": "Miesiąc bez nieobecności",
+    "attendance_streak_90": "3 miesiące bez nieobecności",
+    "behaviour_streak_7": "Tydzień bez uwagi",
+    "behaviour_streak_30": "Miesiąc bez uwagi",
+    "behaviour_streak_90": "3 miesiące bez uwagi",
+}
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
@@ -160,6 +295,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # substitution lessons - not a real id from the API, just enough to
         # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
         self._known_timetable_disruptions: set[str] | None = None
+        # Achievement keys already unlocked (e.g. "good_grade_streak_10") -
+        # same seed-silently-then-union pattern as every set above, applied
+        # to a small fixed vocabulary of milestones instead of growing API
+        # ids. See _check_achievements.
+        self._known_achievements: set[str] | None = None
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
         # to raise a repair issue only once a supplementary endpoint has
@@ -316,6 +456,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._async_fire_new_item_events(grades, school_notices, notes, messages, homeworks)
         self._fire_timetable_change_events(timetable, today)
         self._fire_new_absence_events(attendances, attendance_types)
+        self._check_achievements(grades, attendances, attendance_types, notes, today)
 
         return LibrusData(
             me=_parse_me(me_payload),
@@ -902,6 +1043,61 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             }
         self._known_absence_ids = self._fire_for_new_ids(
             EVENT_NEW_ABSENCE, entry_id, self._known_absence_ids, items
+        )
+
+    def _check_achievements(
+        self,
+        grades: list[GradeData],
+        attendances: list[AttendanceData],
+        attendance_types: dict[int, AttendanceTypeData],
+        notes: list[NoteData],
+        today: date,
+    ) -> None:
+        """Fires EVENT_ACHIEVEMENT_UNLOCKED for a handful of objective,
+        data-derived gamification milestones - deliberately never an
+        invented points/scoring system, which would have no basis in
+        anything Librus actually reports and would feel arbitrary/made up.
+
+        Reuses `_fire_for_new_ids` exactly like every other event above -
+        each achievement KEY (e.g. "good_grade_streak_10") is treated as
+        an "item id" that's either currently unlocked or not, seeded
+        silently on the first sync, and unioned (not replaced) so nothing
+        re-fires once achieved even if the underlying streak later
+        resets (a bad grade breaking a 10-grade streak must not "revoke"
+        the achievement already earned)."""
+        entry_id = self.config_entry.entry_id if self.config_entry else None
+        unlocked: set[str] = set()
+
+        non_proposition_grades = [
+            g for g in grades if not g.is_semester_proposition and not g.is_final_proposition
+        ]
+        if any(parse_grade_value(g.value) == 6.0 for g in non_proposition_grades):
+            unlocked.add("first_six")
+
+        streak = good_grade_streak(grades)
+        for milestone in _GOOD_GRADE_STREAK_MILESTONES:
+            if streak >= milestone:
+                unlocked.add(f"good_grade_streak_{milestone}")
+
+        attendance_days = days_since_last_absence(
+            attendances, attendance_types, self._cached_class, today
+        )
+        if attendance_days is not None:
+            for milestone in _STREAK_DAY_MILESTONES:
+                if attendance_days >= milestone:
+                    unlocked.add(f"attendance_streak_{milestone}")
+
+        behaviour_days = days_since_last_negative_note(notes, self._cached_class, today)
+        if behaviour_days is not None:
+            for milestone in _STREAK_DAY_MILESTONES:
+                if behaviour_days >= milestone:
+                    unlocked.add(f"behaviour_streak_{milestone}")
+
+        self._known_achievements = self._fire_for_new_ids(
+            EVENT_ACHIEVEMENT_UNLOCKED,
+            entry_id,
+            self._known_achievements,
+            {key: {"title": _ACHIEVEMENT_TITLES[key]} for key in unlocked},
         )
 
     def _fire_for_new_ids(
