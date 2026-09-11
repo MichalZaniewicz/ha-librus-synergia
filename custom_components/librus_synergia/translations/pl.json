@@ -35,13 +35,39 @@
         "title": "Opcje Librus Synergia",
         "data": {
           "scan_interval": "Częstotliwość odpytywania (minuty)",
-          "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)"
+          "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)",
+          "announcements_enabled": "Pobieraj ogłoszenia",
+          "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
+          "descriptive_grades_enabled": "Pobieraj oceny opisowe",
+          "free_days_enabled": "Pobieraj kalendarz dni wolnych"
         },
         "data_description": {
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
-          "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa."
+          "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa.",
+          "announcements_enabled": "Gdy wyłączone, sensor Nieprzeczytane ogłoszenia staje się niedostępny i nie są wykonywane żadne zapytania o ogłoszenia.",
+          "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
+          "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
+          "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne."
         }
       }
+    }
+  },
+  "issues": {
+    "school_year_rollover": {
+      "title": "Data końca roku szkolnego wygląda na nieaktualną",
+      "description": "Zapisana data końca roku szkolnego ({end_date}) minęła ponad miesiąc temu. Zwykle aktualizuje się to automatycznie w ciągu 24 godzin, gdy Librus opublikuje rekord klasy dla nowego roku szkolnego, ale jeśli tak się nie stało, przeładowanie integracji teraz wymusi natychmiastowe sprawdzenie.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Przeładuj, aby sprawdzić rok szkolny",
+            "description": "Przeładować teraz integrację Librus Synergia, aby wymusić natychmiastowe sprawdzenie, zamiast czekać na kolejne zaplanowane odświeżenie?"
+          }
+        }
+      }
+    },
+    "optional_endpoint_degraded": {
+      "title": "\"{label}\" nie odpowiada od ponad tygodnia",
+      "description": "Opcjonalny endpoint \"{label}\" zawodzi przy każdej próbie od {since}. Często jest to nieszkodliwe - nie każda szkoła ma włączony każdy moduł Librusa, a ta integracja traktuje to jako normalne - ale cały tydzień nieprzerwanych błędów może też oznaczać, że coś się zmieniło (zmiana uprawnień albo przebudowa tego endpointu przez Librusa). To powiadomienie jest wyłącznie informacyjne i można je bezpiecznie odrzucić - pojawi się ponownie, jeśli endpoint nadal będzie zawodził."
     }
   },
   "entity": {

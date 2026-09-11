@@ -11,7 +11,11 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
+    CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_COOKIES,
+    CONF_DESCRIPTIVE_GRADES_ENABLED,
+    CONF_FREE_DAYS_ENABLED,
     CONF_MESSAGES_ENABLED,
     DOMAIN,
 )
@@ -143,6 +147,9 @@ async def test_reauth_flow_still_captcha_gated(hass) -> None:
 
 
 async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> None:
+    """The other 4 feature toggles aren't touched here, so voluptuous fills
+    them in from their own (all-True) defaults - options ends up with every
+    field, not just the ones this test explicitly passed."""
     entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
     entry.add_to_hass(hass)
 
@@ -154,4 +161,40 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
         {CONF_SCAN_INTERVAL: 45, CONF_MESSAGES_ENABLED: False},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {CONF_SCAN_INTERVAL: 45, CONF_MESSAGES_ENABLED: False}
+    assert entry.options == {
+        CONF_SCAN_INTERVAL: 45,
+        CONF_MESSAGES_ENABLED: False,
+        CONF_ANNOUNCEMENTS_ENABLED: True,
+        CONF_BEHAVIOUR_GRADES_ENABLED: True,
+        CONF_DESCRIPTIVE_GRADES_ENABLED: True,
+        CONF_FREE_DAYS_ENABLED: True,
+    }
+
+
+async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 20,
+            CONF_MESSAGES_ENABLED: True,
+            CONF_ANNOUNCEMENTS_ENABLED: False,
+            CONF_BEHAVIOUR_GRADES_ENABLED: False,
+            CONF_DESCRIPTIVE_GRADES_ENABLED: False,
+            CONF_FREE_DAYS_ENABLED: False,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {
+        CONF_SCAN_INTERVAL: 20,
+        CONF_MESSAGES_ENABLED: True,
+        CONF_ANNOUNCEMENTS_ENABLED: False,
+        CONF_BEHAVIOUR_GRADES_ENABLED: False,
+        CONF_DESCRIPTIVE_GRADES_ENABLED: False,
+        CONF_FREE_DAYS_ENABLED: False,
+    }

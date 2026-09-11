@@ -7,17 +7,24 @@ from datetime import timedelta
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_capture_events
 
+from custom_components.librus_synergia import async_remove_entry
 from custom_components.librus_synergia.const import (
+    DOMAIN,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_TIMETABLE_CHANGED,
 )
-from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from custom_components.librus_synergia.coordinator import (
+    LibrusDataUpdateCoordinator,
+    optional_endpoint_issue_id,
+    school_year_issue_id,
+)
 from custom_components.librus_synergia.librus_api import (
     LibrusConnectionError,
     LibrusInvalidCredentialsError,
@@ -792,3 +799,215 @@ async def test_timetable_change_event_not_re_fired_for_known_disruption(hass, fr
     await hass.async_block_till_done()
 
     assert events == []  # substitution present from the very first (seeding) sync
+
+
+# ----------------------------------------------------------------------
+# Options-flow feature toggles - announcements/behaviour grades/descriptive
+# grades/free days. Same "skip the network call, degrade to the already-
+# proven empty-account shape" pattern as the pre-existing messages_enabled
+# toggle above (see test_messages_disabled_via_options_skips_all_message_
+# calls).
+# ----------------------------------------------------------------------
+
+
+async def test_announcements_disabled_via_options_skips_school_notices_call(hass) -> None:
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client, options={"announcements_enabled": False})
+
+    data = await coordinator._async_update_data()
+
+    assert data.school_notices == []
+    client.async_get_school_notices.assert_not_called()
+
+
+async def test_behaviour_grades_disabled_via_options_skips_calls(hass) -> None:
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client, options={"behaviour_grades_enabled": False})
+
+    data = await coordinator._async_update_data()
+
+    assert data.behaviour_grades == []
+    client.async_get_behaviour_grade_points.assert_not_called()
+    client.async_get_behaviour_grade_point_comments.assert_not_called()
+    client.async_get_behaviour_grade_point_categories.assert_not_called()
+
+
+async def test_descriptive_grades_disabled_via_options_skips_call(hass) -> None:
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client, options={"descriptive_grades_enabled": False})
+
+    data = await coordinator._async_update_data()
+
+    assert data.descriptive_grades == []
+    client.async_get_descriptive_grades.assert_not_called()
+
+
+async def test_free_days_disabled_via_options_skips_calls(hass) -> None:
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client, options={"free_days_enabled": False})
+
+    data = await coordinator._async_update_data()
+
+    assert data.free_days == []
+    client.async_get_school_free_days.assert_not_called()
+    client.async_get_class_free_days.assert_not_called()
+
+
+async def test_all_optional_features_enabled_by_default(hass) -> None:
+    """No options set at all (the common case) must keep every one of these
+    toggles at its pre-toggle, all-on behaviour."""
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client)
+
+    await coordinator._async_update_data()
+
+    client.async_get_school_notices.assert_called_once()
+    client.async_get_behaviour_grade_points.assert_called_once()
+    client.async_get_descriptive_grades.assert_called_once()
+    client.async_get_school_free_days.assert_called_once()
+
+
+# ----------------------------------------------------------------------
+# Repair issues - optional_endpoint_degraded + school_year_rollover. See
+# repairs.py for what each means and coordinator.py for exactly when
+# they're raised/cleared.
+# ----------------------------------------------------------------------
+
+
+async def test_optional_endpoint_failure_raises_issue_after_grace_period(
+    hass, freezer, issue_registry
+) -> None:
+    """A single hiccup must not raise anything - only a full week of
+    unbroken failures on the same supplementary endpoint does."""
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client()
+    client.async_get_descriptive_grades.side_effect = LibrusUnexpectedResponseError("boom")
+    coordinator = _make_coordinator(hass, client)
+    entry_id = coordinator.config_entry.entry_id
+    issue_id = optional_endpoint_issue_id(entry_id, "DescriptiveGrades")
+
+    await coordinator.async_config_entry_first_refresh()
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+    freezer.move_to("2026-09-09T12:00:00+00:00")  # +8 days, past the 7-day grace
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.translation_placeholders["label"] == "DescriptiveGrades"
+
+
+async def test_optional_endpoint_recovery_clears_issue(hass, freezer, issue_registry) -> None:
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client()
+    client.async_get_descriptive_grades.side_effect = LibrusUnexpectedResponseError("boom")
+    coordinator = _make_coordinator(hass, client)
+    entry_id = coordinator.config_entry.entry_id
+    issue_id = optional_endpoint_issue_id(entry_id, "DescriptiveGrades")
+    await coordinator.async_config_entry_first_refresh()
+
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    client.async_get_descriptive_grades.side_effect = None
+    client.async_get_descriptive_grades.return_value = {"Grades": []}
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_optional_endpoint_disabled_via_options_clears_issue(
+    hass, freezer, issue_registry
+) -> None:
+    """Turning the feature off in the options flow isn't a failure - any
+    previously-raised issue for it must be cleared, not left dangling
+    forever for an endpoint that's no longer even being called."""
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client()
+    client.async_get_descriptive_grades.side_effect = LibrusUnexpectedResponseError("boom")
+    coordinator = _make_coordinator(hass, client)
+    entry_id = coordinator.config_entry.entry_id
+    issue_id = optional_endpoint_issue_id(entry_id, "DescriptiveGrades")
+    await coordinator.async_config_entry_first_refresh()
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={"descriptive_grades_enabled": False}
+    )
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_school_year_rollover_raises_issue_when_stale(hass, freezer, issue_registry) -> None:
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client(
+        async_get_classes={
+            "Class": {"Number": 7, "Symbol": "d", "EndSchoolYear": "2026-06-20"}
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+    entry_id = coordinator.config_entry.entry_id
+    issue_id = school_year_issue_id(entry_id)
+
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+
+    issue = issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.is_fixable is True
+    assert issue.data == {"entry_id": entry_id}
+
+
+async def test_school_year_not_stale_does_not_raise_issue(hass, freezer, issue_registry) -> None:
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client(
+        async_get_classes={
+            "Class": {"Number": 7, "Symbol": "d", "EndSchoolYear": "2027-06-20"}
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+    entry_id = coordinator.config_entry.entry_id
+    issue_id = school_year_issue_id(entry_id)
+
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_async_remove_entry_clears_repair_issues(hass, freezer, issue_registry) -> None:
+    """A student's repair issues must not linger forever once the config
+    entry itself is deleted - `async_remove_entry` (__init__.py) clears
+    them, since issue_registry entries have no lifecycle tie to a config
+    entry on their own."""
+    freezer.move_to("2026-09-01T12:00:00+00:00")
+    client = build_mock_client(
+        async_get_classes={"Class": {"Number": 7, "Symbol": "d", "EndSchoolYear": "2026-06-20"}},
+    )
+    client.async_get_descriptive_grades.side_effect = LibrusUnexpectedResponseError("boom")
+    coordinator = _make_coordinator(hass, client)
+    entry = coordinator.config_entry
+    school_year_id = school_year_issue_id(entry.entry_id)
+    endpoint_id = optional_endpoint_issue_id(entry.entry_id, "DescriptiveGrades")
+
+    await coordinator.async_config_entry_first_refresh()
+    freezer.move_to("2026-09-09T12:00:00+00:00")
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert issue_registry.async_get_issue(DOMAIN, school_year_id) is not None
+    assert issue_registry.async_get_issue(DOMAIN, endpoint_id) is not None
+
+    await async_remove_entry(hass, entry)
+
+    assert issue_registry.async_get_issue(DOMAIN, school_year_id) is None
+    assert issue_registry.async_get_issue(DOMAIN, endpoint_id) is None

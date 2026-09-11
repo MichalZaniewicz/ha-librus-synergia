@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
+from .const import CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED
 from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
 from .librus_api import LibrusError
 from .librus_api.models import (
@@ -32,13 +33,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up Librus Synergia calendars from a config entry."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        [
-            LibrusTimetableCalendar(coordinator, entry),
-            LibrusAgendaCalendar(coordinator, entry),
-            LibrusFreeDaysCalendar(coordinator, entry),
-        ]
-    )
+    entities: list[CalendarEntity] = [
+        LibrusTimetableCalendar(coordinator, entry),
+        LibrusAgendaCalendar(coordinator, entry),
+    ]
+    # Skipped entirely (not just left empty) when turned off in the options
+    # flow - unlike the sensors gated the same way, a calendar entity has no
+    # "unavailable" state that reads as clearly as just not existing.
+    if entry.options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED):
+        entities.append(LibrusFreeDaysCalendar(coordinator, entry))
+    async_add_entities(entities)
 
 
 def _iso_week_start(day: date) -> date:

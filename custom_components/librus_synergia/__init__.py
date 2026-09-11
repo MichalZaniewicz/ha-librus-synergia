@@ -7,6 +7,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -15,9 +16,14 @@ from .const import (
     CONF_SESSION_LOGGED_IN_AT,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
+    OPTIONAL_ENDPOINT_LABELS,
     PLATFORMS,
 )
-from .coordinator import LibrusDataUpdateCoordinator
+from .coordinator import (
+    LibrusDataUpdateCoordinator,
+    optional_endpoint_issue_id,
+    school_year_issue_id,
+)
 from .librus_api import LibrusApiClient, LibrusSessionData
 from .services import async_setup_services, async_unload_services
 
@@ -95,3 +101,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
 async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
     """Reload the entry when options change."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
+    """Called once when a config entry is actually being deleted (not on a
+    plain reload) - clears any repair issues raised for it, so a removed
+    student doesn't leave a phantom "school year rollover" or "endpoint
+    degraded" repair sitting in the issue registry forever (issue_registry
+    entries have no lifecycle tie to a config entry on their own). Computed
+    from the entry id directly rather than via `entry.runtime_data`, since
+    the coordinator is already gone by the time this runs (unload happens
+    first)."""
+    issue_ids = [school_year_issue_id(entry.entry_id)] + [
+        optional_endpoint_issue_id(entry.entry_id, label) for label in OPTIONAL_ENDPOINT_LABELS
+    ]
+    for issue_id in issue_ids:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)

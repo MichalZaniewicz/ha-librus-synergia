@@ -32,12 +32,11 @@ these can't be built or verified against a real shape:
   login. Would need a teacher/staff account to develop.
 
 ## Buildable now, just not done
-- **Fuller options-flow toggles** — announcements / behaviour / descriptive
-  grades / free-days calendar on-off, calendar weeks-ahead, a quiet-hours
-  polling window. `messages_enabled` is the only one so far. The invasive
-  bit is gating entity creation vs. just skipping the fetch — a
-  multi-select "features" option where an off group makes its sensor
-  `unavailable` (like `messages` already does) is the safe shape.
+- ~~**Fuller options-flow toggles**~~ — done (Unreleased): announcements /
+  behaviour grade / descriptive grades / free-days calendar can each be
+  turned off individually now, same "sensor goes unavailable, endpoint
+  never called" shape as the pre-existing `messages_enabled`. Calendar
+  weeks-ahead and a quiet-hours polling window are still open, if wanted.
 - **`Units` data** — surface the bell schedule (`LessonsRange`), the more
   specific school-unit name ("Szkoła Podstawowa 32" vs the broad "Zespół
   Szkolno-Przedszkolny nr 21"), grade-system flags. Client method
@@ -57,8 +56,10 @@ these can't be built or verified against a real shape:
   wrap `get_message`, low value).
 - **Teacher directory** — only the homeroom teacher is surfaced anywhere;
   subject teachers aren't in any attribute.
-- **`repairs.py`** — a repair issue for e.g. "an endpoint has 403'd for N
-  days" or "school year rolled over, re-check semester dates". Dropped so
-  far.
+- ~~**`repairs.py`**~~ — done (Unreleased): a fixable "school year end date
+  looks out of date" issue (cached `end_school_year` >30 days in the past;
+  the fix just reloads the entry) and an informational "\<endpoint\> has
+  not responded in over a week" issue for a supplementary endpoint failing
+  on every attempt for 7 straight days.
 - **`manual_smoke_test.py`** — extend to the newer endpoints (behaviour
   grades, justifications, `next_exam`-relevant).

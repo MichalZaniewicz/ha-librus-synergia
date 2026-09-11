@@ -17,7 +17,15 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
-from .const import ATTR_SUBJECT_ID
+from .const import (
+    ATTR_SUBJECT_ID,
+    CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_BEHAVIOUR_GRADES_ENABLED,
+    CONF_DESCRIPTIVE_GRADES_ENABLED,
+    DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_BEHAVIOUR_GRADES_ENABLED,
+    DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
+)
 from .coordinator import LibrusDataUpdateCoordinator
 from .librus_api.models import (
     AttendanceTypeData,
@@ -704,6 +712,18 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "unread_announcements")
 
+    @property
+    def available(self) -> bool:
+        # `unavailable` while turned off in the options flow, rather than a
+        # real-looking "0" - same precedent as the Unread messages sensor's
+        # own `messages_available` gate.
+        if not super().available:
+            return False
+        entry = self.coordinator.config_entry
+        return entry is None or bool(
+            entry.options.get(CONF_ANNOUNCEMENTS_ENABLED, DEFAULT_ANNOUNCEMENTS_ENABLED)
+        )
+
     def _unread(self) -> list[Any]:
         if self.coordinator.data is None:
             return []
@@ -833,6 +853,15 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "behaviour_grade")
 
+    @property
+    def available(self) -> bool:
+        if not super().available:
+            return False
+        entry = self.coordinator.config_entry
+        return entry is None or bool(
+            entry.options.get(CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED)
+        )
+
     def _latest(self) -> BehaviourGradeData | None:
         if self.coordinator.data is None:
             return None
@@ -883,6 +912,15 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "descriptive_grades")
+
+    @property
+    def available(self) -> bool:
+        if not super().available:
+            return False
+        entry = self.coordinator.config_entry
+        return entry is None or bool(
+            entry.options.get(CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED)
+        )
 
     @property
     def native_value(self) -> int | None:

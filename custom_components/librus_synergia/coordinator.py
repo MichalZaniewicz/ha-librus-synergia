@@ -24,12 +24,22 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_BEHAVIOUR_GRADES_ENABLED,
+    CONF_DESCRIPTIVE_GRADES_ENABLED,
+    CONF_FREE_DAYS_ENABLED,
     CONF_MESSAGES_ENABLED,
+    DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_BEHAVIOUR_GRADES_ENABLED,
+    DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
+    DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MESSAGES_ENABLED,
+    DOMAIN,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -37,7 +47,10 @@ from .const import (
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
+    ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
+    ISSUE_SCHOOL_YEAR_ROLLOVER,
     LUCKY_NUMBER_PUBLISH_HOUR,
+    OPTIONAL_ENDPOINT_LABELS,
 )
 from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSessionExpiredError
 from .librus_api.models import (
@@ -63,6 +76,20 @@ from .librus_api.models import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def optional_endpoint_issue_id(entry_id: str, label: str) -> str:
+    """Stable repair-issue id for one entry's one supplementary-endpoint
+    degradation. Public (not underscore-prefixed) - `__init__.py::
+    async_remove_entry` needs to compute the same ids to clear them when a
+    config entry is deleted for good, without needing a live coordinator."""
+    return f"{ISSUE_OPTIONAL_ENDPOINT_DEGRADED}_{entry_id}_{label.lower().replace('/', '_')}"
+
+
+def school_year_issue_id(entry_id: str) -> str:
+    """Stable repair-issue id for one entry's school-year-rollover check -
+    see `optional_endpoint_issue_id`'s docstring for why this is public."""
+    return f"{ISSUE_SCHOOL_YEAR_ROLLOVER}_{entry_id}"
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
@@ -127,6 +154,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # substitution lessons - not a real id from the API, just enough to
         # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
         self._known_timetable_disruptions: set[str] | None = None
+
+        # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
+        # to raise a repair issue only once a supplementary endpoint has
+        # failed on EVERY attempt for a week straight (not a single
+        # hiccup). In-memory only, same "a HA restart just re-seeds
+        # quietly" tradeoff as the new-item id sets above - a restart just
+        # restarts the 7-day countdown, which is fine for something this
+        # low-stakes.
+        self._optional_endpoint_first_failure: dict[str, datetime] = {}
 
     @property
     def client(self) -> LibrusApiClient:
@@ -301,18 +337,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
         )
 
-    # Labels for the SUPPLEMENTARY endpoints fetched by _async_fetch_core_
-    # payloads, in the exact order passed to that method's second
-    # asyncio.gather() - used only for the warning logged when one of them
-    # fails. Keep in sync with that gather() call.
-    _OPTIONAL_PAYLOAD_LABELS = (
-        "Grades/Comments",
-        "HomeWorkAssignments",
-        "BehaviourGrades/Points",
-        "BehaviourGrades/Points/Comments",
-        "DescriptiveGrades",
-        "ParentTeacherConferences",
-    )
+    def _feature_enabled(self, key: str, default: bool) -> bool:
+        """Read one of the options-flow feature toggles (see config_flow.py)
+        - defaults to enabled (the pre-toggle behaviour) if the entry has
+        never set it, or if called before a config_entry is attached."""
+        if self.config_entry is None:
+            return default
+        return bool(self.config_entry.options.get(key, default))
+
+    async def _maybe(self, enabled: bool, factory: Any) -> Any:
+        """Skip a network call entirely when a feature is toggled off in the
+        options flow, returning `{}` instead - the same shape every parser
+        in this module already treats identically to a genuinely empty
+        account, so no extra special-casing was needed downstream to wire
+        these toggles up. `factory` is the client's bound method itself
+        (not yet called), so a disabled feature never even builds the
+        coroutine for its real network call."""
+        if not enabled:
+            return {}
+        return await factory()
 
     async def _async_fetch_core_payloads(
         self, week_start: date, next_week_start: date
@@ -333,7 +376,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         fetched with `return_exceptions=True` so one of them failing only
         degrades THAT ONE entity to empty this cycle, same "confirmed real,
         empty" degrade path this codebase already uses for a genuinely
-        empty account."""
+        empty account.
+
+        Announcements/BehaviourGrades/DescriptiveGrades are additionally
+        gated by their own options-flow toggle via `_maybe` - disabled ones
+        never hit the network at all, in either tier."""
+        announcements_enabled = self._feature_enabled(
+            CONF_ANNOUNCEMENTS_ENABLED, DEFAULT_ANNOUNCEMENTS_ENABLED
+        )
+        behaviour_grades_enabled = self._feature_enabled(
+            CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
+        )
+        descriptive_grades_enabled = self._feature_enabled(
+            CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
+        )
+
         core = await asyncio.gather(
             self._client.async_get_me(),
             self._client.async_get_grades(),
@@ -344,35 +401,42 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_timetable(week_start),
             self._client.async_get_timetable(next_week_start),
             self._client.async_get_homeworks(),
-            self._client.async_get_school_notices(),
+            self._maybe(announcements_enabled, self._client.async_get_school_notices),
         )
 
         optional_results = await asyncio.gather(
             self._client.async_get_grade_comments(),
             self._client.async_get_homework_assignments(),
-            self._client.async_get_behaviour_grade_points(),
-            self._client.async_get_behaviour_grade_point_comments(),
-            self._client.async_get_descriptive_grades(),
+            self._maybe(behaviour_grades_enabled, self._client.async_get_behaviour_grade_points),
+            self._maybe(
+                behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_comments
+            ),
+            self._maybe(descriptive_grades_enabled, self._client.async_get_descriptive_grades),
             self._client.async_get_parent_teacher_conferences(),
             return_exceptions=True,
         )
         optional_payloads = [
             self._degrade_optional_payload(label, result)
-            for label, result in zip(self._OPTIONAL_PAYLOAD_LABELS, optional_results)
+            for label, result in zip(OPTIONAL_ENDPOINT_LABELS, optional_results)
         ]
 
         return (*core, *optional_payloads)
 
-    @staticmethod
     def _degrade_optional_payload(
-        label: str, result: dict[str, Any] | BaseException
+        self, label: str, result: dict[str, Any] | BaseException
     ) -> dict[str, Any]:
         """Turn one `return_exceptions=True` gather result into a payload,
         degrading a LibrusError to an empty dict (so its parser sees the
         same shape as a genuinely empty account) instead of letting it take
         down the rest of the core-data fetch. Anything that ISN'T a
         LibrusError (a real bug, or asyncio.CancelledError) is re-raised -
-        only confirmed API-level failures are safe to swallow here."""
+        only confirmed API-level failures are safe to swallow here.
+
+        Also feeds the optional-endpoint-degraded repair issue tracking -
+        a `_maybe()`-skipped (disabled-in-options) endpoint arrives here as
+        a plain `{}`, which counts as a "success" for that tracking (it
+        clears any previously-raised issue for it - turning a feature off
+        isn't a failure worth flagging)."""
         if isinstance(result, BaseException):
             if isinstance(result, LibrusError):
                 _LOGGER.debug(
@@ -381,9 +445,51 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     result,
                     exc_info=result,
                 )
+                self._note_optional_endpoint_failure(label)
                 return {}
             raise result
+        self._note_optional_endpoint_recovery(label)
         return result
+
+    # How long a supplementary endpoint must fail on EVERY attempt before a
+    # repair issue is raised for it - deliberately generous. Most of these
+    # endpoints are "confirmed real, empty" for entire school years at a
+    # time (see this project's own README/BACKLOG), so a short window would
+    # constantly flag perfectly normal accounts; a week of unbroken
+    # failures is a much stronger signal that something is actually wrong
+    # (a permission change, an endpoint Librus removed, etc.) rather than
+    # this account simply never having that kind of data.
+    _OPTIONAL_ENDPOINT_DEGRADED_AFTER = timedelta(days=7)
+
+    def _note_optional_endpoint_failure(self, label: str) -> None:
+        if self.config_entry is None:
+            return
+        now = dt_util.utcnow()
+        first_failed = self._optional_endpoint_first_failure.setdefault(label, now)
+        if now - first_failed < self._OPTIONAL_ENDPOINT_DEGRADED_AFTER:
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            optional_endpoint_issue_id(self.config_entry.entry_id, label),
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
+            translation_placeholders={"label": label, "since": first_failed.date().isoformat()},
+        )
+
+    def _note_optional_endpoint_recovery(self, label: str) -> None:
+        """Always attempt the delete (a no-op if nothing was raised) rather
+        than gating it on THIS coordinator instance's own in-memory
+        failure tracking - the in-memory dict resets on every reload
+        (options change, HA restart, ...), so a coordinator that comes back
+        up already healthy would otherwise never clear an issue a PREVIOUS
+        instance raised before that reload."""
+        self._optional_endpoint_first_failure.pop(label, None)
+        if self.config_entry is not None:
+            ir.async_delete_issue(
+                self.hass, DOMAIN, optional_endpoint_issue_id(self.config_entry.entry_id, label)
+            )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
         now = dt_util.now()
@@ -423,6 +529,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             and now - self._reference_data_fetched_at < timedelta(hours=24)
         ):
             return
+        free_days_enabled = self._feature_enabled(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED)
+        behaviour_grades_enabled = self._feature_enabled(
+            CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
+        )
         try:
             (
                 subjects_payload,
@@ -442,10 +552,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._client.async_get_schools(),
                 self._client.async_get_classes(),
                 self._client.async_get_homework_categories(),
-                self._client.async_get_school_free_days(),
-                self._client.async_get_class_free_days(),
+                self._maybe(free_days_enabled, self._client.async_get_school_free_days),
+                self._maybe(free_days_enabled, self._client.async_get_class_free_days),
                 self._client.async_get_note_categories(),
-                self._client.async_get_behaviour_grade_point_categories(),
+                self._maybe(
+                    behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
+                ),
             )
         except LibrusError:
             _LOGGER.warning(
@@ -461,9 +573,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
         self._cached_school = _parse_school(schools_payload)
         self._cached_class = _parse_class(classes_payload)
+        self._check_school_year_rollover()
         self._cached_homework_categories = _parse_id_name_map(
             homework_categories_payload, ("Categories",)
         )
+        # A disabled toggle's payload is already `{}` (via `_maybe`), which
+        # `_parse_free_days`/`_parse_id_name_map` below already treat the
+        # same as a genuinely empty account - no extra branching needed.
         self._cached_free_days = _parse_free_days(
             school_free_days_payload, "SchoolFreeDays"
         ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
@@ -474,6 +590,44 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             behaviour_grade_categories_payload, ("Categories",)
         )
         self._reference_data_fetched_at = now
+
+    # How long past the cached Class record's own `end_school_year` date
+    # before flagging it as possibly stale - generous on purpose. The
+    # coordinator already re-fetches `Classes` every 24h (see above), so
+    # this normally self-heals well within a day of the real school year
+    # rolling over; this only fires if Librus itself hasn't published a new
+    # Class record in over a month, which is worth a nudge to reload rather
+    # than silently showing a school year that ended a month ago forever.
+    _SCHOOL_YEAR_ROLLOVER_GRACE = timedelta(days=30)
+
+    def _check_school_year_rollover(self) -> None:
+        """Raise (or clear) the "school year rollover" repair issue based on
+        whether the cached `ClassData.end_school_year` is well in the past.
+        Called every time `_cached_class` is freshly refetched (i.e. at
+        most once a day) - see `_async_refresh_reference_data`."""
+        if self.config_entry is None:
+            return
+        issue_id = school_year_issue_id(self.config_entry.entry_id)
+        end_school_year = self._cached_class.end_school_year if self._cached_class else None
+        end_date: date | None = None
+        if end_school_year:
+            try:
+                end_date = date.fromisoformat(end_school_year[:10])
+            except ValueError:
+                end_date = None
+        if end_date is not None and dt_util.now().date() - end_date >= self._SCHOOL_YEAR_ROLLOVER_GRACE:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=ISSUE_SCHOOL_YEAR_ROLLOVER,
+                translation_placeholders={"end_date": end_school_year},
+                data={"entry_id": self.config_entry.entry_id},
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def _async_get_messages(
         self,

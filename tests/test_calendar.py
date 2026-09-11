@@ -36,6 +36,17 @@ async def test_all_calendars_are_created(hass) -> None:
     assert _entity_id(hass, entry, "free_days") is not None
 
 
+async def test_free_days_calendar_not_created_when_disabled_via_options(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client, options={"free_days_enabled": False})
+
+    assert _entity_id(hass, entry, "timetable") is not None
+    assert _entity_id(hass, entry, "agenda") is not None
+    assert _entity_id(hass, entry, "free_days") is None
+    client.async_get_school_free_days.assert_not_called()
+    client.async_get_class_free_days.assert_not_called()
+
+
 async def test_agenda_calendar_next_event_from_homeworks(hass) -> None:
     client = build_mock_client(
         async_get_homeworks={

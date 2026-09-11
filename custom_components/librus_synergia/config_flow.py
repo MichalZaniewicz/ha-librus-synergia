@@ -37,9 +37,17 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_COOKIES,
+    CONF_DESCRIPTIVE_GRADES_ENABLED,
+    CONF_FREE_DAYS_ENABLED,
     CONF_MESSAGES_ENABLED,
     CONF_SESSION_LOGGED_IN_AT,
+    DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_BEHAVIOUR_GRADES_ENABLED,
+    DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
+    DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
@@ -228,6 +236,26 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_MESSAGES_ENABLED,
                     default=options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_ANNOUNCEMENTS_ENABLED,
+                    default=options.get(CONF_ANNOUNCEMENTS_ENABLED, DEFAULT_ANNOUNCEMENTS_ENABLED),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_BEHAVIOUR_GRADES_ENABLED,
+                    default=options.get(
+                        CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
+                    ),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_DESCRIPTIVE_GRADES_ENABLED,
+                    default=options.get(
+                        CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
+                    ),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_FREE_DAYS_ENABLED,
+                    default=options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED),
                 ): BooleanSelector(),
             }
         )

@@ -29,6 +29,42 @@ MAX_SCAN_INTERVAL_MINUTES = 180
 CONF_MESSAGES_ENABLED = "messages_enabled"
 DEFAULT_MESSAGES_ENABLED = True
 
+# Same "skip the fetch, sensor goes unavailable" shape as CONF_MESSAGES_
+# ENABLED above, extended to the other optional (non-core) data groups.
+# `coordinator.py`'s `_maybe()` helper skips the network call entirely when
+# one of these is False - the existing defensive parsers already treat an
+# empty `{}` payload identically to a genuinely-empty account, so no extra
+# special-casing was needed to wire these up.
+CONF_ANNOUNCEMENTS_ENABLED = "announcements_enabled"
+DEFAULT_ANNOUNCEMENTS_ENABLED = True
+CONF_BEHAVIOUR_GRADES_ENABLED = "behaviour_grades_enabled"
+DEFAULT_BEHAVIOUR_GRADES_ENABLED = True
+CONF_DESCRIPTIVE_GRADES_ENABLED = "descriptive_grades_enabled"
+DEFAULT_DESCRIPTIVE_GRADES_ENABLED = True
+CONF_FREE_DAYS_ENABLED = "free_days_enabled"
+DEFAULT_FREE_DAYS_ENABLED = True
+
+# Labels for the SUPPLEMENTARY (tier 2, `return_exceptions=True`) endpoints
+# fetched by `coordinator.py::_async_fetch_core_payloads`, in the exact
+# order passed to that method's second `asyncio.gather()` call - used for
+# the warning logged when one fails, and for the matching repair-issue id
+# (see `coordinator.py::optional_endpoint_issue_id`). Keep in sync with
+# that gather() call. Public (not underscore-prefixed) since `__init__.py`
+# also needs it, to clear any repair issues for a removed config entry.
+OPTIONAL_ENDPOINT_LABELS = (
+    "Grades/Comments",
+    "HomeWorkAssignments",
+    "BehaviourGrades/Points",
+    "BehaviourGrades/Points/Comments",
+    "DescriptiveGrades",
+    "ParentTeacherConferences",
+)
+
+# Repair issue translation keys - see repairs.py for what each one means and
+# when it's raised/cleared.
+ISSUE_SCHOOL_YEAR_ROLLOVER = "school_year_rollover"
+ISSUE_OPTIONAL_ENDPOINT_DEGRADED = "optional_endpoint_degraded"
+
 # The daily lucky number ("szczęśliwy numerek") is normally published by this
 # local hour; the coordinator avoids re-polling it before then once today's
 # value is already cached. Mirrors ha-suunto's approach of special-casing a

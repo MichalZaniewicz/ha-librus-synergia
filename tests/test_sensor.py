@@ -524,6 +524,33 @@ async def test_descriptive_grades_sensor(hass) -> None:
     assert state.attributes["recent"][0]["subject"] == "Matematyka"
 
 
+async def test_unread_announcements_sensor_unavailable_when_disabled_via_options(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client, options={"announcements_enabled": False})
+
+    entity_id = _entity_id(hass, entry, "unread_announcements")
+    assert entity_id is not None
+    assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_behaviour_grade_sensor_unavailable_when_disabled_via_options(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client, options={"behaviour_grades_enabled": False})
+
+    entity_id = _entity_id(hass, entry, "behaviour_grade")
+    assert entity_id is not None
+    assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_descriptive_grades_sensor_unavailable_when_disabled_via_options(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client, options={"descriptive_grades_enabled": False})
+
+    entity_id = _entity_id(hass, entry, "descriptive_grades")
+    assert entity_id is not None
+    assert hass.states.get(entity_id).state == "unavailable"
+
+
 def _tt_lesson(no: int, hour_from: str, hour_to: str, subject_id: int, **flags) -> dict:
     return {
         "LessonNo": str(no),

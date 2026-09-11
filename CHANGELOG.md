@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Repair issues** - two new, deliberately conservative repairs: a fixable
+  "school year end date looks out of date" issue (cached `end_school_year`
+  more than a month in the past - normally self-heals within 24h, but a
+  one-click fix reloads the entry to force an immediate re-check), and an
+  informational "\<endpoint\> has not responded in over a week" issue for a
+  supplementary endpoint (BehaviourGrades, DescriptiveGrades, etc.) that
+  has failed on every attempt for 7 straight days - a single hiccup never
+  raises it. Both clear themselves automatically on recovery, and are
+  cleaned up for good if the config entry is deleted.
+- **Four more options-flow toggles**, matching the existing "Fetch private
+  messages" one: announcements, behaviour grade, descriptive grades, and
+  the free days calendar can each be turned off individually. A disabled
+  feature's sensor goes `unavailable` (the free days calendar entity isn't
+  created at all) and its endpoint is never called - fewer requests to
+  Librus for families that don't use a given module.
+
 ## 0.5.1
 
 Small fix + a blueprint, both from live use.

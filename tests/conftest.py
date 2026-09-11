@@ -112,10 +112,12 @@ def make_config_entry(*, options: dict | None = None, **data) -> MockConfigEntry
     )
 
 
-async def setup_integration(hass, client: AsyncMock) -> MockConfigEntry:
+async def setup_integration(
+    hass, client: AsyncMock, *, options: dict | None = None
+) -> MockConfigEntry:
     """Add a config entry and run the real `async_setup_entry`, with the
     module-level `LibrusApiClient` constructor patched to return `client`."""
-    entry = make_config_entry()
+    entry = make_config_entry(options=options)
     entry.add_to_hass(hass)
     with patch("custom_components.librus_synergia.LibrusApiClient", return_value=client):
         assert await hass.config_entries.async_setup(entry.entry_id)
