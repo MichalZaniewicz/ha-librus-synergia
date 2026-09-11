@@ -55,12 +55,11 @@
   "issues": {
     "school_year_rollover": {
       "title": "School year end date looks out of date",
-      "description": "The cached school year end date ({end_date}) is over a month in the past. This usually updates automatically within 24 hours as Librus publishes the new school year's class record, but if it hasn't yet, reloading the integration now forces an immediate re-check.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Reload to re-check the school year",
-            "description": "Reload the Librus Synergia integration now to force an immediate re-check, instead of waiting for the next scheduled refresh?"
+            "description": "The cached school year end date ({end_date}) is over a month in the past. This usually updates automatically within 24 hours as Librus publishes the new school year's class record, but if it hasn't yet, reload the integration now to force an immediate re-check."
           }
         }
       }

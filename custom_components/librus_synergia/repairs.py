@@ -27,6 +27,9 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
+
+from .const import DOMAIN
 
 
 class LibrusSchoolYearRolloverRepairFlow(RepairsFlow):
@@ -43,7 +46,19 @@ class LibrusSchoolYearRolloverRepairFlow(RepairsFlow):
         if user_input is not None:
             await self.hass.config_entries.async_reload(self._entry_id)
             return self.async_create_entry(data={})
-        return self.async_show_form(step_id="confirm", data_schema=vol.Schema({}))
+        # Same lookup the built-in generic `ConfirmRepairFlow` does - lets
+        # the confirm step's own description use the issue's own
+        # `{end_date}` placeholder (hassfest's translation schema forbids a
+        # fixable issue from ALSO having a top-level `description`, so this
+        # is the only place that placeholder can be shown).
+        description_placeholders = None
+        if issue := ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id):
+            description_placeholders = issue.translation_placeholders
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({}),
+            description_placeholders=description_placeholders,
+        )
 
 
 async def async_create_fix_flow(

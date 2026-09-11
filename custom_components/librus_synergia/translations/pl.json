@@ -55,12 +55,11 @@
   "issues": {
     "school_year_rollover": {
       "title": "Data końca roku szkolnego wygląda na nieaktualną",
-      "description": "Zapisana data końca roku szkolnego ({end_date}) minęła ponad miesiąc temu. Zwykle aktualizuje się to automatycznie w ciągu 24 godzin, gdy Librus opublikuje rekord klasy dla nowego roku szkolnego, ale jeśli tak się nie stało, przeładowanie integracji teraz wymusi natychmiastowe sprawdzenie.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Przeładuj, aby sprawdzić rok szkolny",
-            "description": "Przeładować teraz integrację Librus Synergia, aby wymusić natychmiastowe sprawdzenie, zamiast czekać na kolejne zaplanowane odświeżenie?"
+            "description": "Zapisana data końca roku szkolnego ({end_date}) minęła ponad miesiąc temu. Zwykle aktualizuje się to automatycznie w ciągu 24 godzin, gdy Librus opublikuje rekord klasy dla nowego roku szkolnego, ale jeśli tak się nie stało, przeładuj teraz integrację, aby wymusić natychmiastowe sprawdzenie."
           }
         }
       }
