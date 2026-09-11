@@ -1,0 +1,104 @@
+blueprint:
+  name: "Librus: Weekly Digest"
+  description: >
+    Every Sunday at a set time, builds a short "what's coming up this
+    week" summary - tests/sprawdziany due in the next 7 days (from the
+    Next exam sensor's own `upcoming` list, not just the single soonest
+    one), homework due this week (optional), and any still-unexcused
+    absence count (optional) - and runs your action, e.g. "send a
+    notification".
+
+
+    Use `{{ digest_text }}` in your action.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/weekly_digest_notification.yaml
+  input:
+    digest_time:
+      name: Time
+      description: When to run, every Sunday.
+      default: "18:00:00"
+      selector:
+        time: {}
+    next_exam_entity:
+      name: Next exam sensor
+      description: The Librus "Next exam" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    homework_assignments_entity:
+      name: Homework assignments sensor (optional)
+      description: List homework due in the next 7 days.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    unexcused_absences_entity:
+      name: Unexcused absences sensor (optional)
+      description: Mention the still-unexcused absence count, if any.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    notify_action:
+      name: Action
+      description: What to do with the digest (e.g. send a notification).
+      selector:
+        action: {}
+
+variables:
+  next_exam_entity: !input next_exam_entity
+  homework_assignments_entity: !input homework_assignments_entity
+  unexcused_absences_entity: !input unexcused_absences_entity
+
+triggers:
+  - trigger: time
+    at: !input digest_time
+
+conditions:
+  - condition: template
+    value_template: "{{ now().weekday() == 6 }}"
+
+actions:
+  - variables:
+      # `upcoming` items are {date, subject, category, content}; date is a
+      # plain "YYYY-MM-DD" string. Built as a plain list of lines (a
+      # namespace, since Jinja has no in-place list-comprehension syntax)
+      # rather than one giant nested template, so each source can fail
+      # independently without breaking the whole digest.
+      exam_lines: >-
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for e in (state_attr(next_exam_entity, 'upcoming') or []) -%}
+          {%- set days = (strptime(e.date, '%Y-%m-%d').date() - now().date()).days -%}
+          {%- if days is defined and 0 <= days <= 7 -%}
+            {%- set ns.lines = ns.lines + ['- ' ~ (e.subject or 'lekcja') ~ (' (' ~ e.category ~ ')' if e.category else '') ~ ' - ' ~ e.date] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      homework_lines: >-
+        {%- set ns = namespace(lines=[]) -%}
+        {%- if homework_assignments_entity -%}
+          {%- for h in (state_attr(homework_assignments_entity, 'recent') or []) -%}
+            {%- if h.due_date -%}
+              {%- set days = (strptime(h.due_date[:10], '%Y-%m-%d').date() - now().date()).days -%}
+              {%- if days is defined and 0 <= days <= 7 -%}
+                {%- set ns.lines = ns.lines + ['- ' ~ (h.topic or h.text or 'zadanie') ~ ' - ' ~ h.due_date[:10]] -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.lines | join('\n') }}
+      unexcused_count: >-
+        {{ states(unexcused_absences_entity)
+           if unexcused_absences_entity
+           and states(unexcused_absences_entity) not in ['unknown', 'unavailable', 'none']
+           else none }}
+      digest_text: >-
+        {{ 'Podsumowanie tygodnia:\n\nSprawdziany:\n' ~ (exam_lines if exam_lines else 'Brak zaplanowanych w tym tygodniu.')
+           ~ (('\n\nZadania domowe:\n' ~ homework_lines) if homework_lines else '')
+           ~ (('\n\nNieusprawiedliwione nieobecności: ' ~ unexcused_count ~ '.') if unexcused_count and unexcused_count | int(0) > 0 else '') }}
+  - !input notify_action
+
+mode: single

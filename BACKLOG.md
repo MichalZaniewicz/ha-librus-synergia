@@ -45,9 +45,13 @@ these can't be built or verified against a real shape:
   payoff (bell schedule is already derived from the timetable).
 - **More response services** — `get_timetable`, `get_grades` (so a card
   can pull data without it sitting in an attribute).
-- **More blueprints** — weekly Sunday digest (needs calendar templating),
-  "lucky number == the child's roll number" (needs the child's own number,
-  not exposed).
+- ~~**Weekly Sunday digest blueprint**~~ — done (Unreleased): built off
+  already-fetched sensor attributes (Next exam's `upcoming` list,
+  Homework assignments' `recent`, Unexcused absences) rather than a
+  `calendar.get_events` service-call template — sidesteps the templating
+  complexity originally blocking this.
+- **More blueprints** — "lucky number == the child's roll number" (needs
+  the child's own number, not exposed).
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   `librus_synergia.download_attachment` service (`LibrusMessagesGetAttachment`

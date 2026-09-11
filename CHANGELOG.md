@@ -24,6 +24,10 @@
   every cycle - no extra API calls. A subject taught by more than one
   teacher (parallel/split groups) lists all of them. Previously the
   homeroom teacher (Class sensor) was the only teacher surfaced anywhere.
+- **Weekly Digest blueprint** - every Sunday at a set time, builds a
+  `{{ digest_text }}` summary (tests due in the next 7 days from the Next
+  exam sensor's own `upcoming` list, optionally homework due this week and
+  any still-unexcused absence count) and runs your action.
 
 ## 0.5.1
 
