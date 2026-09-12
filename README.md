@@ -1,8 +1,12 @@
 # Librus Synergia (unofficial) for Home Assistant
 
+![Librus Synergia](docs/hero-banner.svg)
+
 A HACS-installable Home Assistant integration for [Librus Synergia](https://synergia.librus.pl/) - the Polish school e-register - pulling grades, attendance, behaviour notices, timetable, agenda, announcements, messages, and school/class info in as sensors and calendars.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration)
+[![License](https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia)](https://github.com/MichalZaniewicz/ha-librus-synergia/releases)
 
 > [!TIP]
 > ⭐ **Enjoying this integration?** Every star is real motivation to keep building new features :)
@@ -37,6 +41,27 @@ If you change your Librus password or mistype the login, use the integration's *
 4. Enter your Librus **login** (e.g. `1234567u` - a direct student/account login, not a Librus Portal e-mail) and password.
 
 Each child/student is a separate login and a separate integration entry.
+
+## Custom Lovelace cards
+
+Want a dashboard without wiring these sensors into generic entity cards by hand?
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
+is a companion HACS repo with 49 purpose-built cards - grade averages, a full
+grade log (per-subject or across every subject), a grade trend chart, a grade
+distribution histogram, a grade profile radar and a grades-by-category donut,
+attendance (plus a percentage/semester breakdown, a year-at-a-glance heatmap,
+and an absences-by-weekday chart), behaviour notices and the formal behaviour
+grade, messages, substitutions & alerts, announcements, homework assignments,
+a combined "what's new" activity feed, today's timetable, a week-at-a-glance
+grid, a lesson-time-by-subject donut, the agenda, free days, a "Today"
+overview, a weekly summary, the lucky number, a playful trading-card style
+student summary, an absence-free streak counter, and compact single-row
+tiles for several of the above. Each card auto-detects
+your child's device (zero YAML for the common case of one student), themes with
+your Home Assistant theme automatically, and follows your HA language (English,
+Polish).
+
+![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
 ## Entities
 
@@ -125,27 +150,6 @@ from an automation that isn't a direct response to someone opening it.
 
 Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 `send_date`, `read_date`, `has_attachment`.
-
-## Custom Lovelace cards
-
-Want a dashboard without wiring these sensors into generic entity cards by hand?
-**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 49 purpose-built cards - grade averages, a full
-grade log (per-subject or across every subject), a grade trend chart, a grade
-distribution histogram, a grade profile radar and a grades-by-category donut,
-attendance (plus a percentage/semester breakdown, a year-at-a-glance heatmap,
-and an absences-by-weekday chart), behaviour notices and the formal behaviour
-grade, messages, substitutions & alerts, announcements, homework assignments,
-a combined "what's new" activity feed, today's timetable, a week-at-a-glance
-grid, a lesson-time-by-subject donut, the agenda, free days, a "Today"
-overview, a weekly summary, the lucky number, a playful trading-card style
-student summary, an absence-free streak counter, and compact single-row
-tiles for several of the above. Each card auto-detects
-your child's device (zero YAML for the common case of one student), themes with
-your Home Assistant theme automatically, and follows your HA language (English,
-Polish).
-
-![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
 ## Known limitations / unverified details
 

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1B1740"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.055" stroke-width="1">
+    <line x1="0" y1="24" x2="1200" y2="24"/>
+    <line x1="0" y1="52" x2="1200" y2="52"/>
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="108" x2="1200" y2="108"/>
+    <line x1="0" y1="136" x2="1200" y2="136"/>
+    <line x1="0" y1="164" x2="1200" y2="164"/>
+    <line x1="0" y1="192" x2="1200" y2="192"/>
+    <line x1="0" y1="220" x2="1200" y2="220"/>
+    <line x1="0" y1="248" x2="1200" y2="248"/>
+    <line x1="0" y1="276" x2="1200" y2="276"/>
+  </g>
+
+  <text x="60" y="72" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="2.5" fill="#F5B93D">UNOFFICIAL HOME ASSISTANT INTEGRATION</text>
+  <text x="60" y="134" font-family="Georgia, 'Times New Roman', serif" font-size="54" font-weight="700" fill="#FFFFFF">Librus Synergia</text>
+  <text x="60" y="172" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#D8D4FA">Grades, attendance, timetable and more </text>
+  <text x="60" y="198" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#D8D4FA">synced straight into Home Assistant.</text>
+  <text x="60" y="240" font-family="Consolas, Menlo, monospace" font-size="14" fill="#B7B0EE">19 sensors&#160;&#160;&#183;&#160;&#160;3 calendars&#160;&#160;&#183;&#160;&#160;0% CAPTCHA</text>
+
+  <g transform="translate(870,25)">
+    <rect x="-18" y="18" width="150" height="230" rx="26" fill="#2A2568"/>
+    <rect x="10" y="8" width="190" height="250" rx="30" fill="#818CF8"/>
+    <rect x="45" y="90" width="120" height="14" rx="7" fill="#FFFFFF"/>
+    <rect x="45" y="135" width="120" height="14" rx="7" fill="#FFFFFF"/>
+    <rect x="45" y="180" width="85" height="14" rx="7" fill="#FFFFFF"/>
+    <path d="M138,8 h42 v60 l-21,-18 l-21,18 z" fill="#F59E0B"/>
+  </g>
+</svg>
