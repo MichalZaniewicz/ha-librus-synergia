@@ -1,12 +1,16 @@
 # Librus Synergia (unofficial) for Home Assistant
 
-![Librus Synergia](docs/hero-banner.svg)
+<p align="center">
+  <img src="docs/hero-banner.svg" alt="Librus Synergia">
+</p>
 
 A HACS-installable Home Assistant integration for [Librus Synergia](https://synergia.librus.pl/) - the Polish school e-register - pulling grades, attendance, behaviour notices, timetable, agenda, announcements, messages, and school/class info in as sensors and calendars.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration)
-[![License](https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia)](https://github.com/MichalZaniewicz/ha-librus-synergia/releases)
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." src="https://my.home-assistant.io/badges/hacs_repository.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia"></a>
+</p>
 
 > [!TIP]
 > ⭐ **Enjoying this integration?** Every star is real motivation to keep building new features :)
