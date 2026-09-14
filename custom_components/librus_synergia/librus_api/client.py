@@ -95,9 +95,9 @@ OnSessionUpdate = Callable[[LibrusSessionData], "Awaitable[None] | None"]
 class LibrusApiClient:
     """Thin async wrapper around Librus's Synergia/API gateway.
 
-    Never owns its own `aiohttp.ClientSession` - the caller (Home Assistant's
-    `async_get_clientsession(hass)`) provides one, so this also plays nicely
-    with `pytest-homeassistant-custom-component`'s `aioclient_mock` fixture.
+    Does not create its own `aiohttp.ClientSession` - the caller provides
+    one, so this also plays nicely with
+    `pytest-homeassistant-custom-component`'s `aioclient_mock` fixture.
 
     Unlike a bearer-token API, this client is inherently stateful in the
     session's cookie jar. It does not cache the password - callers must pass
@@ -107,6 +107,25 @@ class LibrusApiClient:
     daily with no separate refresh grant, silent unattended operation
     requires storing the password, unlike ha-suunto's long-lived session
     key).
+
+    CONFIRMED real bug (multi-child households, 3 config entries): the
+    caller MUST give each `LibrusApiClient` its own private session -
+    Home Assistant's shared, hass-wide `async_get_clientsession(hass)`
+    session has ONE cookie jar keyed only by domain
+    (`synergia.librus.pl`/etc.), not per account. Two `LibrusApiClient`
+    instances (one per student) pointed at that same shared session are
+    really sharing one `oauth_token` slot - whichever entry logged in or
+    re-imported its cookies most recently silently "wins" the jar for
+    EVERY entry's next request, however briefly, until the next login
+    overwrites it again. With independent per-entry `DataUpdateCoordinator`
+    polling cycles interleaving on the event loop, this reproduces exactly
+    as reported: one child's sensors intermittently showing another
+    child's data, "fixed" only until the next background refresh cycle
+    from any entry re-triggers the race. The caller must use
+    `homeassistant.helpers.aiohttp_client.async_create_clientsession(hass)`
+    (one call per config entry, closed via `async_close()` on unload) -
+    never the shared `async_get_clientsession(hass)` - whenever more than
+    one entry of this integration may be loaded at once.
     """
 
     def __init__(
@@ -124,6 +143,14 @@ class LibrusApiClient:
     @property
     def username(self) -> str:
         return self._username
+
+    async def async_close(self) -> None:
+        """Close the underlying session. Only meaningful (and only safe to
+        call) when the caller gave this client its own private session, per
+        this class's docstring - never call this on the shared
+        `async_get_clientsession(hass)` session, which other integrations
+        also use."""
+        await self._session.close()
 
     # ------------------------------------------------------------------
     # Session lifecycle

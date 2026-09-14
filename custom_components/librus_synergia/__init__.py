@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
@@ -54,8 +54,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
             },
         )
 
+    # A dedicated session per entry, NOT the hass-wide `async_get_
+    # clientsession(hass)` - this client's auth lives entirely in the
+    # session's cookie jar, keyed only by domain. Sharing one session
+    # across multiple students (multiple config entries) means their
+    # `oauth_token` cookies collide in that one jar - whichever entry
+    # last logged in/re-imported its cookies "wins" it for every entry's
+    # next request, so two children's coordinators polling independently
+    # end up intermittently swapping data. See LibrusApiClient's docstring.
     client = LibrusApiClient(
-        async_get_clientsession(hass),
+        async_create_clientsession(hass),
         entry.data[CONF_USERNAME],
         on_session_update=_persist_session,
     )
@@ -89,6 +97,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
 async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        # This entry's own dedicated session (see async_setup_entry) -
+        # close it here or a reload leaks one aiohttp session/connector
+        # per reload, since a fresh one is created on every setup.
+        await entry.runtime_data.client.async_close()
     # Services are domain-wide, not per-entry - only drop them once the
     # LAST Librus Synergia entry (student) is going away, so a second
     # entry doesn't lose `get_message` while the first is just reloading.

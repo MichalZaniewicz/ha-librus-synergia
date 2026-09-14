@@ -25,7 +25,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -99,37 +99,51 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
         Returns ``{"data": ..., "title": ..., "unique_id": ...}``. Raises one
         of the `librus_api` exceptions on failure.
         """
-        session = async_get_clientsession(self.hass)
-        client = LibrusApiClient(session, username)
-        session_data = await client.async_login(password)
-
-        title = username
-        unique_id = username.lower()
+        # A throwaway, dedicated session for this one-off validation login -
+        # NOT the hass-wide `async_get_clientsession(hass)`. That shared
+        # session is exactly what caused a real multi-child bug (see
+        # LibrusApiClient's docstring): its cookie jar is keyed only by
+        # domain, so two accounts' `oauth_token` cookies collide in it.
+        # Closing this session right after is fine - the resulting cookies
+        # are persisted into the entry's own data below and re-imported
+        # into that entry's own dedicated session in `async_setup_entry`,
+        # so nothing is lost by not keeping this particular session alive.
+        session = async_create_clientsession(self.hass)
         try:
-            me_payload = await client.async_get_me()
-            me = me_payload.get("Me", {})
-            account = me.get("Account", {})
-            # `Account` is the LOGIN's own identity - for a child's login
-            # under a parent-managed portal this is the PARENT's name
-            # (confirmed live: Account was "Michał Zaniewicz", the parent,
-            # while `User` below was "Kacper Zaniewicz", the actual
-            # student) - the student ("User") is what the title/device name
-            # should show, not whoever's name is on the login itself.
-            student = me.get("User", {})
-            student_name = f"{student.get('FirstName', '')} {student.get('LastName', '')}".strip()
-            if student_name:
-                title = f"E-dziennik {student_name}"
-            else:
-                account_name = f"{account.get('FirstName', '')} {account.get('LastName', '')}".strip()
-                if account_name:
-                    title = f"E-dziennik {account_name}"
-            account_id = account.get("Id")
-            if account_id is not None:
-                unique_id = str(account_id)
-        except LibrusError:
-            # A friendly title/stable id is a nice-to-have, never fatal -
-            # the login above already succeeded.
-            _LOGGER.debug("Could not fetch a display name for the new entry", exc_info=True)
+            client = LibrusApiClient(session, username)
+            session_data = await client.async_login(password)
+
+            title = username
+            unique_id = username.lower()
+            try:
+                me_payload = await client.async_get_me()
+                me = me_payload.get("Me", {})
+                account = me.get("Account", {})
+                # `Account` is the LOGIN's own identity - for a child's login
+                # under a parent-managed portal this is the PARENT's name
+                # (confirmed live: Account was "Michał Zaniewicz", the parent,
+                # while `User` below was "Kacper Zaniewicz", the actual
+                # student) - the student ("User") is what the title/device name
+                # should show, not whoever's name is on the login itself.
+                student = me.get("User", {})
+                student_name = f"{student.get('FirstName', '')} {student.get('LastName', '')}".strip()
+                if student_name:
+                    title = f"E-dziennik {student_name}"
+                else:
+                    account_name = (
+                        f"{account.get('FirstName', '')} {account.get('LastName', '')}".strip()
+                    )
+                    if account_name:
+                        title = f"E-dziennik {account_name}"
+                account_id = account.get("Id")
+                if account_id is not None:
+                    unique_id = str(account_id)
+            except LibrusError:
+                # A friendly title/stable id is a nice-to-have, never fatal -
+                # the login above already succeeded.
+                _LOGGER.debug("Could not fetch a display name for the new entry", exc_info=True)
+        finally:
+            await session.close()
 
         return {
             "data": {

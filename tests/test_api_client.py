@@ -331,3 +331,15 @@ async def test_import_session_restores_validity_without_network() -> None:
             )
         )
         assert client.is_session_valid()
+
+
+async def test_async_close_closes_the_underlying_session() -> None:
+    """`async_close` must close whatever session this client was given -
+    the caller (see `custom_components/librus_synergia/__init__.py`) relies
+    on this to release a per-entry session on unload, instead of leaking one
+    aiohttp session per reload."""
+    session = aiohttp.ClientSession()
+    client = LibrusApiClient(session, "1234567u")
+    assert not session.closed
+    await client.async_close()
+    assert session.closed
