@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.1-beta.1
+
+**Beta release** - opt in via HACS -> Librus Synergia -> ⋮ -> "Redownload"
+-> enable "Show beta versions", to try this before it's promoted to the
+stable channel.
+
+### Fixed
+- **Next exam sensor missed "kartkówka" entries filed under the generic
+  "Inne" (Other) Agenda category** ([issue #1](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/1))
+  - some teachers only name the assessment type in the free-text
+  description, not the category. `sensor.*_next_exam` now also matches the
+  description against the same keyword list when the category itself
+  doesn't match, instead of requiring the category alone to say
+  "sprawdzian"/"kartkówka"/etc.
+
 ## 0.6.0
 
 ### Added

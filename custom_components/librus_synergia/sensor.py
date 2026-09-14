@@ -165,6 +165,14 @@ def _lesson_attrs(
 # are the other standard Polish assessment names. Best-effort by design -
 # a school naming a test category something else just won't be picked up
 # (no false positives is the priority over catching every one).
+#
+# CONFIRMED real-world gap (GitHub issue #1, "Kartkowki w inne"): some
+# teachers file a "kartkówka" under the generic `Inne` (Other) category
+# and only name it in the free-text description instead - a category-only
+# match misses these entirely. `_upcoming()` below therefore also tests
+# `item.content` against this same regex as a fallback whenever the
+# category itself doesn't match, rather than requiring a second, separate
+# keyword list to stay in sync with this one.
 _EXAM_CATEGORY_RE = re.compile(
     r"sprawdzian|praca\s+klasowa|kartków|egzamin|diagnoz", re.IGNORECASE
 )
@@ -1325,7 +1333,8 @@ class LibrusNextExamSensor(LibrusSensorBase):
     the Agenda feed. State is a date (`device_class: date`); attributes
     carry `days_until`, the subject, the category name, the description and
     an `upcoming` list. `unknown` when nothing assessment-like is on the
-    agenda. Exam detection is by the Agenda category name (see
+    agenda. Exam detection is by the Agenda category name, falling back to
+    the free-text description when the category itself doesn't match (see
     `_EXAM_CATEGORY_RE`) - deliberately conservative."""
 
     _attr_translation_key = "next_exam"
@@ -1349,7 +1358,9 @@ class LibrusNextExamSensor(LibrusSensorBase):
                 if item.category_id is not None
                 else None
             )
-            if not category or _EXAM_CATEGORY_RE.search(category) is None:
+            category_match = category is not None and _EXAM_CATEGORY_RE.search(category)
+            content_match = item.content and _EXAM_CATEGORY_RE.search(item.content)
+            if not category_match and not content_match:
                 continue
             try:
                 day = date.fromisoformat(item.date[:10])
