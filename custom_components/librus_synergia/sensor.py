@@ -173,8 +173,11 @@ def _lesson_attrs(
 # `item.content` against this same regex as a fallback whenever the
 # category itself doesn't match, rather than requiring a second, separate
 # keyword list to stay in sync with this one.
+#
+# "quiz" added on user request (same issue thread) - another word some
+# teachers use for a short/informal test, same as "kartkówka".
 _EXAM_CATEGORY_RE = re.compile(
-    r"sprawdzian|praca\s+klasowa|kartków|egzamin|diagnoz", re.IGNORECASE
+    r"sprawdzian|praca\s+klasowa|kartków|egzamin|diagnoz|quiz", re.IGNORECASE
 )
 
 

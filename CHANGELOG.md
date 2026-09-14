@@ -1,45 +1,40 @@
 # Changelog
 
-## 0.6.1-beta.2
+## 0.6.1
 
-**Beta release** - opt in via HACS -> Librus Synergia -> ⋮ -> "Redownload"
--> enable "Show beta versions", to try this before it's promoted to the
-stable channel.
+Promoted from the `0.6.1-beta.1`/`0.6.1-beta.2` testing line, with one more
+small addition on top (the "quiz" keyword below) - both fixes were
+confirmed live by the reporting user before this promotion.
 
 ### Fixed
 - **Multi-child households (2+ config entries) could intermittently show
-  one child's data on another child's sensors** - reported live by a user
-  running 3 config entries, one per student. Root cause: every entry's
-  `LibrusApiClient` was built on Home Assistant's shared, hass-wide
-  `async_get_clientsession(hass)`. This client's auth lives entirely in
-  the session's cookie jar, and aiohttp's cookie jar is keyed only by
-  domain (`synergia.librus.pl`) - not per account. With multiple entries
-  sharing one jar, whichever entry logged in or re-imported its cookies
-  most recently silently "won" that one `oauth_token` slot for every
-  OTHER entry's next request too, however briefly, until the next login
-  overwrote it again - and independent per-entry polling cycles racing on
-  the event loop reproduced this exactly as reported (data crossing over
-  between siblings, "fixed" only until the next background refresh from
-  any entry re-triggered the race - matching why reloading the affected
-  entry only ever helped temporarily). Fixed: each config entry now gets
-  its own dedicated session (`async_create_clientsession`), closed on
-  unload; the config flow's own one-off login-validation session was
-  switched the same way, for the same reason.
-
-## 0.6.1-beta.1
-
-**Beta release** - opt in via HACS -> Librus Synergia -> ⋮ -> "Redownload"
--> enable "Show beta versions", to try this before it's promoted to the
-stable channel.
-
-### Fixed
+  one child's data on another child's sensors** ([issue #2](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/2))
+  - reported live by a user running 3 config entries, one per student.
+  Root cause: every entry's `LibrusApiClient` was built on Home
+  Assistant's shared, hass-wide `async_get_clientsession(hass)`. This
+  client's auth lives entirely in the session's cookie jar, and aiohttp's
+  cookie jar is keyed only by domain (`synergia.librus.pl`) - not per
+  account. With multiple entries sharing one jar, whichever entry logged
+  in or re-imported its cookies most recently silently "won" that one
+  `oauth_token` slot for every OTHER entry's next request too, however
+  briefly, until the next login overwrote it again - and independent
+  per-entry polling cycles racing on the event loop reproduced this
+  exactly as reported (data crossing over between siblings, "fixed" only
+  until the next background refresh from any entry re-triggered the race
+  - matching why reloading the affected entry only ever helped
+  temporarily). Fixed: each config entry now gets its own dedicated
+  session (`async_create_clientsession`), closed on unload; the config
+  flow's own one-off login-validation session was switched the same way,
+  for the same reason.
 - **Next exam sensor missed "kartkówka" entries filed under the generic
   "Inne" (Other) Agenda category** ([issue #1](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/1))
   - some teachers only name the assessment type in the free-text
   description, not the category. `sensor.*_next_exam` now also matches the
   description against the same keyword list when the category itself
   doesn't match, instead of requiring the category alone to say
-  "sprawdzian"/"kartkówka"/etc.
+  "sprawdzian"/"kartkówka"/etc. Also added "quiz" to that keyword list, on
+  the reporting user's follow-up request - another word some teachers use
+  for a short/informal test.
 
 ## 0.6.0
 

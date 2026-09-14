@@ -752,6 +752,33 @@ async def test_next_exam_sensor_falls_back_to_content_keyword(hass) -> None:
     assert state.attributes["subject"] == "Geografia"
 
 
+async def test_next_exam_sensor_matches_quiz_keyword(hass) -> None:
+    """"quiz" - another informal-test word some teachers use, same
+    treatment as "kartkówka" - added on user request."""
+    today = dt_util.now().date()
+    exam_day = (today + timedelta(days=1)).isoformat()
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Angielski"}]},
+        async_get_homework_categories={"Categories": [{"Id": 9, "Name": "Inne"}]},
+        async_get_homeworks={
+            "HomeWorks": [
+                {
+                    "Id": 1,
+                    "Content": "Quiz z rozdziału 3",
+                    "Date": exam_day,
+                    "Category": {"Id": 9},
+                    "Subject": {"Id": 100},
+                },
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "next_exam"))
+    assert state.state == exam_day
+    assert state.attributes["subject"] == "Angielski"
+
+
 async def test_school_sensor_exposes_bell_schedule(hass) -> None:
     """bell_schedule just echoes back whatever HourFrom/HourTo strings the
     timetable carries, so fixed clock times are fine here (no dependency on
