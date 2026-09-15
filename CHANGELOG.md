@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2
 
 ### Fixed
 - **The integration failed to load at all (`setup_retry`, no entities/data)
