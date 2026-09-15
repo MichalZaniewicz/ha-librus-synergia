@@ -83,7 +83,14 @@ class NoteData:
 
 @dataclass(slots=True)
 class AttendanceData:
-    id: int
+    # CONFIRMED live 2026-09-15: most Attendances[].Id values are plain
+    # numeric strings ("41685"), but some real records carry a "t"-prefixed
+    # id ("t41685", meaning unknown - not documented anywhere upstream
+    # either). int()-converting unconditionally crashed the whole
+    # coordinator update on any account with one of these. Keep as str
+    # when it isn't cleanly int-able rather than guessing at a stripped
+    # numeric fallback.
+    id: int | str
     lesson_id: int | None
     lesson_no: int | None
     date: str | None

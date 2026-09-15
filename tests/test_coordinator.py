@@ -766,6 +766,36 @@ async def test_new_absence_event_fires_with_excused_flag(hass) -> None:
     assert events[0].data["lesson_no"] == 3
 
 
+async def test_attendance_with_non_numeric_id_does_not_crash_coordinator(hass) -> None:
+    """CONFIRMED live 2026-09-15: some real Attendances[].Id values are
+    "t"-prefixed strings (e.g. "t41685"), not plain numeric ones - blindly
+    int()-converting every id crashed the whole coordinator update
+    (setup_retry) for any account with one of these records."""
+    events = async_capture_events(hass, EVENT_NEW_ABSENCE)
+    client = build_mock_client(
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+            ]
+        },
+        async_get_attendances={
+            "Attendances": [
+                {"Id": "t41685", "Date": "2026-09-11", "LessonNo": 3, "Type": {"Id": 1}},
+                {"Id": 502, "Date": "2026-09-11", "Type": {"Id": 100}},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.last_update_success is True
+    assert coordinator.data is not None
+    assert coordinator.data.attendances[0].id == "t41685"
+    assert events == []  # first refresh seeds silently, doesn't fire yet
+
+
 async def test_new_homework_event_carries_resolved_subject_and_category(hass) -> None:
     events = async_capture_events(hass, EVENT_NEW_HOMEWORK)
     client = build_mock_client(

@@ -290,7 +290,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_note_ids: set[int] | None = None
         self._known_message_ids: set[str] | None = None
         self._known_homework_ids: set[int] | None = None
-        self._known_absence_ids: set[int] | None = None
+        # Attendances ids are usually int-able but not always (a "t"-prefixed
+        # id like "t41685" has been observed live) - see AttendanceData.id.
+        self._known_absence_ids: set[int | str] | None = None
         # Synthetic "date|period|kind|subject" signatures for cancelled /
         # substitution lessons - not a real id from the API, just enough to
         # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
@@ -1026,7 +1028,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         says which). Seeded silently on the first sync like the other
         events."""
         entry_id = self.config_entry.entry_id if self.config_entry else None
-        items: dict[int, dict[str, Any]] = {}
+        items: dict[int | str, dict[str, Any]] = {}
         for attendance in attendances:
             attendance_type = (
                 attendance_types.get(attendance.type_id)
@@ -1276,9 +1278,16 @@ def _parse_attendances(payload: dict[str, Any]) -> list[AttendanceData]:
             continue
         lesson = item.get("Lesson") or {}
         type_ = item.get("Type") or {}
+        raw_id = item["Id"]
+        try:
+            item_id: int | str = int(raw_id)
+        except (TypeError, ValueError):
+            # CONFIRMED live: some records use a "t"-prefixed id (e.g.
+            # "t41685") instead of a plain numeric one - see AttendanceData.
+            item_id = str(raw_id)
         attendances.append(
             AttendanceData(
-                id=int(item["Id"]),
+                id=item_id,
                 lesson_id=lesson.get("Id"),
                 lesson_no=item.get("LessonNo"),
                 date=item.get("Date"),

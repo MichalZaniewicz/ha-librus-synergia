@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The integration failed to load at all (`setup_retry`, no entities/data)
+  on any account with at least one non-numeric attendance record id.**
+  `Attendances[].Id` was assumed to always be a plain numeric value and
+  unconditionally `int()`-converted; a real record with a `t`-prefixed id
+  (e.g. `"t41685"`) raised `ValueError` and crashed the whole coordinator
+  update every cycle, immediately after upgrading. Now kept as a string
+  when it isn't cleanly convertible to an int, instead of assuming every
+  Attendances id has the same shape.
+
 ## 0.6.1
 
 Promoted from the `0.6.1-beta.1`/`0.6.1-beta.2` testing line, with one more
