@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 ### Added
 - **Optional "student's number in the class register" option**
