@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Optional "student's number in the class register" option**
+  (`CONF_STUDENT_NUMBER`, options flow) - Librus's API does not expose this
+  anywhere at all (confirmed via szkolny-android's own reference source;
+  even that app just asks the user to type it in once), so it's a fact the
+  user enters by hand, not fetched data. When set, the Lucky number sensor
+  gains `student_number`/`is_yours` attributes so a card can highlight
+  whenever today's (or the next published) lucky number is the student's
+  own. Left unset, `is_yours` stays `None` rather than falsely reporting
+  `False`.
+
 ## 0.6.2
 
 ### Fixed

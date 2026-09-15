@@ -48,6 +48,7 @@ from .const import (
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
     CONF_SESSION_LOGGED_IN_AT,
+    CONF_STUDENT_NUMBER,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
@@ -334,6 +335,17 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_FREE_DAYS_ENABLED,
                     default=options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED),
                 ): BooleanSelector(),
+                # Genuinely optional, no default - Librus's API doesn't expose
+                # this anywhere (CONFIRMED via szkolny-android's own reference
+                # source), so it's a fact the user types in once, not fetched
+                # data. Left blank, the Lucky number sensor's `is_yours`
+                # attribute stays `None` instead of falsely reporting `False`.
+                vol.Optional(
+                    CONF_STUDENT_NUMBER,
+                    description={"suggested_value": options.get(CONF_STUDENT_NUMBER)},
+                ): NumberSelector(
+                    NumberSelectorConfig(min=1, max=99, step=1, mode=NumberSelectorMode.BOX)
+                ),
                 vol.Required(
                     CONF_QUIET_HOURS_ENABLED,
                     default=options.get(CONF_QUIET_HOURS_ENABLED, DEFAULT_QUIET_HOURS_ENABLED),

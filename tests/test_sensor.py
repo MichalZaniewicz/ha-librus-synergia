@@ -58,6 +58,44 @@ async def test_lucky_number_sensor_flags_when_published_for_a_future_day(hass) -
     assert state.attributes["is_today"] is False
 
 
+async def test_lucky_number_sensor_flags_is_yours_when_student_number_matches(hass) -> None:
+    """Librus's API doesn't expose the student's own class-register number
+    anywhere (confirmed via szkolny-android's reference source) - it's a
+    fact the user types in once via CONF_STUDENT_NUMBER, not fetched data."""
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 7, "LuckyNumberDay": "2099-01-01"}}
+    )
+    entry = await setup_integration(hass, client, options={"student_number": 7})
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.attributes["student_number"] == 7
+    assert state.attributes["is_yours"] is True
+
+
+async def test_lucky_number_sensor_flags_is_yours_false_when_student_number_differs(hass) -> None:
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 7, "LuckyNumberDay": "2099-01-01"}}
+    )
+    entry = await setup_integration(hass, client, options={"student_number": 12})
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.attributes["student_number"] == 12
+    assert state.attributes["is_yours"] is False
+
+
+async def test_lucky_number_sensor_is_yours_none_when_student_number_not_configured(hass) -> None:
+    """Unset must stay `None` ("unknown"), not falsely report `False` -
+    most families won't have configured this at all."""
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 7, "LuckyNumberDay": "2099-01-01"}}
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.attributes["student_number"] is None
+    assert state.attributes["is_yours"] is None
+
+
 async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     """CONFIRMED live: most attendance records are ordinary "present" marks
     (IsPresenceKind=true) - the sensor's primary state must count only the

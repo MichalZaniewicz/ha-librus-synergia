@@ -57,6 +57,16 @@ DEFAULT_DESCRIPTIVE_GRADES_ENABLED = True
 CONF_FREE_DAYS_ENABLED = "free_days_enabled"
 DEFAULT_FREE_DAYS_ENABLED = True
 
+# The student's own number in the class register ("numer w dzienniku") -
+# CONFIRMED (via szkolny-android's reference source) that Librus's API does
+# not expose this anywhere at all; even that reference app just asks the
+# user to type it in once via a settings dialog rather than fetching it.
+# Genuinely optional and unset by default (no DEFAULT_* - absent means "not
+# configured", distinct from any real roster number) so the Lucky number
+# sensor's `is_yours` attribute can stay `None` ("unknown, not configured")
+# rather than falsely reporting `False` for a family that never set this.
+CONF_STUDENT_NUMBER = "student_number"
+
 # Labels for the SUPPLEMENTARY (tier 2, `return_exceptions=True`) endpoints
 # fetched by `coordinator.py::_async_fetch_core_payloads`, in the exact
 # order passed to that method's second `asyncio.gather()` call - used for

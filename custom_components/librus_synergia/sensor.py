@@ -23,6 +23,7 @@ from .const import (
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
+    CONF_STUDENT_NUMBER,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
@@ -847,9 +848,19 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         if self.coordinator.data is None or self.coordinator.data.lucky_number is None:
             return None
         day = self.coordinator.data.lucky_number.day
+        entry = self.coordinator.config_entry
+        raw_student_number = entry.options.get(CONF_STUDENT_NUMBER) if entry else None
+        student_number = int(raw_student_number) if raw_student_number is not None else None
+        is_yours = (
+            student_number == self.coordinator.data.lucky_number.number
+            if student_number is not None
+            else None
+        )
         return {
             "day": day,
             "is_today": day == dt_util.now().date().isoformat() if day else None,
+            "student_number": student_number,
+            "is_yours": is_yours,
         }
 
 

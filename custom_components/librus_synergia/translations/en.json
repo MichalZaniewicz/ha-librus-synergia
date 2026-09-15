@@ -50,6 +50,7 @@
           "behaviour_grades_enabled": "Fetch behaviour grade (ocena zachowania)",
           "descriptive_grades_enabled": "Fetch descriptive grades",
           "free_days_enabled": "Fetch free days calendar",
+          "student_number": "Student's number in the class register",
           "quiet_hours_enabled": "Enable quiet hours (skip polling overnight)",
           "quiet_hours_start": "Quiet hours start",
           "quiet_hours_end": "Quiet hours end"
@@ -61,6 +62,7 @@
           "behaviour_grades_enabled": "When off, the Behaviour grade sensor goes unavailable and no BehaviourGrades calls are made.",
           "descriptive_grades_enabled": "When off, the Descriptive grades sensor goes unavailable and no DescriptiveGrades calls are made.",
           "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
+          "student_number": "Optional - Librus's API doesn't expose this anywhere, so it has to be entered by hand. When set, the Lucky number sensor shows whether it's your number. Leave blank to disable.",
           "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
           "quiet_hours_start": "Only used while quiet hours are enabled above.",
           "quiet_hours_end": "Only used while quiet hours are enabled above. Can be earlier than the start time (e.g. 23:00 -> 06:00) to span midnight."

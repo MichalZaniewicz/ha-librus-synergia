@@ -50,6 +50,7 @@
           "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
           "descriptive_grades_enabled": "Pobieraj oceny opisowe",
           "free_days_enabled": "Pobieraj kalendarz dni wolnych",
+          "student_number": "Numer ucznia w dzienniku",
           "quiet_hours_enabled": "Włącz ciszę nocną (bez odpytywania w nocy)",
           "quiet_hours_start": "Początek ciszy nocnej",
           "quiet_hours_end": "Koniec ciszy nocnej"
@@ -61,6 +62,7 @@
           "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
           "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne.",
+          "student_number": "Opcjonalne - Librus nie udostępnia tej informacji w API, więc trzeba wpisać ją ręcznie. Gdy podany, sensor Szczęśliwy numerek pokaże, czy to Twój numerek. Zostaw puste, aby wyłączyć.",
           "quiet_hours_enabled": "Gdy włączone, w oknie poniżej nie są pobierane żadne dane z Librusa - encje po prostu zachowują ostatni znany stan przez noc.",
           "quiet_hours_start": "Używane tylko, gdy cisza nocna jest włączona powyżej.",
           "quiet_hours_end": "Używane tylko, gdy cisza nocna jest włączona powyżej. Może być wcześniejsze niż godzina początku (np. 23:00 -> 06:00), aby obejmować północ."

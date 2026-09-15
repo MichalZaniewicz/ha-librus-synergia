@@ -20,6 +20,7 @@ from custom_components.librus_synergia.const import (
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
+    CONF_STUDENT_NUMBER,
     DOMAIN,
 )
 from custom_components.librus_synergia.librus_api import (
@@ -324,3 +325,30 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         CONF_QUIET_HOURS_START: "22:30:00",
         CONF_QUIET_HOURS_END: "07:15:00",
     }
+
+
+async def test_options_flow_student_number_is_optional_and_round_trips(hass) -> None:
+    """CONF_STUDENT_NUMBER has no default (unlike the feature toggles above)
+    - Librus's API doesn't expose this anywhere, so leaving it out of the
+    submitted form must leave it genuinely absent from options, not filled
+    in with some default."""
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCAN_INTERVAL: 20, CONF_MESSAGES_ENABLED: True, CONF_STUDENT_NUMBER: 7},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_STUDENT_NUMBER] == 7
+
+    # Submitted again without it (e.g. the user cleared the field) - options
+    # is fully replaced, so it should genuinely disappear, not linger.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCAN_INTERVAL: 20, CONF_MESSAGES_ENABLED: True},
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert CONF_STUDENT_NUMBER not in entry.options
