@@ -11,6 +11,9 @@ blueprint:
     Inside your chosen action, use `{{ absence_summary }}` for a ready-made
     one-liner, or the fields directly: `{{ trigger.event.data.date }}`,
     `{{ trigger.event.data.type }}`, `{{ trigger.event.data.lesson_no }}`.
+    If you use this blueprint for more than one child, `absence_summary` is
+    already prefixed with `{{ trigger.event.data.student }}` (the child's
+    name) so one shared notification still says whose absence it is.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/unexcused_absence_notification.yaml
   input:
@@ -31,7 +34,7 @@ conditions:
 actions:
   - variables:
       absence_summary: >-
-        Nieusprawiedliwiona nieobecność: {{ trigger.event.data.date }}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nieusprawiedliwiona nieobecność: {{ trigger.event.data.date }}
         {{ ('(lekcja ' ~ trigger.event.data.lesson_no ~ ')') if trigger.event.data.lesson_no else '' }}
   - !input notify_action
 

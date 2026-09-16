@@ -52,7 +52,20 @@ class LibrusSessionExpiredError(LibrusAuthError):
     password is very likely still correct here, so the coordinator forces
     one fresh login + retry (see coordinator.py::_async_update_data)
     before ever surfacing Home Assistant's reauth flow to the user. Only
-    escalate to reauth if that forced re-login itself fails."""
+    escalate to reauth if that forced re-login itself fails.
+
+    `status_code` (CONFIRMED reported live, issue #4) - a 403 on
+    `Timetables` specifically can mean the school simply hasn't published
+    the class's timetable yet ("Plan lekcji klasy ... nie został jeszcze
+    opublikowany" in Synergia's own web UI), a real and permanent-until-the-
+    school-acts condition that a fresh re-login can never fix. Kept
+    separate from a genuine 401 (session actually dead) so the coordinator
+    can tell the two apart instead of forcing a pointless relogin-and-retry
+    that only ends in an incorrect reauth prompt."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class LibrusCaptchaRequiredError(LibrusAuthError):

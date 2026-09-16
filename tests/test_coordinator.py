@@ -98,6 +98,11 @@ async def test_second_refresh_fires_new_grade_event(hass) -> None:
     assert len(events) == 1
     assert events[0].data["id"] == 1
     assert events[0].data["value"] == "5"
+    # CONFIRMED reported live (multi-child household, issue #3): a
+    # notification blueprint has no other way to say WHOSE grade this is -
+    # one blueprint instance's action runs for every config entry
+    # (student) that fires the event.
+    assert events[0].data["student"] == "Kacper Zaniewicz"
 
 
 async def test_grade_seen_twice_is_not_re_announced(hass) -> None:
@@ -159,6 +164,32 @@ async def test_session_expired_mid_cycle_recovers_via_forced_relogin(hass) -> No
     assert client.async_ensure_session_valid.call_count == 2
     _, kwargs = client.async_ensure_session_valid.call_args
     assert kwargs.get("force") is True
+
+
+async def test_timetables_unpublished_403_loads_rest_of_data_without_reauth(hass) -> None:
+    """CONFIRMED reported live (issue #4): a school that hasn't published
+    the class's timetable yet makes Librus return HTTP 403 on `Timetables`
+    specifically - Synergia's own web UI shows an explicit "not published"
+    message for this exact case. A fresh re-login can never fix this (the
+    login itself succeeds fine), so unlike a genuine 401 it must NOT force
+    a relogin-and-retry or ever escalate to reauth - just degrade to an
+    empty timetable and load everything else normally."""
+    client = build_mock_client()
+    client.async_get_timetable.side_effect = LibrusSessionExpiredError(
+        "Session rejected on .../Timetables (HTTP 403).", status_code=403
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.timetable == {}
+    # No forced relogin attempted - only the normal top-of-cycle freshness
+    # check, never the `force=True` recovery path a genuine 401 triggers.
+    assert client.async_ensure_session_valid.call_count == 1
+    force_calls = [
+        c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
+    ]
+    assert force_calls == []
 
 
 async def test_session_expired_and_relogin_also_fails_raises_auth_failed(hass) -> None:
@@ -764,6 +795,7 @@ async def test_new_absence_event_fires_with_excused_flag(hass) -> None:
     assert events[0].data["excused"] is False
     assert events[0].data["date"] == "2026-09-11"
     assert events[0].data["lesson_no"] == 3
+    assert events[0].data["student"] == "Kacper Zaniewicz"
 
 
 async def test_attendance_with_non_numeric_id_does_not_crash_coordinator(hass) -> None:

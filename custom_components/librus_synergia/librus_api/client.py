@@ -145,12 +145,27 @@ class LibrusApiClient:
         return self._username
 
     async def async_close(self) -> None:
-        """Close the underlying session. Only meaningful (and only safe to
-        call) when the caller gave this client its own private session, per
-        this class's docstring - never call this on the shared
+        """Release the underlying session. Only meaningful (and only safe
+        to call) when the caller gave this client its own private session,
+        per this class's docstring - never call this on the shared
         `async_get_clientsession(hass)` session, which other integrations
-        also use."""
-        await self._session.close()
+        also use.
+
+        BUG FIX (reported live, issue #4): a session obtained from
+        `homeassistant.helpers.aiohttp_client.async_create_clientsession`
+        has its own `.close()` replaced by HA's frame helper with a no-op
+        that only logs a "closes the Home Assistant aiohttp session"
+        deprecation report - it never actually calls the real underlying
+        `close()`. `.detach()` is the officially correct way to release
+        such a session (HA's own internal auto-cleanup uses exactly this -
+        see `_async_register_clientsession_shutdown` in
+        `homeassistant/helpers/aiohttp_client.py`): it drops this session's
+        reference to its (possibly shared, HA-pooled) connector without
+        touching the connector's own separate lifecycle, and is not
+        wrapped/neutered the way `.close()` is. Works identically on a
+        plain, non-HA `aiohttp.ClientSession` too (used directly by this
+        client's own standalone test suite)."""
+        self._session.detach()
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -320,8 +335,13 @@ class LibrusApiClient:
                     # means an already-established session died mid-cycle,
                     # which the stored password can very likely fix without
                     # asking the user anything. See LibrusSessionExpiredError.
+                    # status_code is carried through so a caller can tell a
+                    # genuine 401 apart from a 403 that might mean something
+                    # else entirely for a specific endpoint (e.g. Timetables'
+                    # "not published yet", not an auth problem at all).
                     raise LibrusSessionExpiredError(
-                        f"Session rejected on {url} (HTTP {response.status})."
+                        f"Session rejected on {url} (HTTP {response.status}).",
+                        status_code=response.status,
                     )
                 if response.status >= 400:
                     raise LibrusUnexpectedResponseError(

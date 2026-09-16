@@ -347,6 +347,29 @@ async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass, f
     assert len(force_calls) == 1
 
 
+async def test_timetable_calendar_treats_403_as_unpublished_not_session_expiry(hass) -> None:
+    """CONFIRMED reported live (issue #4): unlike a genuine 401, a 403 on
+    `Timetables` can mean the school simply hasn't published the class's
+    timetable yet - a fresh re-login can never fix that. The on-demand
+    calendar path must degrade straight to "no lessons known" WITHOUT ever
+    attempting a forced relogin, unlike the 401 case above."""
+    client = build_mock_client()
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    client.async_get_timetable.side_effect = LibrusSessionExpiredError(
+        "Session rejected on .../Timetables (HTTP 403).", status_code=403
+    )
+
+    events = await _get_timetable_events(hass, entity_id)
+
+    assert events == []
+    force_calls = [
+        c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
+    ]
+    assert force_calls == []
+
+
 async def test_timetable_calendar_degrades_gracefully_when_recovery_fails(hass) -> None:
     """If the forced re-login retry ALSO fails, the calendar must degrade
     to "no lessons known for this week" rather than propagate the raw

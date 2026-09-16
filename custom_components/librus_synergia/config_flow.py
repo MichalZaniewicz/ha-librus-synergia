@@ -105,10 +105,11 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
         # session is exactly what caused a real multi-child bug (see
         # LibrusApiClient's docstring): its cookie jar is keyed only by
         # domain, so two accounts' `oauth_token` cookies collide in it.
-        # Closing this session right after is fine - the resulting cookies
-        # are persisted into the entry's own data below and re-imported
-        # into that entry's own dedicated session in `async_setup_entry`,
-        # so nothing is lost by not keeping this particular session alive.
+        # Releasing this session right after is fine - the resulting
+        # cookies are persisted into the entry's own data below and
+        # re-imported into that entry's own dedicated session in
+        # `async_setup_entry`, so nothing is lost by not keeping this
+        # particular session alive.
         session = async_create_clientsession(self.hass)
         try:
             client = LibrusApiClient(session, username)
@@ -144,7 +145,13 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
                 # the login above already succeeded.
                 _LOGGER.debug("Could not fetch a display name for the new entry", exc_info=True)
         finally:
-            await session.close()
+            # BUG FIX (reported live, issue #4): `.close()` on a session
+            # from `async_create_clientsession` is replaced by HA's frame
+            # helper with a no-op that only logs a "closes the Home
+            # Assistant aiohttp session" deprecation report - see
+            # LibrusApiClient.async_close's docstring for the full
+            # explanation. `.detach()` is the real, HA-blessed release.
+            session.detach()
 
         return {
             "data": {

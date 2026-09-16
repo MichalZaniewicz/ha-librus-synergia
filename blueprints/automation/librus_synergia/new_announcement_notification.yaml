@@ -6,8 +6,10 @@ blueprint:
     `librus_synergia_new_announcement` event.
 
 
-    Inside your chosen action, use `{{ trigger.event.data.subject }}` for the
-    announcement's title.
+    Inside your chosen action, use `{{ announcement_summary }}` for a
+    ready-made line (the child's name prefixed, if this blueprint is used
+    for more than one), or `{{ trigger.event.data.subject }}` directly for
+    just the announcement's title.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_announcement_notification.yaml
   input:
@@ -22,6 +24,9 @@ triggers:
     event_type: librus_synergia_new_announcement
 
 actions:
+  - variables:
+      announcement_summary: >-
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ trigger.event.data.subject }}
   - !input notify_action
 
 mode: queued

@@ -11,6 +11,9 @@ blueprint:
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.date }}`,
     `{{ trigger.event.data.lesson_no }}`, `{{ trigger.event.data.kind }}`
     (`canceled` or `substitution`), `{{ trigger.event.data.hour_from }}`.
+    If you use this blueprint for more than one child, `change_summary` is
+    already prefixed with `{{ trigger.event.data.student }}` (the child's
+    name) so one shared notification still says whose lesson changed.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/lesson_change_notification.yaml
   input:
@@ -27,7 +30,7 @@ triggers:
 actions:
   - variables:
       change_summary: >-
-        {{ 'Odwołana lekcja' if trigger.event.data.kind == 'canceled' else 'Zastępstwo' }}:
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ 'Odwołana lekcja' if trigger.event.data.kind == 'canceled' else 'Zastępstwo' }}:
         {{ trigger.event.data.subject or ('lekcja ' ~ trigger.event.data.lesson_no) }}
         ({{ trigger.event.data.date }}{{ ', ' ~ trigger.event.data.hour_from if trigger.event.data.hour_from else '' }})
   - !input notify_action

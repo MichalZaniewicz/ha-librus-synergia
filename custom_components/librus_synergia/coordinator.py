@@ -319,6 +319,24 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ranges outside this coordinator's current+next-week cache)."""
         return self._client
 
+    async def _fetch_timetable_or_unpublished(self, week_start: date) -> dict[str, Any]:
+        """Fetch one week's raw `Timetable` payload, treating a CONFIRMED
+        403 as "this class's timetable isn't published yet" (issue #4,
+        reported live) rather than a session problem - Synergia's own web
+        UI shows an explicit "Plan lekcji klasy ... nie został jeszcze
+        opublikowany" message for this exact case, and a fresh re-login
+        can never fix it (the login itself succeeds fine, as reported). A
+        genuine 401 still means the session actually died and is left to
+        propagate, so the normal forced-relogin-and-retry-once recovery
+        (see `_async_update_data` / `async_fetch_timetable_week`) still
+        runs for that case."""
+        try:
+            return await self._client.async_get_timetable(week_start)
+        except LibrusSessionExpiredError as err:
+            if err.status_code == 403:
+                return {}
+            raise
+
     async def async_fetch_timetable_week(self, week_start: date) -> Any:
         """Fetch one week's raw `Timetable` payload on demand, for
         `LibrusTimetableCalendar.async_get_events` serving a date range
@@ -342,12 +360,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """
         assert self.config_entry is not None
         try:
-            return await self._client.async_get_timetable(week_start)
+            return await self._fetch_timetable_or_unpublished(week_start)
         except LibrusSessionExpiredError:
             await self._client.async_ensure_session_valid(
                 self.config_entry.data[CONF_PASSWORD], force=True
             )
-            return await self._client.async_get_timetable(week_start)
+            return await self._fetch_timetable_or_unpublished(week_start)
 
     async def async_fetch_message(self, mailbox: str, message_id: str) -> Any:
         """Fetch one message's full body on demand, for `services.py`'s
@@ -448,6 +466,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             justification_messages,
         ) = await self._async_get_messages()
 
+        me = _parse_me(me_payload)
         grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
         school_notices = _parse_school_notices(notices_payload)
         notes = _parse_notes(notes_payload)
@@ -455,13 +474,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendances = _parse_attendances(attendances_payload)
         attendance_types = _parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
-        self._async_fire_new_item_events(grades, school_notices, notes, messages, homeworks)
-        self._fire_timetable_change_events(timetable, today)
-        self._fire_new_absence_events(attendances, attendance_types)
-        self._check_achievements(grades, attendances, attendance_types, notes, today)
+        self._async_fire_new_item_events(
+            grades, school_notices, notes, messages, homeworks, me.display_name
+        )
+        self._fire_timetable_change_events(timetable, today, me.display_name)
+        self._fire_new_absence_events(attendances, attendance_types, me.display_name)
+        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
 
         return LibrusData(
-            me=_parse_me(me_payload),
+            me=me,
             grades=grades,
             grade_categories=_parse_grade_categories(categories_payload),
             notes=notes,
@@ -577,8 +598,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_notes(),
             self._client.async_get_attendances(),
             self._client.async_get_attendance_types(),
-            self._client.async_get_timetable(week_start),
-            self._client.async_get_timetable(next_week_start),
+            self._fetch_timetable_or_unpublished(week_start),
+            self._fetch_timetable_or_unpublished(next_week_start),
             self._client.async_get_homeworks(),
             self._maybe(announcements_enabled, self._client.async_get_school_notices),
         )
@@ -912,13 +933,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         notes: list[NoteData],
         messages: list[MessageData],
         homeworks: list[HomeworkEventData],
+        student: str,
     ) -> None:
         entry_id = self.config_entry.entry_id if self.config_entry else None
         # Resolved names are included alongside the raw ids so an automation
         # (e.g. a notification blueprint) can use {{ trigger.event.data.
         # subject }} directly, without its own lookup against the sensor
         # attributes just to say which subject/teacher a grade or note was
-        # about.
+        # about. `student` (the resolved child's name, not the login/parent's -
+        # see MeData) is included the same way for a multi-child household's
+        # blueprint to say WHOSE grade/note/etc. this is, since one blueprint
+        # instance's action runs for every config entry that fires the event.
         self._known_grade_ids = self._fire_for_new_ids(
             EVENT_NEW_GRADE,
             entry_id,
@@ -933,12 +958,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 }
                 for g in grades
             },
+            student=student,
         )
         self._known_notice_ids = self._fire_for_new_ids(
             EVENT_NEW_ANNOUNCEMENT,
             entry_id,
             self._known_notice_ids,
             {n.id: {"subject": n.subject} for n in notices},
+            student=student,
         )
         self._known_note_ids = self._fire_for_new_ids(
             EVENT_NEW_NOTE,
@@ -955,12 +982,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 }
                 for n in notes
             },
+            student=student,
         )
         self._known_message_ids = self._fire_for_new_ids(
             EVENT_NEW_MESSAGE,
             entry_id,
             self._known_message_ids,
             {m.id: {"sender": m.sender_name, "topic": m.topic} for m in messages},
+            student=student,
         )
         self._known_homework_ids = self._fire_for_new_ids(
             EVENT_NEW_HOMEWORK,
@@ -980,10 +1009,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 }
                 for h in homeworks
             },
+            student=student,
         )
 
     def _fire_timetable_change_events(
-        self, timetable: dict[date, list[LessonData]], today: date
+        self, timetable: dict[date, list[LessonData]], today: date, student: str
     ) -> None:
         """Fire EVENT_TIMETABLE_CHANGED for any cancelled/substitution
         lesson on today or a later date that wasn't already known. Reuses
@@ -1015,13 +1045,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "hour_from": lesson.hour_from,
                 }
         self._known_timetable_disruptions = self._fire_for_new_ids(
-            EVENT_TIMETABLE_CHANGED, entry_id, self._known_timetable_disruptions, items
+            EVENT_TIMETABLE_CHANGED,
+            entry_id,
+            self._known_timetable_disruptions,
+            items,
+            student=student,
         )
 
     def _fire_new_absence_events(
         self,
         attendances: list[AttendanceData],
         attendance_types: dict[int, AttendanceTypeData],
+        student: str,
     ) -> None:
         """Fire EVENT_NEW_ABSENCE for a newly-seen real absence record
         (any non-presence type - excused or not, `excused` in the payload
@@ -1044,7 +1079,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "lesson_no": attendance.lesson_no,
             }
         self._known_absence_ids = self._fire_for_new_ids(
-            EVENT_NEW_ABSENCE, entry_id, self._known_absence_ids, items
+            EVENT_NEW_ABSENCE, entry_id, self._known_absence_ids, items, student=student
         )
 
     def _check_achievements(
@@ -1054,6 +1089,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendance_types: dict[int, AttendanceTypeData],
         notes: list[NoteData],
         today: date,
+        student: str,
     ) -> None:
         """Fires EVENT_ACHIEVEMENT_UNLOCKED for a handful of objective,
         data-derived gamification milestones - deliberately never an
@@ -1100,6 +1136,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             entry_id,
             self._known_achievements,
             {key: {"title": _ACHIEVEMENT_TITLES[key]} for key in unlocked},
+            student=student,
         )
 
     def _fire_for_new_ids(
@@ -1108,6 +1145,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         entry_id: str | None,
         known: set[Any] | None,
         items: dict[Any, dict[str, Any]],
+        *,
+        student: str | None = None,
     ) -> set[Any]:
         current_ids = set(items)
         if known is None:
@@ -1116,7 +1155,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return current_ids
         new_ids = current_ids - known
         for item_id in new_ids:
-            self.hass.bus.async_fire(event, {"entry_id": entry_id, "id": item_id, **items[item_id]})
+            self.hass.bus.async_fire(
+                event, {"entry_id": entry_id, "id": item_id, "student": student, **items[item_id]}
+            )
         # Union, not replace: an item that later drops out of the fetch
         # window must not be re-announced if it reappears.
         return known | current_ids

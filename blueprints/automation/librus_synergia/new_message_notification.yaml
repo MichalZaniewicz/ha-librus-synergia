@@ -11,6 +11,9 @@ blueprint:
     Inside your chosen action, use `{{ message_summary }}` for the ready-made
     summary, or reference the individual fields directly, e.g.
     `{{ trigger.event.data.sender }}` or `{{ trigger.event.data.topic }}`.
+    If you use this blueprint for more than one child, `message_summary` is
+    already prefixed with `{{ trigger.event.data.student }}` (the child's
+    name) so one shared notification still says whose mailbox it is.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_message_notification.yaml
   input:
@@ -27,7 +30,7 @@ triggers:
 actions:
   - variables:
       message_summary: >-
-        Nowa wiadomość od {{ trigger.event.data.sender }}: {{ trigger.event.data.topic }}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość od {{ trigger.event.data.sender }}: {{ trigger.event.data.topic }}
   - !input notify_action
 
 mode: queued

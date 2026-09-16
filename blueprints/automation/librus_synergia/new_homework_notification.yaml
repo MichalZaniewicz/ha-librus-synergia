@@ -15,6 +15,9 @@ blueprint:
     one-liner, or the individual fields:
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.category }}`,
     `{{ trigger.event.data.date }}`, `{{ trigger.event.data.content }}`.
+    If you use this blueprint for more than one child, `agenda_summary` is
+    already prefixed with `{{ trigger.event.data.student }}` (the child's
+    name) so one shared notification still says whose agenda entry it is.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_homework_notification.yaml
   input:
@@ -48,7 +51,7 @@ conditions:
 actions:
   - variables:
       agenda_summary: >-
-        {{ ('[' ~ trigger.event.data.category ~ '] ') if trigger.event.data.category else '' }}{{ (trigger.event.data.subject ~ ': ') if trigger.event.data.subject else '' }}{{ trigger.event.data.content }}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ ('[' ~ trigger.event.data.category ~ '] ') if trigger.event.data.category else '' }}{{ (trigger.event.data.subject ~ ': ') if trigger.event.data.subject else '' }}{{ trigger.event.data.content }}
         ({{ trigger.event.data.date }})
   - !input notify_action
 

@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **A school not having published the class's timetable yet made the whole
+  integration fail with a reauth prompt** ([issue #4](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/4))
+  - reported live: login succeeded fine, but Librus returns HTTP 403 on
+  `Timetables` specifically when a class's schedule genuinely hasn't been
+  published (Synergia's own web UI shows an explicit "not published"
+  message for this exact case) - a real, permanent-until-the-school-acts
+  condition that a fresh re-login can never fix. This was previously
+  indistinguishable from a genuinely dead session (also a 401/403), so it
+  forced a pointless relogin-and-retry that only ended in an incorrect
+  `ConfigEntryAuthFailed`. `LibrusSessionExpiredError` now carries the real
+  HTTP status code, and a 403 on `Timetables` specifically degrades to an
+  empty timetable (both in the normal poll cycle and the calendar's
+  on-demand week fetch) instead of ever triggering reauth. A genuine 401
+  still recovers via the existing forced-relogin-and-retry-once path.
+- **The integration logged a "closes the Home Assistant aiohttp session"
+  deprecation report on every login/reload** (same issue #4 report) -
+  `.close()` on a session from `async_create_clientsession` is silently
+  replaced by Home Assistant's own frame helper with a no-op that only
+  logs that warning; it never actually released anything. Switched both
+  call sites (`LibrusApiClient.async_close`, the config flow's one-off
+  login-validation session) to `.detach()` - the same mechanism Home
+  Assistant's own internal auto-cleanup uses for exactly this case, and
+  not neutered the way `.close()` is.
+- **Notification blueprints gave no way to tell which child an event was
+  about in a multi-child household** ([issue #3](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/3))
+  - one blueprint instance's action runs for every config entry (student)
+  that fires the event, but no event carried the student's own name.
+  Every event this integration fires (`new_grade`/`new_note`/
+  `new_announcement`/`new_message`/`new_homework`/`timetable_changed`/
+  `new_absence`/`achievement_unlocked`) now includes a `student` field,
+  and all 9 event-triggered blueprints prefix their ready-made summary
+  text with it automatically.
+
 ## 0.7.0
 
 ### Added
