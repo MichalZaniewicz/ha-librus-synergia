@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1
 
 ### Fixed
 - **A school not having published the class's timetable yet made the whole
