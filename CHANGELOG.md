@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **`librus_synergia.get_grades` service** - every grade for a student in
+  one response (subject, value, category, date, semester, comments),
+  optionally filtered to one `subject_id`. Reads straight from
+  already-fetched data (no extra Librus request), unlike `get_message` -
+  the single-call equivalent of reading each subject average sensor's own
+  `grades` attribute separately.
+
 ## 0.7.1
 
 ### Fixed

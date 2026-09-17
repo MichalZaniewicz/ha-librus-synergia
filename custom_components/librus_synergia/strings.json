@@ -152,6 +152,20 @@
           "description": "Which mailbox the message is in. Defaults to \"inbox\" - use \"substitutions\" or \"alerts\" for a message from the Unread messages sensor's \"substitutions_recent\" or \"alerts_recent\" attribute."
         }
       }
+    },
+    "get_grades": {
+      "name": "Get grades",
+      "description": "Returns every grade for a student in one response, optionally filtered to one subject - instead of reading each subject sensor's own \"grades\" attribute separately.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Librus Synergia device (student) to fetch grades for."
+        },
+        "subject_id": {
+          "name": "Subject ID",
+          "description": "Limit to one subject's grades, using the subject average sensor's \"subject_id\" attribute. Leave empty for every subject."
+        }
+      }
     }
   }
 }

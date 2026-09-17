@@ -158,16 +158,33 @@ from an automation that isn't a direct response to someone opening it.
 Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 `send_date`, `read_date`, `has_attachment`.
 
+### `librus_synergia.get_grades`
+
+Returns every grade for a student in one response, optionally filtered to
+one subject via `subject_id` - the single-call equivalent of reading each
+subject average sensor's own `grades` attribute separately. Reads straight
+from already-fetched data, no extra Librus request, so it's safe to call
+from a routine automation (unlike `get_message`).
+
+| Field | Description |
+|---|---|
+| `device_id` | The Librus Synergia device (student) to fetch grades for. |
+| `subject_id` | Optional - limit to one subject, using a subject average sensor's `subject_id` attribute. |
+
+Returns `grades` (a list of `subject`, `subject_id`, `value`, `category`,
+`date`, `semester`, `comments`, newest first) and `count`.
+
 ## Known limitations / unverified details
 
-A few details couldn't be confirmed against a real account with data yet (an empty gradebook and no behaviour notices/grades at the time of writing). Most field names below come straight from reading szkolny-eu/szkolny-android's own reference parser (the same GPL-3.0 source this whole integration is modeled on), not guesswork - but none of it has been checked against a real *populated* response yet:
+A few details couldn't be confirmed against a real account with data yet. Most field names below come straight from reading szkolny-eu/szkolny-android's own reference parser (the same GPL-3.0 source this whole integration is modeled on), not guesswork:
 
-- **Grade value parsing**: the `+0.5`/`-0.25` numeric modifier convention (`5+`, `4-`, ...) is a common third-party inference, not something Librus documents - the live `Grades/Types` reference endpoint confirms every *non-numeric* mark Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`, `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) is correctly excluded from the average, but the exact numeric value a `+`/`-` modifier should produce is still unverified (no grades existed on the test account, first week of the school year).
-- **Homework assignments, Behaviour grade and Descriptive grades sensors** are all wired up and shipping, but none have ever shown real data - the account's `HomeWorkAssignments`/`BehaviourGrades/Points`/`DescriptiveGrades` endpoints have been empty every time they've been checked.
-- **`Grades/Comments`**: fixed to correctly treat this as a separate endpoint from `/Grades` (a grade's own `Comments` field is a list of ids to resolve against it, not embedded text) - still unconfirmed against a real commented grade either way.
+- **Grade value parsing**: real numeric grades (e.g. a plain `4` or `6`) and non-numeric marks (e.g. a bare `+` for "aktywność") are now CONFIRMED live to parse and average correctly - a non-numeric mark is correctly excluded from the average rather than crashing or counting as 0. The one piece still unverified is the exact value the `+0.5`/`-0.25` modifier convention should produce (`5+`, `4-`, ...) - a common third-party inference, not something Librus documents - since no *modified* grade has been issued on the test account yet, only bare values.
+- **Homework assignments** (`HomeWorkAssignments`) now has CONFIRMED real data (first time since this sensor was built) and is parsing correctly. **Behaviour grade** and **Descriptive grades** sensors are still wired up but unverified - their endpoints (`BehaviourGrades/Points`, `DescriptiveGrades`) have been empty every time they've been checked so far.
+- **`Grades/Comments`**: a real grade comment is now CONFIRMED to resolve correctly end-to-end (visible in a subject sensor's `latest_grade_comments`). The exact underlying shape (ids into the separate `Grades/Comments` endpoint vs. text embedded directly in each grade) is still unconfirmed either way, since the parser handles both defensively and it works correctly regardless of which one is real.
 - `VirtualClasses` (split/group classes, e.g. language subgroups), `PointGrades` (confirmed *disabled* for this account's school via the `Units` endpoint) and `TextGrades` (enablement unknown) all have client methods available but aren't wired into any entity - nothing to build a parser against, or nothing that would ever populate for this account.
 - Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
 - A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.
+- Message attachments still can't be downloaded through this integration - only a `has_attachment` flag is exposed. The reference source's own attachment-download class turned out to target Librus's older XML "sandbox" message protocol, not the JSON REST API this integration actually uses, so the modern download endpoint's real shape is still unknown.
 
 If you hit one of these, please open an issue with what you saw (redact personal data).
 

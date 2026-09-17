@@ -32,3 +32,17 @@ get_message:
             - "absences"
             - "justifications"
             - "trash"
+
+get_grades:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    subject_id:
+      required: false
+      example: 42005
+      selector:
+        number:
+          mode: box

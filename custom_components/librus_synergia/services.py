@@ -5,6 +5,10 @@
   polling.
 - `refresh` - force an immediate data refresh (e.g. right before a morning
   briefing automation, instead of waiting for the next poll).
+- `get_grades` - all of a student's grades (optionally filtered to one
+  subject) in one response, instead of reading each subject sensor's own
+  `grades` attribute separately. Purely a reshape of `coordinator.data`
+  already in memory - no extra Librus request, unlike `get_message`.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_GET_MESSAGE = "get_message"
 SERVICE_REFRESH = "refresh"
+SERVICE_GET_GRADES = "get_grades"
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
     {
@@ -35,6 +40,13 @@ _GET_MESSAGE_SCHEMA = vol.Schema(
 )
 
 _REFRESH_SCHEMA = vol.Schema({vol.Optional("device_id"): cv.string})
+
+_GET_GRADES_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Optional("subject_id"): vol.Coerce(int),
+    }
+)
 
 
 def _resolve_coordinator(hass: HomeAssistant, device_id: str) -> LibrusDataUpdateCoordinator:
@@ -133,12 +145,57 @@ def async_setup_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.ONLY,
     )
 
+    async def _async_handle_get_grades(call: ServiceCall) -> ServiceResponse:
+        """All of a student's grades in one response, optionally filtered
+        to one `subject_id`.
+
+        Unlike `get_message`, this reads straight from the coordinator's
+        already-fetched data - no live Librus request, so it's safe to
+        call from routine automations, not just direct user action. Each
+        subject average sensor already exposes its OWN `grades` attribute,
+        but reading "every grade across every subject" today means polling
+        16+ separate sensors; this is the single-call equivalent.
+        """
+        coordinator = _resolve_coordinator(hass, call.data["device_id"])
+        if coordinator.data is None:
+            raise HomeAssistantError("No data available yet - the integration hasn't completed its first refresh.")
+
+        subject_id = call.data.get("subject_id")
+        data = coordinator.data
+        grades = [
+            {
+                "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
+                "subject_id": grade.subject_id,
+                "value": grade.value,
+                "category": (
+                    category.name
+                    if (category := data.grade_categories.get(grade.category_id)) is not None
+                    else None
+                ),
+                "date": grade.add_date,
+                "semester": grade.semester,
+                "comments": list(grade.comments),
+            }
+            for grade in data.grades
+            if subject_id is None or grade.subject_id == subject_id
+        ]
+        grades.sort(key=lambda g: g["date"] or "", reverse=True)
+        return {"grades": grades, "count": len(grades)}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_GRADES,
+        _async_handle_get_grades,
+        schema=_GET_GRADES_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
 
 def async_unload_services(hass: HomeAssistant) -> None:
     """Remove this integration's services - call only once the LAST config
     entry is about to be unloaded (see __init__.py::async_unload_entry),
     so a second student's entry doesn't lose the service while the first
     one is just being reloaded."""
-    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH):
+    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH, SERVICE_GET_GRADES):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)

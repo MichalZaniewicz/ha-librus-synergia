@@ -57,8 +57,14 @@ these can't be built or verified against a real shape:
   `async_get_units` exists but isn't wired to the coordinator. Needs the
   reference parser (`szkolny-android`) for exact field names — modest
   payoff (bell schedule is already derived from the timetable).
-- **More response services** — `get_timetable`, `get_grades` (so a card
-  can pull data without it sitting in an attribute).
+- ~~**`get_grades` response service**~~ — done (Unreleased): every grade
+  across every subject in one call, optional `subject_id` filter - reads
+  straight from already-fetched coordinator data, no extra Librus request.
+  **`get_timetable` deliberately NOT built** - HA's own built-in
+  `calendar.get_events` service against `calendar.*_plan_lekcji` already
+  covers this (same on-demand out-of-range week fetch + session-recovery
+  logic `LibrusTimetableCalendar` uses), so a dedicated service would just
+  be a thinner duplicate with different field names, not a real gap.
 - ~~**Weekly Sunday digest blueprint**~~ — done (Unreleased): built off
   already-fetched sensor attributes (Next exam's `upcoming` list,
   Homework assignments' `recent`, Unexcused absences) rather than a
@@ -78,9 +84,21 @@ these can't be built or verified against a real shape:
   to close later.
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
-  `librus_synergia.download_attachment` service (`LibrusMessagesGetAttachment`
-  is a real endpoint) not built; a `mark_message_read` service (would just
-  wrap `get_message`, low value).
+  a `mark_message_read` service (would just wrap `get_message`, low value).
+- **`librus_synergia.download_attachment` service** — checked again
+  (2026-09-17): `LibrusMessagesGetAttachment.kt` (szkolny-android) is
+  NOT a usable reference for this after all - it targets Librus's older
+  XML "sandbox" messages protocol (`messagesGet`/`doc.select(...)`, Jsoup
+  doc parsing), not the JSON `wiadomosci.librus.pl/api/...` REST API this
+  integration actually uses (same trap as `LibrusMessagesGetMessage.kt`/
+  `LibrusSynergiaGetMessage.kt` hit before, back when `get_message` was
+  being built). The modern API's real attachment-download endpoint shape
+  is genuinely unknown - guessing a URL pattern risks another dead end.
+  Two real messages on the live account currently have `has_attachment:
+  true` (Siwik Anna, Włodarczyk Małgorzata, both 2026-09-14), so a
+  one-time live probe (same consent-first pattern used for `get_message`
+  back in 2026-09-06) would settle this quickly whenever the user wants
+  to do it.
 - ~~**Teacher directory**~~ — done (Unreleased): `sensor.*_school` gained a
   `subject_teachers` attribute (subject name -> sorted teacher name list),
   derived client-side from the already-fetched timetable, same approach as

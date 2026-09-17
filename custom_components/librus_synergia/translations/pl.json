@@ -152,6 +152,20 @@
           "description": "W której skrzynce jest wiadomość. Domyślnie \"inbox\" - użyj \"substitutions\" lub \"alerts\" dla wiadomości z atrybutu \"substitutions_recent\" lub \"alerts_recent\" sensora Nieprzeczytane wiadomości."
         }
       }
+    },
+    "get_grades": {
+      "name": "Pobierz oceny",
+      "description": "Zwraca wszystkie oceny ucznia w jednej odpowiedzi, opcjonalnie ograniczone do jednego przedmiotu - zamiast odczytywać osobno atrybut \"grades\" z każdego sensora średniej przedmiotowej.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń), dla którego pobrać oceny."
+        },
+        "subject_id": {
+          "name": "ID przedmiotu",
+          "description": "Ogranicz do ocen z jednego przedmiotu, używając atrybutu \"subject_id\" sensora średniej przedmiotowej. Zostaw puste dla wszystkich przedmiotów."
+        }
+      }
     }
   }
 }
