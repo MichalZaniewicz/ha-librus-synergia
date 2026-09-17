@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.2
 
 ### Added
 - **`librus_synergia.get_grades` service** - every grade for a student in
