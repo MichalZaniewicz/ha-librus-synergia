@@ -85,20 +85,30 @@ these can't be built or verified against a real shape:
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   a `mark_message_read` service (would just wrap `get_message`, low value).
-- **`librus_synergia.download_attachment` service** — checked again
-  (2026-09-17): `LibrusMessagesGetAttachment.kt` (szkolny-android) is
-  NOT a usable reference for this after all - it targets Librus's older
-  XML "sandbox" messages protocol (`messagesGet`/`doc.select(...)`, Jsoup
-  doc parsing), not the JSON `wiadomosci.librus.pl/api/...` REST API this
-  integration actually uses (same trap as `LibrusMessagesGetMessage.kt`/
-  `LibrusSynergiaGetMessage.kt` hit before, back when `get_message` was
-  being built). The modern API's real attachment-download endpoint shape
-  is genuinely unknown - guessing a URL pattern risks another dead end.
-  Two real messages on the live account currently have `has_attachment:
-  true` (Siwik Anna, Włodarczyk Małgorzata, both 2026-09-14), so a
-  one-time live probe (same consent-first pattern used for `get_message`
-  back in 2026-09-06) would settle this quickly whenever the user wants
-  to do it.
+- **`librus_synergia.download_attachment` service** — investigated live
+  (2026-09-17, one-time consented probe, same pattern as `get_message`
+  back in 2026-09-06). **Genuinely blocked, not just unverified.**
+  `client.async_get_message("inbox", "428360")` against a real message
+  confirmed the modern JSON API's `attachments` field shape:
+  `[{"filename": "...", "id": "7982536"}]` - so at least THAT part is now
+  known. But two reasoned guesses at a REST download URL under
+  `wiadomosci.librus.pl/api/...` (`.../messages/{id}/attachments/{id}`,
+  `/api/attachments/{id}`) both 404'd with an empty-route JSON body
+  (`[]`), meaning those routes don't exist in this API's router at all.
+  Reading szkolny-android's reference classes all the way down (not just
+  `LibrusMessagesGetAttachment.kt`, but its base `LibrusMessages.kt` and
+  `LibrusSandboxDownloadAttachment.kt`) confirmed why: attachment download
+  in that reference app goes through a COMPLETELY SEPARATE legacy XML
+  protocol (`sandboxGet`/`sandboxGetFile` against a `LIBRUS_SANDBOX_URL`,
+  a `singleUseKey` polling handshake, `CSCheckKey`/`CSDownload` actions)
+  authenticated with its own `messagesSessionId`/`DZIENNIKSID` cookie -
+  NOT the `oauth_token` this integration's whole session model is built
+  on. Building this for real would mean standing up a second, fully
+  separate auth/session subsystem just for file downloads - a large,
+  disproportionate undertaking for one feature. Not pursuing further
+  without a stronger signal (e.g. capturing the real modern web app's own
+  network requests some other way) that a same-session JSON download path
+  actually exists.
 - ~~**Teacher directory**~~ — done (Unreleased): `sensor.*_school` gained a
   `subject_teachers` attribute (subject name -> sorted teacher name list),
   derived client-side from the already-fetched timetable, same approach as
