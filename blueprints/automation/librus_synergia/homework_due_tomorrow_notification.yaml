@@ -1,0 +1,80 @@
+blueprint:
+  name: "Librus: Homework Due Tomorrow"
+  description: >
+    At a set time each day, checks the Homework assignments ("Zadania
+    domowe") sensor for any real assignment due the next calendar day, and
+    runs your action - typically "Send a notification" - only when there's
+    at least one. Silent (no action) on a day with nothing due tomorrow.
+
+
+    Use `{{ homework_summary }}` in your action for a ready-made list, or
+    `{{ homework_lines }}` / `{{ homework_count }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/homework_due_tomorrow_notification.yaml
+  input:
+    check_time:
+      name: Time
+      description: When to check each day (e.g. the evening before).
+      default: "19:00:00"
+      selector:
+        time: {}
+    homework_assignments_entity:
+      name: Homework assignments sensor
+      description: The Librus "Homework assignments" (Zadania domowe) sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    notify_action:
+      name: Notification action
+      description: The action to run when at least one assignment is due tomorrow.
+      selector:
+        action: {}
+
+variables:
+  homework_assignments_entity: !input homework_assignments_entity
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {%- set tomorrow_date = (now().date() + timedelta(days=1)) | string -%}
+      {%- set ns = namespace(count=0) -%}
+      {%- for h in (state_attr(homework_assignments_entity, 'recent') or []) -%}
+        {%- if h.due_date and h.due_date[:10] == tomorrow_date -%}
+          {%- set ns.count = ns.count + 1 -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.count > 0 }}
+
+actions:
+  - variables:
+      # Re-derived from the same sensor rather than passed from the
+      # condition above - HA automation `conditions` can't hand data to
+      # `actions`, so both blocks independently filter the same `recent`
+      # list (same pattern the condition above and Weekly Digest use).
+      homework_lines: >-
+        {%- set tomorrow_date = (now().date() + timedelta(days=1)) | string -%}
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for h in (state_attr(homework_assignments_entity, 'recent') or []) -%}
+          {%- if h.due_date and h.due_date[:10] == tomorrow_date -%}
+            {%- set ns.lines = ns.lines + ['- ' ~ (h.topic or 'Zadanie') ~ (': ' ~ h.text if h.text else '')] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      homework_count: >-
+        {%- set tomorrow_date = (now().date() + timedelta(days=1)) | string -%}
+        {%- set ns = namespace(count=0) -%}
+        {%- for h in (state_attr(homework_assignments_entity, 'recent') or []) -%}
+          {%- if h.due_date and h.due_date[:10] == tomorrow_date -%}
+            {%- set ns.count = ns.count + 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.count }}
+      homework_summary: "Zadanie domowe na jutro:\n{{ homework_lines }}"
+  - !input notify_action
+
+mode: single

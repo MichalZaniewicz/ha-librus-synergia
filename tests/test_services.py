@@ -84,7 +84,37 @@ async def test_get_message_service_returns_decoded_content(hass) -> None:
     assert response["topic"] == "Zebranie z rodzicami"
     assert response["content"] == "Dzien dobry, zapraszam na zebranie."
     assert response["read_date"] == "2026-09-06T18:22:51"
+    assert response["has_attachment"] is False
+    assert response["attachments"] == []
     client.async_get_message.assert_awaited_once_with("inbox", "186536")
+
+
+async def test_get_message_service_returns_attachment_filenames(hass) -> None:
+    """CONFIRMED live (2026-09-17): each entry is {"filename", "id"} - the
+    file itself still can't be downloaded, but the name is real and useful."""
+    client = build_mock_client()
+    client.async_get_message.return_value = {
+        "data": {
+            **GOOD_MESSAGE_PAYLOAD["data"],
+            "attachments": [
+                {"filename": "PREZENTACJA-RODZICE-WRZESIEN-2026.pdf", "id": "7982536"}
+            ],
+        }
+    }
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "get_message",
+        {"device_id": _device_id(hass, entry), "message_id": "428360"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response["has_attachment"] is True
+    assert response["attachments"] == [
+        {"id": "7982536", "filename": "PREZENTACJA-RODZICE-WRZESIEN-2026.pdf"}
+    ]
 
 
 async def test_get_message_service_mailbox_field_passed_through(hass) -> None:

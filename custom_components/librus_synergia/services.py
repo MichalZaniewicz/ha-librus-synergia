@@ -126,6 +126,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
         sender_name = data.get("senderName") or (
             f"{data.get('senderFirstName', '')} {data.get('senderLastName', '')}".strip()
         )
+        # CONFIRMED live (2026-09-17): each entry is {"filename": ..., "id":
+        # ...}. The file itself still can't be downloaded through this
+        # integration (see BACKLOG.md) - only the name, so at least someone
+        # knows what to look for in the real Librus app/website.
+        attachments = [
+            {"id": str(a["id"]), "filename": a.get("filename")}
+            for a in data.get("attachments") or []
+            if isinstance(a, dict) and a.get("id") is not None
+        ]
         return {
             "id": message_id,
             "mailbox": mailbox,
@@ -134,7 +143,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "content": decode_message_content(data.get("Message", "")),
             "send_date": data.get("sendDate"),
             "read_date": data.get("readDate"),
-            "has_attachment": bool(data.get("attachments")),
+            "has_attachment": bool(attachments),
+            "attachments": attachments,
         }
 
     hass.services.async_register(

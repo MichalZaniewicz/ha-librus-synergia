@@ -9,6 +9,14 @@
   already-fetched data (no extra Librus request), unlike `get_message` -
   the single-call equivalent of reading each subject average sensor's own
   `grades` attribute separately.
+- **`get_message` now also returns `attachments`** (a list of `id`/
+  `filename`) - confirmed live that the modern JSON API does expose the
+  real filename, even though the file itself still can't be downloaded
+  through this integration (see README's "Known limitations").
+- **Homework Due Tomorrow blueprint** - at a set time each day, runs your
+  action with a ready-made summary only when a real Homework assignment
+  ("zadanie domowe", not the general agenda/test feed) is due the next
+  calendar day - silent otherwise.
 
 ## 0.7.1
 
