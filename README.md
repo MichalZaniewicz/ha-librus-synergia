@@ -53,7 +53,7 @@ Each child/student is a separate login and a separate integration entry.
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 49 purpose-built cards - grade averages, a full
+is a companion HACS repo with 50 purpose-built cards - grade averages, a full
 grade log (per-subject or across every subject), a grade trend chart, a grade
 distribution histogram, a grade profile radar and a grades-by-category donut,
 attendance (plus a percentage/semester breakdown, a year-at-a-glance heatmap,
@@ -62,8 +62,9 @@ grade, messages, substitutions & alerts, announcements, homework assignments,
 a combined "what's new" activity feed, today's timetable, a week-at-a-glance
 grid, a lesson-time-by-subject donut, the agenda, free days, a "Today"
 overview, a weekly summary, the lucky number, a playful trading-card style
-student summary, an absence-free streak counter, and compact single-row
-tiles for several of the above. Each card auto-detects
+student summary, an absence-free streak counter, a deterministic "hero or
+archetype" result computed from your child's own stats, and compact
+single-row tiles for several of the above. Each card auto-detects
 your child's device (zero YAML for the common case of one student), themes with
 your Home Assistant theme automatically, and follows your HA language (English,
 Polish).
