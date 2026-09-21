@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Timetable/agenda broke (HTTP 500 / "Coś poszło nie tak") right after the
+  session was renewed, until a manual refresh.** Saving the fresh session
+  cookies into the config entry after a re-login fired the entry's update
+  listener, which reloaded the whole integration - closing its aiohttp
+  session while the request that had just triggered the re-login was about
+  to be retried on it (`RuntimeError: Session is closed`). Since 0.7.1
+  actually releases the session on unload (before that, the close was a
+  silent no-op, which masked this), it hit about once a day, when Librus
+  expired the session. The entry now reloads only when its *options*
+  change; reauth/reconfigure still reload themselves.
+- **"Download diagnostics" returned HTTP 500.** The coordinator dump kept
+  `date`/`int` dictionary keys, which Home Assistant's JSON encoder rejects;
+  keys are now stringified.
+
 ## 0.7.2
 
 ### Added

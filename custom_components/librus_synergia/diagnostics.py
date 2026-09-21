@@ -37,13 +37,30 @@ TO_REDACT = {
 }
 
 
+def _stringify_keys(value: Any) -> Any:
+    """Recursively turn every dict key into a `str`.
+
+    `dataclasses.asdict` keeps the coordinator data's real key types - `date`
+    for the timetable/attendance-by-day maps, `int` for the subjects/teachers/
+    classrooms lookups - and HA serializes diagnostics with orjson, which
+    rejects non-string keys outright, so "Download diagnostics" answered
+    HTTP 500 instead of a dump."""
+    if isinstance(value, dict):
+        return {str(key): _stringify_keys(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_stringify_keys(item) for item in value]
+    return value
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: LibrusConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     coordinator = entry.runtime_data
     coordinator_data = (
-        dataclasses.asdict(coordinator.data) if coordinator.data is not None else None
+        _stringify_keys(dataclasses.asdict(coordinator.data))
+        if coordinator.data is not None
+        else None
     )
     return {
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
