@@ -87,6 +87,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+
+    options_at_setup = dict(entry.options)
+
+    async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
+        """Reload the entry only when its OPTIONS changed.
+
+        HA fires update listeners for ANY change to the entry, including
+        `_persist_session` above writing fresh session cookies into
+        `entry.data` after every re-login (roughly daily, plus every
+        mid-cycle session-expiry recovery). Reloading on those tears the
+        whole entry down - closing this entry's dedicated aiohttp session -
+        while the very request that triggered the re-login is still about to
+        be retried on it, so the retry died with `RuntimeError: Session is
+        closed` (not a `LibrusError`, so nothing caught it) and the dashboard
+        showed a broken timetable/agenda until the next manual refresh.
+        Reauth/reconfigure already reload themselves via
+        `async_update_reload_and_abort`, so data-only changes never need
+        this listener to do it for them.
+        """
+        if dict(entry.options) == options_at_setup:
+            return
+        await hass.config_entries.async_reload(entry.entry_id)
+
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -109,11 +132,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
     if unloaded and not remaining:
         async_unload_services(hass)
     return unloaded
-
-
-async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
-    """Reload the entry when options change."""
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:

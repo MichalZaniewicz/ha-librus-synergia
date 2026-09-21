@@ -18,6 +18,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+from homeassistant.const import CONF_SCAN_INTERVAL
+
+from custom_components.librus_synergia.const import CONF_COOKIES
+
 from .conftest import build_mock_client, make_config_entry
 
 
@@ -93,3 +97,69 @@ async def test_unload_closes_only_that_entrys_own_client_session(hass) -> None:
 
     client_a.async_close.assert_awaited_once()
     client_b.async_close.assert_not_called()
+
+
+async def test_session_persist_does_not_reload_the_entry(hass) -> None:
+    """Regression (found live, 2026-09-21): after a session-expiry
+    re-login the coordinator persists the fresh cookies via
+    `async_update_entry(data=...)`. That used to fire the update listener,
+    which reloaded the whole entry - closing its aiohttp session while the
+    request that triggered the re-login was about to be retried on it
+    (`RuntimeError: Session is closed`, HTTP 500 on the timetable calendar).
+    A data-only change must leave the loaded entry, its client and its
+    session untouched."""
+    entry = make_config_entry()
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.librus_synergia.async_create_clientsession",
+            side_effect=lambda hass: AsyncMock(),
+        ),
+        patch(
+            "custom_components.librus_synergia.LibrusApiClient",
+            side_effect=_client_factory_recording_session,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        client = entry.runtime_data.client
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **entry.data,
+                CONF_COOKIES: [{"name": "oauth_token", "value": "fresh", "domain": "x"}],
+            },
+        )
+        await hass.async_block_till_done()
+
+    client.async_close.assert_not_called()
+    assert entry.runtime_data.client is client
+
+
+async def test_options_change_still_reloads_the_entry(hass) -> None:
+    """The flip side of the test above: a real options change (e.g. a new
+    scan interval) must still reload the entry, building a fresh client."""
+    entry = make_config_entry()
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.librus_synergia.async_create_clientsession",
+            side_effect=lambda hass: AsyncMock(),
+        ),
+        patch(
+            "custom_components.librus_synergia.LibrusApiClient",
+            side_effect=_client_factory_recording_session,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        client = entry.runtime_data.client
+
+        hass.config_entries.async_update_entry(entry, options={CONF_SCAN_INTERVAL: 45})
+        await hass.async_block_till_done()
+
+    client.async_close.assert_awaited_once()
+    assert entry.runtime_data.client is not client
