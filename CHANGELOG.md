@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.3
 
 ### Fixed
 - **Timetable/agenda broke (HTTP 500 / "Coś poszło nie tak") right after the
