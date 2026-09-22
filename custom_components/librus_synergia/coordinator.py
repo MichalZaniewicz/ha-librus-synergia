@@ -332,6 +332,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ranges outside this coordinator's current+next-week cache)."""
         return self._client
 
+    @property
+    def degraded_endpoints(self) -> dict[str, datetime]:
+        """Snapshot of `_optional_endpoint_first_failure` - label -> the
+        timestamp it started failing (cleared on recovery). Public so
+        `diagnostics.py` can surface it: for an account where several
+        endpoints are degrading (a confirmed-403 module-unavailable case,
+        or a genuinely flaky one), this is the single most direct answer
+        to "what's actually going on" - a `{}` here means every core AND
+        supplementary endpoint succeeded on the last cycle. A copy, not
+        the live dict, so a diagnostics consumer can't accidentally
+        mutate coordinator state."""
+        return dict(self._optional_endpoint_first_failure)
+
     async def _fetch_timetable_or_unpublished(self, week_start: date) -> dict[str, Any]:
         """Fetch one week's raw `Timetable` payload, treating a CONFIRMED
         403 as "this class's timetable isn't published yet" (issue #4,

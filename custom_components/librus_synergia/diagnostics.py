@@ -7,8 +7,10 @@ from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from . import LibrusConfigEntry
+from .const import DOMAIN
 
 # entry.data holds login/password/session cookies - all secrets. Coordinator
 # data carries the student's real grades/attendance/notes, so free-text and
@@ -55,14 +57,52 @@ def _stringify_keys(value: Any) -> Any:
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: LibrusConfigEntry
 ) -> dict[str, Any]:
-    """Return diagnostics for a config entry."""
+    """Return diagnostics for a config entry.
+
+    BUG FIX (live feedback, 2026-09-22 - "co się tam dzieje w ogóle?"):
+    the original dump only had the raw entry data + a full coordinator-
+    data snapshot - useful for checking what DID come through, but gave
+    no direct answer to "why is half of this account unknown/empty" (a
+    confirmed-403-degraded endpoint and a genuinely broken one both just
+    look like an empty/missing field in that dump, with no way to tell
+    them apart). Added three sections that answer that directly: whether
+    the last update cycle actually succeeded, which endpoints are
+    CURRENTLY degrading and since when (straight from the coordinator's
+    own repair-issue tracking - see `LibrusDataUpdateCoordinator.
+    degraded_endpoints`), and any repair issues HA itself has open for
+    this entry right now."""
     coordinator = entry.runtime_data
     coordinator_data = (
         _stringify_keys(dataclasses.asdict(coordinator.data))
         if coordinator.data is not None
         else None
     )
+    registry = ir.async_get(hass)
+    open_issues = [
+        {
+            "issue_id": issue.issue_id,
+            "translation_key": issue.translation_key,
+            "translation_placeholders": issue.translation_placeholders,
+            "severity": issue.severity.value if issue.severity else None,
+        }
+        for issue in registry.issues.values()
+        if issue.domain == DOMAIN and entry.entry_id in issue.issue_id
+    ]
     return {
+        "last_update_success": coordinator.last_update_success,
+        "last_exception": repr(coordinator.last_exception)
+        if coordinator.last_exception
+        else None,
+        "update_interval_seconds": (
+            coordinator.update_interval.total_seconds() if coordinator.update_interval else None
+        ),
+        # Label -> ISO timestamp it started failing (see
+        # `degraded_endpoints`'s own docstring) - empty means every
+        # core+supplementary endpoint succeeded on the last cycle.
+        "degraded_endpoints": {
+            label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()
+        },
+        "open_repair_issues": open_issues,
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
         "coordinator_data": async_redact_data(coordinator_data, TO_REDACT)
         if coordinator_data is not None

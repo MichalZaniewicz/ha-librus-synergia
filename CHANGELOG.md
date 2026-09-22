@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.5-beta.2
+
+**Beta release** - still the issue #5 fix from `0.7.5-beta.1`, plus a
+diagnostics improvement to actually see what's happening on an account
+with several degraded endpoints. To try it: HACS -> Librus Synergia ->
+the three-dot menu -> "Redownload" -> enable "Show beta versions" ->
+pick `0.7.5-beta.2`.
+
+### Added
+- **"Download diagnostics" now shows whether the last update actually
+  succeeded, exactly which endpoints are currently degraded and since
+  when, and any open repair issues for the entry** - previously the dump
+  only had the raw fetched data, with no way to tell a confirmed-403
+  degraded endpoint apart from one that's genuinely broken or an account
+  that simply has no data for it (all three looked like the same empty
+  field). Requested live while investigating issue #5's account.
+
 ## 0.7.5-beta.1
 
 **Beta release** - a fix for a limited/restricted-access account type
