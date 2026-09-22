@@ -460,8 +460,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             parent_teacher_conferences_payload,
         ) = core_payloads
 
-        lucky_number = await self._async_get_lucky_number(today)
-        await self._async_refresh_reference_data()
+        # BUG FIX (code review): these three used to run sequentially, one
+        # `await` after another, even though none of them reads state any
+        # of the others writes - the lucky number, reference data, and
+        # messages fetches are entirely independent. Each already catches
+        # its own LibrusError internally and never lets one raise out to
+        # affect the others (see `_async_get_lucky_number`/
+        # `_async_refresh_reference_data`/`_async_get_messages`'s own
+        # docstrings/try-excepts), so it's safe to run them concurrently via
+        # asyncio.gather() - the cycle now pays the MAX of the three's
+        # latency instead of the SUM.
+        lucky_number, _, messages_result = await asyncio.gather(
+            self._async_get_lucky_number(today),
+            self._async_refresh_reference_data(),
+            self._async_get_messages(),
+        )
         (
             unread_count,
             unread_by_mailbox,
@@ -469,7 +482,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             substitution_messages,
             alert_messages,
             justification_messages,
-        ) = await self._async_get_messages()
+        ) = messages_result
 
         me = _parse_me(me_payload)
         grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
