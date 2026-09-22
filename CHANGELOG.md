@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.5-beta.1
+
+**Beta release** - a fix for a limited/restricted-access account type
+(e.g. preschool), not yet promoted to the stable channel. To try it:
+HACS -> Librus Synergia -> the three-dot menu -> "Redownload" -> enable
+"Show beta versions" -> pick `0.7.5-beta.1`.
+
+### Fixed
+- **A limited/restricted-access account (e.g. a preschool child's login,
+  which only has the Wiadomości module enabled) could not be set up at
+  all.** ([issue #5](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/5))
+  `Attendances/Types` returning a CONFIRMED 403 for such an account (the
+  attendance module genuinely doesn't apply, not a session problem - the
+  reporter verified independently against the real Synergia web UI) used
+  to fail the whole setup, exactly the same class of issue `Timetables`
+  already got fixed for once (an unpublished class schedule, #4).
+  Generalized that same "confirmed 403 = module unavailable, degrade
+  gracefully" treatment to the whole core data tier (Grades, Notes,
+  Attendances, Attendances/Types, HomeWorks, SchoolNotices) instead of
+  just Timetables - a genuine 401 anywhere still triggers the normal
+  forced-relogin-and-retry-once recovery, unchanged.
+
 ## 0.7.4
 
 ### Fixed

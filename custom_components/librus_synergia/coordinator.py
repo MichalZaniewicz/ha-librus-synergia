@@ -52,6 +52,7 @@ from .const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_MESSAGE,
+    CORE_ENDPOINT_LABELS,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
     ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
@@ -595,13 +596,27 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         raised and discarded every OTHER endpoint's already-successful
         result too, wiping grades/attendance/timetable for the whole cycle
         over one unrelated endpoint. TIER 1 below is the original,
-        genuinely load-bearing sensors - a failure there is still fatal and
-        still drives the forced-relogin-and-retry-once logic in
-        `_async_update_data`. TIER 2 is the newer supplementary endpoints -
-        fetched with `return_exceptions=True` so one of them failing only
-        degrades THAT ONE entity to empty this cycle, same "confirmed real,
-        empty" degrade path this codebase already uses for a genuinely
-        empty account.
+        genuinely load-bearing sensors; TIER 2 is the newer supplementary
+        endpoints. Both now use `return_exceptions=True` and degrade a
+        CONFIRMED 403 to empty (see `_degrade_core_payload`/
+        `_degrade_optional_payload`) - a genuine 401 anywhere still
+        propagates and still drives the forced-relogin-and-retry-once
+        logic in `_async_update_data`, unchanged.
+
+        `Me` is deliberately fetched separately, BEFORE either tier, and
+        stays fully fatal on any failure (401 or 403) - see
+        CORE_ENDPOINT_LABELS' own comment for why.
+
+        BUG FIX (issue #5, reported live): TIER 1 used to be one plain
+        `asyncio.gather()` with no `return_exceptions=True` at all - a
+        CONFIRMED 403 on `Attendances/Types` (a preschool-account login
+        that only has the Wiadomości module enabled) took down the whole
+        setup, even though it just meant "this account doesn't have the
+        attendance module", the exact same class of thing `Timetables`
+        already got this treatment for once (issue #4). Generalized to
+        the whole tier now, not just Timetables, since the next limited-
+        access account type would otherwise just report the same bug
+        again with a different endpoint name.
 
         Announcements/BehaviourGrades/DescriptiveGrades are additionally
         gated by their own options-flow toggle via `_maybe` - disabled ones
@@ -616,8 +631,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
         )
 
-        core = await asyncio.gather(
-            self._client.async_get_me(),
+        me_payload = await self._client.async_get_me()
+
+        core_results = await asyncio.gather(
             self._client.async_get_grades(),
             self._client.async_get_grade_categories(),
             self._client.async_get_notes(),
@@ -627,6 +643,24 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._fetch_timetable_or_unpublished(next_week_start),
             self._client.async_get_homeworks(),
             self._maybe(announcements_enabled, self._client.async_get_school_notices),
+            return_exceptions=True,
+        )
+        # A genuine 401 anywhere in this tier means the session actually
+        # died - propagate it immediately (before degrading any 403s)
+        # so the existing forced-relogin-and-retry-once recovery still
+        # runs exactly as before. A dead session can plausibly 403
+        # unrelated endpoints too in the same broken cycle, so it's not
+        # safe to interpret THOSE as "confirmed module-unavailable" once
+        # a real 401 has shown up anywhere in the same batch.
+        for result in core_results:
+            if isinstance(result, LibrusSessionExpiredError) and result.status_code == 401:
+                raise result
+        core = (
+            me_payload,
+            *(
+                self._degrade_core_payload(label, result)
+                for label, result in zip(CORE_ENDPOINT_LABELS, core_results)
+            ),
         )
 
         optional_results = await asyncio.gather(
@@ -669,6 +703,48 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     label,
                     result,
                     exc_info=result,
+                )
+                self._note_optional_endpoint_failure(label)
+                return {}
+            raise result
+        self._note_optional_endpoint_recovery(label)
+        return result
+
+    def _degrade_core_payload(
+        self, label: str, result: dict[str, Any] | BaseException
+    ) -> dict[str, Any]:
+        """Turn one TIER-1 `return_exceptions=True` gather result into a
+        payload, degrading a CONFIRMED 403 to an empty dict - "this
+        account/school type doesn't have this module" (issue #5, see
+        CORE_ENDPOINT_LABELS' own comment for the full story). Every
+        parser fed from TIER 1 already treats an empty payload the same
+        as a genuinely empty account, so this is the same degrade path
+        `_degrade_optional_payload` uses for TIER 2, just narrower:
+
+        Unlike TIER 2 (genuinely optional endpoints, where ANY LibrusError
+        is safe to swallow), TIER 1 is the load-bearing tier - only a
+        CONFIRMED 403 (`LibrusSessionExpiredError` specifically, not any
+        LibrusError) is treated as "module unavailable". A 401 never
+        reaches here at all (the caller re-raises any 401 across the
+        whole tier before calling this, see `_async_fetch_core_payloads`).
+        A connection error, an unexpected-shape response, or any other
+        LibrusError subtype still fails the whole cycle - those aren't a
+        confirmed "this module doesn't exist for this account" signal,
+        just a transient or genuinely-wrong-shaped failure that's worth
+        surfacing (and retrying next cycle) rather than silently hiding.
+
+        Shares the same repair-issue tracking as `_degrade_optional_payload`
+        (`_note_optional_endpoint_failure`/`_note_optional_endpoint_recovery`)
+        - a persistently-403ing core endpoint is just as worth a "hasn't
+        responded in over a week" repair issue as a supplementary one."""
+        if isinstance(result, BaseException):
+            if isinstance(result, LibrusSessionExpiredError) and result.status_code == 403:
+                _LOGGER.debug(
+                    "Core endpoint '%s' returned a confirmed 403 (module "
+                    "likely unavailable for this account/school) - "
+                    "degrading to empty instead of failing the whole cycle: %s",
+                    label,
+                    result,
                 )
                 self._note_optional_endpoint_failure(label)
                 return {}

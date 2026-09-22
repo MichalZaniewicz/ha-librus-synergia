@@ -32,9 +32,20 @@ these can't be built or verified against a real shape:
   `is_final` flags already classify a grade correctly without it), but
   reading this file is what surfaced the REAL bug: `IsSemester`/`IsFinal`
   (the actual, not proposed, semester/year grade) were never tracked at
-  all - fixed same session, see CHANGELOG's Unreleased section.
+  all - fixed same session, see CHANGELOG's `0.7.4` entry.
 - **`Notes[].Positive`** — resolved (0=neg, 1=pos, else neutral, via the
   reference parser) — keep as-is unless a real note contradicts it.
+- **Limited/restricted-access account types (e.g. preschool)** — issue #5
+  confirmed a real one exists in the wild: a preschool child's login only
+  has Wiadomości enabled, `Attendances/Types` 403s. Fixed (`0.7.5-beta.1`)
+  by generalizing the confirmed-403-degrades-gracefully treatment from
+  Timetables (issue #4) to the whole core tier. Not confirmed live against
+  OUR OWN test account (which has full access) - only against the
+  reporter's own description + their independent check of the real
+  Synergia web UI. If the reporter confirms the beta works, worth asking
+  whether OTHER core endpoints (Grades? Notes? HomeWorks?) also 403 for
+  that account type, to know if this class of account can ever get a
+  fuller picture than just Wiadomości + degraded-empty everything else.
 - **Confirmed-real-but-empty endpoints**, client methods exist, not wired
   to any entity: `PointGrades` (disabled for this school), `TextGrades`
   (enablement unknown), `VirtualClasses` (nothing references a

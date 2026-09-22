@@ -192,6 +192,59 @@ async def test_timetables_unpublished_403_loads_rest_of_data_without_reauth(hass
     assert force_calls == []
 
 
+async def test_confirmed_403_on_core_endpoint_degrades_instead_of_failing_setup(hass) -> None:
+    """BUG FIX (issue #5, reported live): a preschool-account login only
+    has the Wiadomości module enabled - `Attendances/Types` returned a
+    CONFIRMED 403 (the account type genuinely doesn't have the attendance
+    module, confirmed by the reporter independently against the real
+    Synergia web UI), which used to take down the WHOLE setup even though
+    Grades/Wiadomości/etc. don't depend on it at all. Generalized the same
+    "confirmed 403 = module unavailable" treatment Timetables already had
+    (issue #4, see test_timetables_unpublished_403_loads_rest_of_data_
+    without_reauth above) to the whole TIER 1 core gather - this must
+    degrade ONLY the attendance-types lookup, not fail the cycle."""
+    client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
+    client.async_get_attendance_types.side_effect = LibrusSessionExpiredError(
+        "Session rejected on .../Attendances/Types (HTTP 403).", status_code=403
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.grades) == 1
+    assert data.attendance_types == {}
+    # No forced relogin - a confirmed 403 on a core endpoint must not
+    # trigger the relogin-and-retry path, same as Timetables' own case.
+    assert client.async_ensure_session_valid.call_count == 1
+    force_calls = [
+        c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
+    ]
+    assert force_calls == []
+
+
+async def test_genuine_401_on_any_core_endpoint_still_triggers_relogin(hass) -> None:
+    """A genuine 401 (not the confirmed-403 module-unavailable case) on
+    ANY TIER-1 endpoint - not just the first one in the gather, like
+    Grades already covered above - must still force a relogin+retry,
+    exactly like a 401 always has. Confirms the `return_exceptions=True`
+    refactor's own "any 401 anywhere in this tier -> raise before
+    degrading anything" scan works regardless of which endpoint the 401
+    actually lands on."""
+    client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
+    client.async_get_attendance_types.side_effect = [
+        LibrusSessionExpiredError("session dead", status_code=401),
+        {"Types": []},
+    ]
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.grades) == 1
+    assert client.async_ensure_session_valid.call_count == 2
+    _, kwargs = client.async_ensure_session_valid.call_args
+    assert kwargs.get("force") is True
+
+
 async def test_session_expired_and_relogin_also_fails_raises_auth_failed(hass) -> None:
     """If the forced re-login itself fails (genuinely wrong password,
     captcha, account action required), THAT must surface as a real reauth

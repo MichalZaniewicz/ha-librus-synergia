@@ -83,6 +83,39 @@ OPTIONAL_ENDPOINT_LABELS = (
     "ParentTeacherConferences",
 )
 
+# Labels for TIER 1's own degradable endpoints - `Me` is deliberately NOT
+# here (kept as a separate, always-fatal fetch ahead of this tier - if we
+# can't even identify who the account belongs to, something is genuinely
+# wrong, not just "a module this account type doesn't have"). In the
+# exact order passed to `_async_fetch_core_payloads`' first
+# `asyncio.gather()` call (Me excluded). Public for the same reason as
+# OPTIONAL_ENDPOINT_LABELS - `__init__.py` also needs it, and it shares
+# that same repair-issue tracking/translation key (see
+# `coordinator.py::_degrade_core_payload`).
+#
+# BUG FIX (issue #5, reported live): a preschool-account login only has
+# the Wiadomości module enabled - `Attendances/Types` 403'd (a module this
+# account type genuinely doesn't have, confirmed by the reporter checking
+# the real Synergia web UI independently) and took down the ENTIRE setup,
+# even though Grades/Attendances/etc. simply don't apply to that account
+# and Wiadomości (what the reporter actually needed) would have worked
+# fine. Previously only `Timetables` had this "confirmed 403 = module
+# unavailable, degrade gracefully" treatment (issue #4); generalized here
+# to the whole core tier since the SAME class of report would otherwise
+# just recur with a different endpoint name for the next limited-access
+# account type.
+CORE_ENDPOINT_LABELS = (
+    "Grades",
+    "Grades/Categories",
+    "Notes",
+    "Attendances",
+    "Attendances/Types",
+    "Timetable (this week)",
+    "Timetable (next week)",
+    "HomeWorks",
+    "SchoolNotices",
+)
+
 # Repair issue translation keys - see repairs.py for what each one means and
 # when it's raised/cleared.
 ISSUE_SCHOOL_YEAR_ROLLOVER = "school_year_rollover"

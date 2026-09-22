@@ -84,7 +84,7 @@
     },
     "optional_endpoint_degraded": {
       "title": "\"{label}\" nie odpowiada od ponad tygodnia",
-      "description": "Opcjonalny endpoint \"{label}\" zawodzi przy każdej próbie od {since}. Często jest to nieszkodliwe - nie każda szkoła ma włączony każdy moduł Librusa, a ta integracja traktuje to jako normalne - ale cały tydzień nieprzerwanych błędów może też oznaczać, że coś się zmieniło (zmiana uprawnień albo przebudowa tego endpointu przez Librusa). To powiadomienie jest wyłącznie informacyjne i można je bezpiecznie odrzucić - pojawi się ponownie, jeśli endpoint nadal będzie zawodził."
+      "description": "Endpoint \"{label}\" zawodzi przy każdej próbie od {since}. Często jest to nieszkodliwe - nie każda szkoła/typ konta ma włączony każdy moduł Librusa, a ta integracja traktuje to jako normalne - ale cały tydzień nieprzerwanych błędów może też oznaczać, że coś się zmieniło (zmiana uprawnień albo przebudowa tego endpointu przez Librusa). To powiadomienie jest wyłącznie informacyjne i można je bezpiecznie odrzucić - pojawi się ponownie, jeśli endpoint nadal będzie zawodził."
     }
   },
   "entity": {

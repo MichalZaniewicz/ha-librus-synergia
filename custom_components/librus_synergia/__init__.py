@@ -14,6 +14,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from .const import (
     CONF_COOKIES,
     CONF_SESSION_LOGGED_IN_AT,
+    CORE_ENDPOINT_LABELS,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     OPTIONAL_ENDPOINT_LABELS,
@@ -144,7 +145,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
     the coordinator is already gone by the time this runs (unload happens
     first)."""
     issue_ids = [school_year_issue_id(entry.entry_id)] + [
-        optional_endpoint_issue_id(entry.entry_id, label) for label in OPTIONAL_ENDPOINT_LABELS
+        optional_endpoint_issue_id(entry.entry_id, label)
+        for label in (*OPTIONAL_ENDPOINT_LABELS, *CORE_ENDPOINT_LABELS)
     ]
     for issue_id in issue_ids:
         ir.async_delete_issue(hass, DOMAIN, issue_id)

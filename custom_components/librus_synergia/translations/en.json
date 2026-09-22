@@ -84,7 +84,7 @@
     },
     "optional_endpoint_degraded": {
       "title": "\"{label}\" has not responded in over a week",
-      "description": "The optional \"{label}\" endpoint has failed on every attempt since {since}. This is often harmless - some schools don't enable every Librus module, and this integration already treats that as normal - but a full week of unbroken failures can also mean something changed (a permission change, or Librus reworking that endpoint). This is informational only and can be safely dismissed; it will reappear if the endpoint keeps failing."
+      "description": "The \"{label}\" endpoint has failed on every attempt since {since}. This is often harmless - some schools/account types don't have every Librus module, and this integration already treats that as normal - but a full week of unbroken failures can also mean something changed (a permission change, or Librus reworking that endpoint). This is informational only and can be safely dismissed; it will reappear if the endpoint keeps failing."
     }
   },
   "entity": {
