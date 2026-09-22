@@ -649,12 +649,41 @@ async def test_next_and_current_lesson_sensors(hass, freezer) -> None:
     assert current.attributes["lesson_no"] == 2
     assert current.attributes["minutes_left"] == 30
     assert current.attributes["classroom"] == "12"
+    assert current.attributes["has_parallel_group"] is False
 
     nxt = hass.states.get(_entity_id(hass, entry, "next_lesson"))
     assert nxt.state == "Historia"
     assert nxt.attributes["lesson_no"] == 3
     assert nxt.attributes["minutes_until"] == 45
     assert nxt.attributes["teacher"] == "Anna Nowak"
+    assert nxt.attributes["has_parallel_group"] is False
+
+
+async def test_next_lesson_flags_parallel_group_ambiguity(hass, freezer) -> None:
+    """BUG FIX (code review): when a period slot holds more than one
+    lesson (parallel groups, e.g. split language subgroups - CONFIRMED
+    real, see merge_timetables' docstring), `_pick()` silently takes the
+    first one with no way to tell whether it's actually the student's own
+    group. `has_parallel_group` must surface that ambiguity instead of
+    quietly showing a subject that might be wrong."""
+    freezer.move_to(_FROZEN)
+    day_iso = dt_util.now().date().isoformat()
+    payload = {
+        "Timetable": {
+            day_iso: [
+                # Same LessonNo, two parallel groups - split language class.
+                [
+                    _tt_lesson(3, _hhmm(45), _hhmm(90), 200),
+                    _tt_lesson(3, _hhmm(45), _hhmm(90), 300),
+                ],
+            ]
+        }
+    }
+    client = build_mock_client(async_get_timetable=payload, async_get_subjects=_LESSON_SUBJECTS)
+    entry = await setup_integration(hass, client)
+
+    nxt = hass.states.get(_entity_id(hass, entry, "next_lesson"))
+    assert nxt.attributes["has_parallel_group"] is True
 
 
 async def test_next_lesson_skips_cancelled_slot(hass, freezer) -> None:

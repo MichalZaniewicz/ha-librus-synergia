@@ -142,6 +142,20 @@ def _lesson_subject(lesson: LessonData, data: LibrusData) -> str:
     return data.subjects.get(lesson.subject_id, f"Lekcja {lesson.subject_id}")
 
 
+def _has_parallel_group(day: date, lesson: LessonData, data: LibrusData) -> bool:
+    """Whether `lesson`'s own period slot (same day + LessonNo) holds MORE
+    than one lesson - parallel groups, e.g. split language subgroups,
+    CONFIRMED real (see `merge_timetables`' docstring). Librus's API
+    doesn't expose which group the logged-in student is actually in
+    anywhere this project has found, so there's no way to pick the "right"
+    one - `LibrusNextLessonSensor`/`LibrusCurrentLessonSensor`'s `_pick()`
+    just takes the first lesson in `_sorted_lessons`' flattened order,
+    which may or may not be the student's real group. This makes that
+    ambiguity visible (via the `has_parallel_group` attribute) instead of
+    silently showing a subject that might be wrong (code review)."""
+    return sum(1 for other in data.timetable.get(day, []) if other.lesson_no == lesson.lesson_no) > 1
+
+
 def _lesson_attrs(
     start: datetime, end: datetime, day: date, lesson: LessonData, data: LibrusData
 ) -> dict[str, Any]:
@@ -157,6 +171,7 @@ def _lesson_attrs(
             data.classrooms.get(lesson.classroom_id) if lesson.classroom_id is not None else None
         ),
         "is_substitution": lesson.is_substitution,
+        "has_parallel_group": _has_parallel_group(day, lesson, data),
     }
 
 
@@ -1272,7 +1287,16 @@ class LibrusNextLessonSensor(LibrusSensorBase):
     substitution - everything a "leaving for school" TTS or a countdown
     card needs, without each consumer re-deriving it from the timetable
     calendar. Client-side over the coordinator's current+next-week window,
-    so it can see through to Monday from a Friday evening but not further."""
+    so it can see through to Monday from a Friday evening but not further.
+
+    `has_parallel_group` (code review): when the picked period slot holds
+    more than one lesson (parallel groups, e.g. split language subgroups -
+    CONFIRMED real, see `merge_timetables`'s docstring), `_pick()` below
+    just takes the first one in `_sorted_lessons`' flattened order - Librus
+    doesn't expose which group the student is actually in anywhere this
+    project has found, so the shown subject might be the wrong group's.
+    This attribute makes that ambiguity visible instead of silently
+    guessing."""
 
     _attr_translation_key = "next_lesson"
     _attr_icon = "mdi:clock-start"
@@ -1310,7 +1334,7 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
     """The lesson happening right now (`unknown` during breaks / outside
     school hours). State is the subject name; attributes carry `minutes_left`
     and the same teacher/classroom/period detail as the Next lesson
-    sensor."""
+    sensor - including `has_parallel_group` (see that class's docstring)."""
 
     _attr_translation_key = "current_lesson"
     _attr_icon = "mdi:clock-time-four-outline"
