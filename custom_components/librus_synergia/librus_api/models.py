@@ -95,7 +95,12 @@ class AttendanceData:
     lesson_no: int | None
     date: str | None
     semester: int | None
-    type_id: int | None
+    # Same defensive typing as `id` above (code review) - Type.Id has never
+    # actually been observed non-numeric live, but since this API has
+    # already proven the sibling Id field can be "t"-prefixed, Type.Id
+    # could plausibly do the same someday. Kept as str when it isn't
+    # cleanly int-able rather than crashing the whole coordinator update.
+    type_id: int | str | None
 
 
 _EXCUSED_ABSENCE_NAME_RE = re.compile(r"uspr\.?", re.IGNORECASE)

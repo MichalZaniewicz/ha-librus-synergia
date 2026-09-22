@@ -1269,11 +1269,26 @@ def _parse_grade_categories(payload: dict[str, Any]) -> dict[int, GradeCategoryD
         if not isinstance(item, dict) or item.get("Id") is None:
             continue
         item_id = int(item["Id"])
+        # BUG FIX (code review): `bool(item.get("CountToTheAverage", True))`
+        # only applied the `True` default when the KEY was absent - an
+        # explicit JSON `null` resolved to `bool(None)` == False. Same
+        # "present but null" failure mode already hit and fixed once for
+        # Users[].FirstName (see const.py's/CLAUDE.md's "Empirically
+        # confirmed" notes) - an explicit null must default to True
+        # ("counts unless explicitly told False"), same as a missing key.
+        raw_count_to_average = item.get("CountToTheAverage")
+        count_to_average = True if raw_count_to_average is None else bool(raw_count_to_average)
+        # BUG FIX (code review): `int(item.get("Weight") or 1)` silently
+        # coerced a legitimate API `Weight: 0` to `1` via Python's
+        # falsy-zero evaluation (`0 or 1` == `1`) - only a genuinely
+        # absent/None Weight should default to 1.
+        raw_weight = item.get("Weight")
+        weight = int(raw_weight) if raw_weight is not None else 1
         result[item_id] = GradeCategoryData(
             id=item_id,
             name=item.get("Name", ""),
-            count_to_average=bool(item.get("CountToTheAverage", True)),
-            weight=int(item.get("Weight") or 1),
+            count_to_average=count_to_average,
+            weight=weight,
         )
     return result
 
@@ -1400,6 +1415,23 @@ def _parse_attendances(payload: dict[str, Any]) -> list[AttendanceData]:
             # CONFIRMED live: some records use a "t"-prefixed id (e.g.
             # "t41685") instead of a plain numeric one - see AttendanceData.
             item_id = str(raw_id)
+        raw_type_id = type_.get("Id")
+        type_id: int | str | None
+        if raw_type_id is None:
+            type_id = None
+        else:
+            try:
+                type_id = int(raw_type_id)
+            except (TypeError, ValueError):
+                # BUG FIX (code review): same defensive fallback as the
+                # sibling `id` field above - not confirmed live for Type.Id
+                # specifically, but this API has already proven the record's
+                # own Id can be "t"-prefixed, so Type.Id could plausibly do
+                # the same someday. A raw str here just misses
+                # attendance_types.get(...) (keyed by int) and is treated
+                # as an unknown type, instead of crashing the whole
+                # coordinator update.
+                type_id = str(raw_type_id)
         attendances.append(
             AttendanceData(
                 id=item_id,
@@ -1407,7 +1439,7 @@ def _parse_attendances(payload: dict[str, Any]) -> list[AttendanceData]:
                 lesson_no=item.get("LessonNo"),
                 date=item.get("Date"),
                 semester=item.get("Semester"),
-                type_id=type_.get("Id"),
+                type_id=type_id,
             )
         )
     return attendances

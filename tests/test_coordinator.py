@@ -852,6 +852,68 @@ async def test_attendance_with_non_numeric_id_does_not_crash_coordinator(hass) -
     assert events == []  # first refresh seeds silently, doesn't fire yet
 
 
+async def test_attendance_with_non_numeric_type_id_does_not_crash_coordinator(hass) -> None:
+    """Same defensive int-coercion (code review) as the sibling `id` field
+    on AttendanceData, exercised above - Attendances[].Type.Id has never
+    actually been observed non-numeric live, but since this API has
+    already proven the record's own Id can be "t"-prefixed, Type.Id could
+    plausibly follow someday. Blindly int()-converting it would crash the
+    whole coordinator update the same way the bare Id field once did."""
+    client = build_mock_client(
+        async_get_attendance_types={
+            "Types": [{"Id": 100, "Name": "Obecność", "IsPresenceKind": True}]
+        },
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 501, "Date": "2026-09-11", "LessonNo": 3, "Type": {"Id": "t7"}},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.attendances[0].type_id == "t7"
+
+
+async def test_grade_category_weight_zero_is_not_coerced_to_one(hass) -> None:
+    """BUG FIX (code review): `weight=int(item.get("Weight") or 1)` silently
+    turned a legitimate API `Weight: 0` into `1` via Python's falsy-zero
+    evaluation (`0 or 1` == `1`) - only an absent/None Weight should
+    default to 1."""
+    client = build_mock_client(
+        async_get_grade_categories={
+            "Categories": [{"Id": 10, "Name": "obecność", "CountToTheAverage": True, "Weight": 0}]
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.grade_categories[10].weight == 0
+
+
+async def test_grade_category_count_to_average_defaults_true_when_explicitly_null(hass) -> None:
+    """BUG FIX (code review): `bool(item.get("CountToTheAverage", True))`
+    only applied the `True` default when the KEY was absent - an explicit
+    JSON `null` resolved to `bool(None)` == False. Same "present but null"
+    failure mode already hit and fixed once for Users[].FirstName - an
+    explicit null must default to True ("counts unless explicitly told
+    False"), same as a missing key."""
+    client = build_mock_client(
+        async_get_grade_categories={
+            "Categories": [
+                {"Id": 10, "Name": "sprawdzian", "CountToTheAverage": None, "Weight": 2}
+            ]
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.grade_categories[10].count_to_average is True
+
+
 async def test_new_homework_event_carries_resolved_subject_and_category(hass) -> None:
     events = async_capture_events(hass, EVENT_NEW_HOMEWORK)
     client = build_mock_client(

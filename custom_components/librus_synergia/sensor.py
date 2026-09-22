@@ -417,7 +417,10 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         }
 
 
-def _attendance_type(data: LibrusData, type_id: int | None) -> AttendanceTypeData | None:
+def _attendance_type(data: LibrusData, type_id: int | str | None) -> AttendanceTypeData | None:
+    # type_id can now be a str (see AttendanceData.type_id) - `.get()` on
+    # the int-keyed `attendance_types` dict just misses (None) for one,
+    # same as any other genuinely-unknown type id.
     return data.attendance_types.get(type_id) if type_id is not None else None
 
 
