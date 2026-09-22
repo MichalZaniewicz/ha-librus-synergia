@@ -413,6 +413,30 @@ async def test_optional_endpoint_failure_does_not_wipe_core_data(hass) -> None:
     assert data.descriptive_grades == []
 
 
+async def test_reference_data_endpoint_failure_does_not_wipe_other_reference_data(hass) -> None:
+    """BUG FIX (code review): `_async_refresh_reference_data`'s own 10-call
+    gather (subjects/teachers/classrooms/school/class/homework-categories/
+    free-days x2/note-categories/behaviour-grade-categories) had the exact
+    same all-or-nothing failure class as `_async_fetch_core_payloads` did
+    before it was fixed (see test_optional_endpoint_failure_does_not_wipe_
+    core_data above) - one endpoint failing (Teachers here) must degrade
+    only that one lookup to empty, never wipe out Subjects/School/Class,
+    which were fetched successfully in the SAME gather."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_schools={"School": {"Name": "Test School"}},
+    )
+    client.async_get_teachers.side_effect = LibrusUnexpectedResponseError("HTTP 500 from Users")
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.subjects == {100: "Matematyka"}
+    assert data.teachers == {}
+    assert data.school is not None
+    assert data.school.name == "Test School"
+
+
 def test_decode_message_content_strips_xml_cdata_wrapper() -> None:
     """BUG FIX (2026-09-06, found live - "co to za bug z treścią
     wiadomości?"): the single-message endpoint's `Message` field, once

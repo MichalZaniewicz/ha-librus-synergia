@@ -728,6 +728,51 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._lucky_number_fetched_date = today
         return self._cached_lucky_number
 
+    # Labels for `_async_refresh_reference_data`'s own 10-call gather, in
+    # the exact order that gather lists them - used only for the debug log
+    # in `_degrade_reference_result`, NOT hooked into the optional-endpoint-
+    # degraded repair issue tracking (`OPTIONAL_ENDPOINT_LABELS`/
+    # `_note_optional_endpoint_failure` are specifically for
+    # `_async_fetch_core_payloads`' own supplementary tier - raising that
+    # SAME class of user-visible repair issue for reference-data endpoints
+    # too is a bigger behavior change than this fix is about).
+    _REFERENCE_DATA_ENDPOINT_LABELS = (
+        "Subjects",
+        "Teachers",
+        "Classrooms",
+        "Schools",
+        "Classes",
+        "HomeworkCategories",
+        "SchoolFreeDays",
+        "ClassFreeDays",
+        "NoteCategories",
+        "BehaviourGradeCategories",
+    )
+
+    def _degrade_reference_result(
+        self, label: str, result: dict[str, Any] | BaseException
+    ) -> dict[str, Any]:
+        """Turn one `return_exceptions=True` reference-data gather result
+        into a payload, degrading a LibrusError to `{}` (which every
+        parser below already treats the same as a genuinely empty account)
+        instead of letting one failing endpoint wipe out the other nine's
+        already-successful results too - the exact same all-or-nothing
+        gather bug `_degrade_optional_payload` fixed for the core-data
+        fetch's own supplementary tier (code review), applied here to
+        reference data instead. Anything that ISN'T a LibrusError (a real
+        bug, or asyncio.CancelledError) is re-raised, same as there."""
+        if isinstance(result, BaseException):
+            if isinstance(result, LibrusError):
+                _LOGGER.debug(
+                    "Reference-data endpoint '%s' fetch failed (non-fatal): %s",
+                    label,
+                    result,
+                    exc_info=result,
+                )
+                return {}
+            raise result
+        return result
+
     async def _async_refresh_reference_data(self) -> None:
         """Refresh near-static reference data at most once a day: subject/
         teacher/classroom name lookups, school/class identity, homework
@@ -740,6 +785,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for all of it, since none of this is core data (grades/attendance/
         timetable keep working without it; entities just fall back to a raw
         numeric id, or a missing school/class sensor/calendar).
+
+        BUG FIX (code review): this used to be ONE plain `asyncio.gather()`
+        (no `return_exceptions=True`) wrapped in a single try/except - one
+        of these 10 endpoints failing raised and discarded the other nine's
+        already-successful results too, and the whole refresh was skipped
+        for this cycle (retried again next cycle, hammering all 10 every
+        time until they all happen to succeed together). None of this is
+        core data (same "supplementary" classification `_async_fetch_core_
+        payloads`' own TIER 2 already uses), so it's now fetched with
+        `return_exceptions=True` and each result degraded independently via
+        `_degrade_reference_result` - one endpoint failing only empties
+        THAT ONE cache for this cycle, never blocks the other nine, and
+        `_reference_data_fetched_at` still advances (this is deliberately a
+        24h-cached "confirmed real, empty" degrade, not a per-cycle retry -
+        a permanently-broken endpoint no longer gets hammered every single
+        coordinator cycle forever).
         """
         now = dt_util.utcnow()
         if (
@@ -751,41 +812,36 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         behaviour_grades_enabled = self._feature_enabled(
             CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
         )
-        try:
-            (
-                subjects_payload,
-                teachers_payload,
-                classrooms_payload,
-                schools_payload,
-                classes_payload,
-                homework_categories_payload,
-                school_free_days_payload,
-                class_free_days_payload,
-                note_categories_payload,
-                behaviour_grade_categories_payload,
-            ) = await asyncio.gather(
-                self._client.async_get_subjects(),
-                self._client.async_get_teachers(),
-                self._client.async_get_classrooms(),
-                self._client.async_get_schools(),
-                self._client.async_get_classes(),
-                self._client.async_get_homework_categories(),
-                self._maybe(free_days_enabled, self._client.async_get_school_free_days),
-                self._maybe(free_days_enabled, self._client.async_get_class_free_days),
-                self._client.async_get_note_categories(),
-                self._maybe(
-                    behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
-                ),
-            )
-        except LibrusError:
-            _LOGGER.warning(
-                "Could not refresh reference data (subjects/teachers/"
-                "classrooms/school/class/categories/free days) - affected "
-                "entities will show raw ids or go stale until the next "
-                "successful refresh",
-                exc_info=True,
-            )
-            return
+        results = await asyncio.gather(
+            self._client.async_get_subjects(),
+            self._client.async_get_teachers(),
+            self._client.async_get_classrooms(),
+            self._client.async_get_schools(),
+            self._client.async_get_classes(),
+            self._client.async_get_homework_categories(),
+            self._maybe(free_days_enabled, self._client.async_get_school_free_days),
+            self._maybe(free_days_enabled, self._client.async_get_class_free_days),
+            self._client.async_get_note_categories(),
+            self._maybe(
+                behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
+            ),
+            return_exceptions=True,
+        )
+        (
+            subjects_payload,
+            teachers_payload,
+            classrooms_payload,
+            schools_payload,
+            classes_payload,
+            homework_categories_payload,
+            school_free_days_payload,
+            class_free_days_payload,
+            note_categories_payload,
+            behaviour_grade_categories_payload,
+        ) = (
+            self._degrade_reference_result(label, result)
+            for label, result in zip(self._REFERENCE_DATA_ENDPOINT_LABELS, results)
+        )
         self._cached_subjects = _parse_id_name_map(subjects_payload, ("Subjects",))
         self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
