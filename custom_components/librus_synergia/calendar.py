@@ -49,6 +49,19 @@ def _iso_week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
+def _event_overlaps(event: CalendarEvent, start: date, end: date) -> bool:
+    """True if `event` (an all-day event, `start`/`end` as `date`) overlaps
+    the closed `[start, end]` day-range window - not single-POINT
+    containment. Shared by `LibrusAgendaCalendar`/`LibrusFreeDaysCalendar`'s
+    own `async_get_events` (code review - previously only the latter had
+    this, the former checked `start <= event.start <= end` instead, which
+    misses an event that starts before the window but still overlaps it).
+    A multi-day event (a school break already, or - if Agenda ever grows
+    one - a multi-day trip) can start before the requested window and/or
+    end after it, which single-point containment would silently miss."""
+    return event.start <= end and event.end > start
+
+
 def _inclusive_end_date(end_date: datetime) -> date:
     """The last calendar DATE actually inside a half-open `[start, end)`
     window. `end_date.date()` alone over-includes by one day whenever
@@ -324,11 +337,19 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         events: list[CalendarEvent] = []
         for item in self.coordinator.data.homeworks:
             event = _homework_to_event(item, self.coordinator.data)
-            if event is not None and start <= event.start <= end:
+            # BUG FIX (code review): was single-point containment (`start
+            # <= event.start <= end`), unlike LibrusFreeDaysCalendar below
+            # which already used a proper overlap check for the same class
+            # of range query - currently masked because every Agenda event
+            # today is single-day (containment and overlap agree for those),
+            # but fixed properly now via the shared `_event_overlaps` helper
+            # since this exact bug class ("midnight-boundary"-adjacent date-
+            # range bugs) has bitten this project multiple times already.
+            if event is not None and _event_overlaps(event, start, end):
                 events.append(event)
         for item in self.coordinator.data.parent_teacher_conferences:
             event = _pt_conference_to_event(item, self.coordinator.data)
-            if event is not None and start <= event.start <= end:
+            if event is not None and _event_overlaps(event, start, end):
                 events.append(event)
         return events
 
@@ -375,7 +396,8 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
         for item in self.coordinator.data.free_days:
             event = _free_day_to_event(item)
             # Overlap check, not containment - a multi-day break can start
-            # before the requested window and/or end after it.
-            if event is not None and event.start <= end and event.end > start:
+            # before the requested window and/or end after it. See
+            # `_event_overlaps` (now shared with LibrusAgendaCalendar above).
+            if event is not None and _event_overlaps(event, start, end):
                 events.append(event)
         return events

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
+from homeassistant.components.calendar import CalendarEvent
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
+from custom_components.librus_synergia.calendar import _event_overlaps
 from custom_components.librus_synergia.const import DOMAIN
 from custom_components.librus_synergia.librus_api import (
     LibrusAuthError,
@@ -25,6 +27,27 @@ def _entity_id(hass, entry, key: str) -> str | None:
 # checks in calendar.py always pick them up as "upcoming", regardless of
 # what time of day the suite happens to run.
 _TOMORROW = (dt_util.now().date() + timedelta(days=1)).isoformat()
+
+
+def test_event_overlaps_true_range_overlap_not_just_containment() -> None:
+    """BUG FIX (code review): `LibrusAgendaCalendar.async_get_events` used
+    to filter by single-POINT containment (`start <= event.start <= end`)
+    instead of true interval overlap, unlike `LibrusFreeDaysCalendar`
+    (already fixed for the same class of range query) - both now share
+    this one `_event_overlaps` helper. A multi-day event starting BEFORE
+    the query window but still ending inside/after it must be included -
+    single-point containment on `event.start` alone would miss it, even
+    though `LibrusFreeDaysCalendar`'s existing test coverage never
+    happened to exercise this specific shape."""
+    # A 3-day event (Mon-Wed) queried against a window that only covers
+    # its last day (Wed-Thu) - event.start (Mon) is OUTSIDE the window, so
+    # containment on event.start alone would wrongly exclude it, even
+    # though the event is still ongoing on the query's first day.
+    event = CalendarEvent(start=date(2026, 9, 7), end=date(2026, 9, 10), summary="Wycieczka")
+    assert _event_overlaps(event, date(2026, 9, 9), date(2026, 9, 11)) is True
+    # Sanity check the negative case too - a window entirely before the
+    # event must NOT overlap.
+    assert _event_overlaps(event, date(2026, 9, 1), date(2026, 9, 6)) is False
 
 
 async def test_all_calendars_are_created(hass) -> None:
