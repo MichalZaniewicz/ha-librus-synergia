@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.4
 
 ### Fixed
 - **The actual semester/year grade (once Librus posts it, distinct from
@@ -12,16 +12,6 @@
   API field - not yet observable on any account until a semester actually
   ends, but confirmed via the reference source's own field names and
   fixed ahead of time.
-
-## 0.7.4-beta.1
-
-**Beta release** - a code-review round (10 correctness/reliability fixes,
-no new entities/behavior changes visible day-to-day), not yet promoted to
-the stable channel. To try it: HACS -> Librus Synergia -> the three-dot
-menu -> "Redownload" -> enable "Show beta versions" -> pick
-`0.7.4-beta.1`.
-
-### Fixed
 - **A dead session could go undetected on a non-JSON 401/403 response.**
   `_async_request_url` used to JSON-parse the body before checking for a
   401/403 status - a plain-text/HTML error body raised the wrong exception
