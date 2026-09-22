@@ -13,19 +13,24 @@ these can't be built or verified against a real shape:
   separate `Grades/Comments` endpoint. `_resolve_comment_ids` handles both
   defensively, but which is right is unconfirmed. Check the first time a
   real graded + commented item exists.
-- **Grade `+`/`-` modifier value** — `sensor._parse_grade_value` adds
-  `+0.5` / `-0.25`; that convention is a third-party inference, never
-  observed. Verify against `Grades/Types`' numeric entries once a real
-  numeric grade lands.
+- **Grade `+`/`-` modifier value** — `coordinator.parse_grade_value` adds
+  `+0.5` / `-0.25`; that convention is a third-party inference. Real
+  `+`-modified grades now exist live (2026-09, `4+`/`5+`) and average out
+  to +0.5 as expected, but that's circular (the average is computed with
+  the same assumed convention) - doesn't independently confirm the value.
+  Still need: a `-`-modified grade (none observed yet at all), and
+  ideally a cross-check against the real Librus app/website's own
+  displayed average for a subject with a modified grade.
 - **`Notes[].Positive`** — resolved (0=neg, 1=pos, else neutral, via the
   reference parser) — keep as-is unless a real note contradicts it.
 - **Confirmed-real-but-empty endpoints**, client methods exist, not wired
   to any entity: `PointGrades` (disabled for this school), `TextGrades`
   (enablement unknown), `VirtualClasses` (nothing references a
-  virtual-class id), `DescriptiveGrades` (enabled here, still empty —
-  sensor exists, will populate when data does), `HomeWorkAssignments`
-  (sensor exists, empty), `ParentTeacherConferences` (merged into the
-  Agenda calendar defensively).
+  virtual-class id), `ParentTeacherConferences` (merged into the Agenda
+  calendar defensively). `DescriptiveGrades`/`BehaviourGrades/Points`
+  have real sensors but are still empty on the live account as of
+  2026-09-22. `HomeWorkAssignments` is no longer in this bucket — it got
+  real data (2026-09-17) and the sensor is confirmed parsing correctly.
 - **Whether `HomeWorks` accepts a date-range query param** — never tried;
   `calendar.py` filters client-side so it's not blocking.
 - **Substitutions / TeacherFreeDays** — both 403 for a parent/student

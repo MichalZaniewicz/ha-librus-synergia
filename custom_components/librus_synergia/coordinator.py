@@ -107,10 +107,15 @@ def parse_grade_value(value: str) -> float | None:
     (2026-09-05) via the `Grades/Types` reference endpoint that every
     non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
     `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
-    returning None here and is excluded from the average - the numeric
-    +/- MODIFIER convention itself is still a third-party inference, not
-    something Librus documents, since no real numeric grade has been
-    issued on the test account yet to check the exact value it produces.
+    returning None here and is excluded from the average. Real `+`-modified
+    grades have since appeared live (2026-09, e.g. `4+` in Język niemiecki,
+    `5+` in Plastyka) and average out to the expected `+0.5` - but that only
+    proves this function is self-consistent, NOT that +0.5/-0.25 is the
+    value Librus itself intends: the subject average is computed with this
+    same assumed convention, so it can't independently confirm itself.
+    Still a third-party inference, not something Librus documents. No
+    `-`-modified grade has appeared yet, so -0.25 remains entirely
+    unchecked.
 
     Public (not underscore-prefixed) - shared by sensor.py's average
     calculation AND the good-grade-streak/achievement logic below, which
