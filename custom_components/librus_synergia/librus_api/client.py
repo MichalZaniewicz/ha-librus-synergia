@@ -326,10 +326,20 @@ class LibrusApiClient:
                     raise LibrusServerMaintenanceError(
                         f"Librus is under maintenance (HTTP 503) on {url}."
                     )
-                payload = await self._async_read_json(
-                    response, array_envelope_key=array_envelope_key
-                )
                 if response.status in (401, 403):
+                    # BUG FIX (code review): this check used to run AFTER
+                    # `_async_read_json` below, which JSON-parses the body
+                    # first - a dead-session 401/403 can come back with a
+                    # non-JSON (HTML/plain-text) body, and that raised
+                    # LibrusUnexpectedResponseError before this branch (and
+                    # the confirmed-403 "timetable not published" detection
+                    # that depends on `status_code`, and the coordinator's
+                    # forced-relogin-and-retry-once recovery that depends on
+                    # this exception TYPE at all) ever got a chance to run.
+                    # Check the status first and don't depend on a
+                    # successfully-parsed payload - `status_code` alone is
+                    # enough context for LibrusSessionExpiredError.
+                    #
                     # Distinct from LibrusInvalidCredentialsError (which
                     # means the login handshake itself was rejected) - this
                     # means an already-established session died mid-cycle,
@@ -343,6 +353,9 @@ class LibrusApiClient:
                         f"Session rejected on {url} (HTTP {response.status}).",
                         status_code=response.status,
                     )
+                payload = await self._async_read_json(
+                    response, array_envelope_key=array_envelope_key
+                )
                 if response.status >= 400:
                     raise LibrusUnexpectedResponseError(
                         f"HTTP {response.status} from {url}: {payload!r}"

@@ -261,6 +261,34 @@ async def test_data_fetch_session_rejected_raises_session_expired() -> None:
 
 
 @pytest.mark.asyncio
+async def test_data_fetch_session_rejected_with_non_json_body_still_raises_session_expired() -> None:
+    """BUG FIX (code review): `_async_request_url` used to call
+    `_async_read_json` (JSON-parse the body) BEFORE checking `response.
+    status in (401, 403)`. A dead-session 401/403 can come back with a
+    non-JSON (HTML/plain-text) body - previously that made `_async_read_json`
+    raise LibrusUnexpectedResponseError first, so LibrusSessionExpiredError
+    never fired at all and the coordinator's forced-relogin-and-retry-once
+    recovery (which depends on catching THIS exception type) was silently
+    skipped. The 401/403 check must run first and must not depend on a
+    successfully-parsed payload."""
+    async with aiohttp.ClientSession() as session:
+        with _MockedSession(session) as mocked:
+            _mock_successful_login(session, mocked)
+            client = LibrusApiClient(session, "1234567u")
+            await client.async_login("correct-password")
+
+            mocked.get(
+                f"{DATA_BASE_URL}/Grades",
+                status=401,
+                text_data="<html>session expired, please log in again</html>",
+            )
+            with pytest.raises(LibrusSessionExpiredError) as exc_info:
+                await client.async_get_grades()
+
+    assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_maintenance_response_raises() -> None:
     async with aiohttp.ClientSession() as session:
         with _MockedSession(session) as mocked:
