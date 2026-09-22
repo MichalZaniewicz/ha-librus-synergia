@@ -14,13 +14,25 @@ these can't be built or verified against a real shape:
   defensively, but which is right is unconfirmed. Check the first time a
   real graded + commented item exists.
 - **Grade `+`/`-` modifier value** — `coordinator.parse_grade_value` adds
-  `+0.5` / `-0.25`; that convention is a third-party inference. Real
-  `+`-modified grades now exist live (2026-09, `4+`/`5+`) and average out
-  to +0.5 as expected, but that's circular (the average is computed with
-  the same assumed convention) - doesn't independently confirm the value.
-  Still need: a `-`-modified grade (none observed yet at all), and
-  ideally a cross-check against the real Librus app/website's own
-  displayed average for a subject with a modified grade.
+  `+0.5` / `-0.25`; that convention was a third-party inference. **+0.5
+  now CONFIRMED (2026-09-22)**: a raw probe of Librus's own `/Grades` API
+  showed it carries no numeric value at all for a modified grade (only
+  the string, e.g. `"Grade": "4+"`) - so the only real check was
+  cross-referencing the real Librus app's own displayed average for that
+  `4+` grade, which the account owner confirmed also shows 4.5. **-0.25
+  still unverified** - no `-`-modified grade has appeared live yet.
+- **`Grades[].IsConstituent`** — RESOLVED (2026-09-22) via the reference
+  parser (`LibrusApiGrades.kt`): it's a grade-type CLASSIFICATION flag
+  (checked first, in priority order, against `IsSemester`/
+  `IsSemesterProposition`/`IsFinal`/`IsFinalProposition` - `true` means
+  "ordinary day-to-day grade"), NOT a "counts toward the average" switch
+  (that's the pre-existing `CountToTheAverage`/weight-0-for-`bz`/`np`/`+`/
+  `-` logic, unrelated). Not itself wired in (no reason to - our own
+  `is_semester_proposition`/`is_final_proposition`/`is_semester`/
+  `is_final` flags already classify a grade correctly without it), but
+  reading this file is what surfaced the REAL bug: `IsSemester`/`IsFinal`
+  (the actual, not proposed, semester/year grade) were never tracked at
+  all - fixed same session, see CHANGELOG's Unreleased section.
 - **`Notes[].Positive`** — resolved (0=neg, 1=pos, else neutral, via the
   reference parser) — keep as-is unless a real note contradicts it.
 - **Confirmed-real-but-empty endpoints**, client methods exist, not wired

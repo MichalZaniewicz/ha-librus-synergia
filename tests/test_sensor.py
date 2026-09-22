@@ -762,6 +762,43 @@ async def test_averages_expose_arithmetic_and_per_semester(hass) -> None:
     assert subject.attributes["average_semester_2"] == 4.0
 
 
+async def test_actual_semester_and_final_grades_excluded_from_average(hass) -> None:
+    """BUG FIX (2026-09-22, found via reading the reference parser after a
+    live IsConstituent investigation): the reference parser distinguishes
+    FOUR non-day-to-day grade types, not just two - `IsSemester`/`IsFinal`
+    (the ACTUAL semester/year grade, once Librus posts it) alongside
+    `IsSemesterProposition`/`IsFinalProposition` (the proposed one, already
+    excluded). Before this fix, a real semester/final grade would have
+    been silently folded into the weighted average alongside the very
+    day-to-day grades it summarizes - double-counting. Not confirmed live
+    yet (no real semester-end data on the test account), but confirmed via
+    the reference parser's own field names."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "3", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-05"},
+                # The ACTUAL semester grade - a summary, not a day-to-day
+                # grade - dated AFTER the two above so it would otherwise
+                # also win "latest_grade" if not excluded.
+                {"Id": 3, "Grade": "4", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2027-01-31", "IsSemester": True},
+                {"Id": 4, "Grade": "6", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2027-06-15", "IsFinal": True},
+            ]
+        },
+        async_get_grade_categories={
+            "Categories": [{"Id": 10, "Name": "odpowiedź", "CountToTheAverage": True, "Weight": 1}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
+    assert float(subject.state) == 4.0  # (5 + 3) / 2 - NOT the semester/final grades
+    assert subject.attributes["grade_count"] == 2
+    assert subject.attributes["latest_grade"] == "3"  # the 2026-09-05 one, not the later summary grades
+    assert [g["value"] for g in subject.attributes["grades"]] == ["3", "5"]
+
+
 async def test_next_exam_sensor(hass) -> None:
     """Picks the soonest future Agenda entry whose category looks like a
     graded assessment; a trip/other category is ignored."""

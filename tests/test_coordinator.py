@@ -1325,6 +1325,8 @@ def _grade(value: str, add_date: str, **flags) -> GradeData:
         add_date=add_date,
         is_semester_proposition=flags.get("is_semester_proposition", False),
         is_final_proposition=flags.get("is_final_proposition", False),
+        is_semester=flags.get("is_semester", False),
+        is_final=flags.get("is_final", False),
     )
 
 
@@ -1342,6 +1344,22 @@ def test_good_grade_streak_skips_non_numeric_and_stops_at_low_grade() -> None:
 def test_good_grade_streak_ignores_semester_and_final_propositions() -> None:
     grades = [
         _grade("6", "2026-09-05", is_semester_proposition=True),
+        _grade("5", "2026-09-01"),
+    ]
+
+    assert good_grade_streak(grades) == 1
+
+
+def test_good_grade_streak_ignores_actual_semester_and_final_grades() -> None:
+    """BUG FIX (2026-09-22, found via reading the reference parser after a
+    live IsConstituent investigation): the ACTUAL semester/final grade
+    (IsSemester/IsFinal - distinct from the proposed one, which was already
+    excluded) must be ignored the same way - it's a summary of the
+    day-to-day grades, not one of them, so it shouldn't itself extend (or
+    break) the streak."""
+    grades = [
+        _grade("6", "2026-09-05", is_semester=True),
+        _grade("2", "2026-09-04", is_final=True),
         _grade("5", "2026-09-01"),
     ]
 

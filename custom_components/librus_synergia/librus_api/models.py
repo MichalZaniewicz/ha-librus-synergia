@@ -45,6 +45,19 @@ class GradeData:
     add_date: str | None
     is_semester_proposition: bool
     is_final_proposition: bool
+    # BUG FIX (live investigation, 2026-09-22): the reference parser
+    # (szkolny-android's `LibrusApiGrades.kt`) distinguishes FOUR
+    # non-day-to-day grade types, not two - `IsSemester`/`IsFinal` (the
+    # ACTUAL semester/year grade, once posted) alongside
+    # `IsSemesterProposition`/`IsFinalProposition` (the proposed one).
+    # This integration only ever tracked the two propositions - once
+    # semester 1 ends and a real semester grade is posted, it would have
+    # been silently treated as an ordinary day-to-day grade and folded
+    # into the weighted average alongside the very grades it summarizes.
+    # Discovered via `IsConstituent` (see coordinator.py's
+    # `_parse_grades`) leading to a read of the same reference file.
+    is_semester: bool = False
+    is_final: bool = False
     comments: list[str] = field(default_factory=list)
 
 

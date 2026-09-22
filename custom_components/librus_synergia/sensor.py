@@ -55,7 +55,9 @@ def _calculate_average(
     semester: int | None = None,
     weighted: bool = True,
 ) -> float | None:
-    """Grade average, excluding semester/final proposition entries and
+    """Grade average, excluding semester/final entries (proposed OR
+    actual - see GradeData.is_semester/is_final's own docstring for why
+    the actual ones matter too, not just the propositions) and
     categories marked as not counting toward the average. Weighted by the
     grade category's weight unless `weighted=False` (plain arithmetic
     mean of the same counted grades). `semester` restricts to grades from
@@ -63,7 +65,12 @@ def _calculate_average(
     running = 0.0
     weight_total = 0.0
     for grade in grades:
-        if grade.is_semester_proposition or grade.is_final_proposition:
+        if (
+            grade.is_semester_proposition
+            or grade.is_final_proposition
+            or grade.is_semester
+            or grade.is_final
+        ):
             continue
         if subject_id is not None and grade.subject_id != subject_id:
             continue
@@ -89,6 +96,8 @@ def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> 
         for g in grades
         if not g.is_semester_proposition
         and not g.is_final_proposition
+        and not g.is_semester
+        and not g.is_final
         and (subject_id is None or g.subject_id == subject_id)
         and g.add_date
     ]
@@ -390,6 +399,8 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             if g.subject_id == self._subject_id
             and not g.is_semester_proposition
             and not g.is_final_proposition
+            and not g.is_semester
+            and not g.is_final
         ]
         count = len(subject_grades)
         categories = self.coordinator.data.grade_categories

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The actual semester/year grade (once Librus posts it, distinct from
+  the already-excluded proposed one) would have been silently folded into
+  the weighted average alongside the day-to-day grades it summarizes.**
+  Found by reading the reference parser (`IsConstituent`, `IsSemester`,
+  `IsFinal` alongside the already-handled `IsSemesterProposition`/
+  `IsFinalProposition`) after a live investigation into an unrelated raw
+  API field - not yet observable on any account until a semester actually
+  ends, but confirmed via the reference source's own field names and
+  fixed ahead of time.
+
 ## 0.7.4-beta.1
 
 **Beta release** - a code-review round (10 correctness/reliability fixes,

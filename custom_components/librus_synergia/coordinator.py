@@ -107,15 +107,18 @@ def parse_grade_value(value: str) -> float | None:
     (2026-09-05) via the `Grades/Types` reference endpoint that every
     non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
     `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
-    returning None here and is excluded from the average. Real `+`-modified
-    grades have since appeared live (2026-09, e.g. `4+` in Język niemiecki,
-    `5+` in Plastyka) and average out to the expected `+0.5` - but that only
-    proves this function is self-consistent, NOT that +0.5/-0.25 is the
-    value Librus itself intends: the subject average is computed with this
-    same assumed convention, so it can't independently confirm itself.
-    Still a third-party inference, not something Librus documents. No
-    `-`-modified grade has appeared yet, so -0.25 remains entirely
-    unchecked.
+    returning None here and is excluded from the average.
+
+    The +0.5 half is now CONFIRMED correct (2026-09-22): a raw probe of
+    Librus's own `/Grades` API (real `4+`/`5+` grades that appeared live,
+    2026-09) showed it carries NO numeric value for a modified grade at
+    all - only the string (`"Grade": "4+"`), so this function computing
+    4.5 from that string is not, by itself, proof of anything (it's the
+    same assumed convention checking itself). The real independent check
+    was cross-referencing the real Librus app's own displayed average for
+    that `4+` grade - also 4.5, confirmed by the account owner. -0.25
+    remains unverified - no `-`-modified grade has appeared live yet to
+    cross-check the same way.
 
     Public (not underscore-prefixed) - shared by sensor.py's average
     calculation AND the good-grade-streak/achievement logic below, which
@@ -148,17 +151,21 @@ _GOOD_GRADE_STREAK_THRESHOLD = 4.0
 def good_grade_streak(grades: list[GradeData]) -> int:
     """Consecutive most-recent NUMERIC grades >= _GOOD_GRADE_STREAK_THRESHOLD,
     counting back from the newest until the first one below it. Semester/
-    final propositions excluded (not day-to-day grades, same as the
-    average calculation). A non-numeric mark (bz/np/...) is SKIPPED, not
-    counted as breaking the streak - it isn't really a "bad grade", just
-    an administrative mark, and penalizing it would feel unfair for what
-    this is meant to be: a small, motivating "passa" a student can watch
-    grow."""
+    final grades (proposed OR actual) excluded (not day-to-day grades,
+    same as the average calculation). A non-numeric mark (bz/np/...) is
+    SKIPPED, not counted as breaking the streak - it isn't really a "bad
+    grade", just an administrative mark, and penalizing it would feel
+    unfair for what this is meant to be: a small, motivating "passa" a
+    student can watch grow."""
     dated = sorted(
         (
             g
             for g in grades
-            if g.add_date and not g.is_semester_proposition and not g.is_final_proposition
+            if g.add_date
+            and not g.is_semester_proposition
+            and not g.is_final_proposition
+            and not g.is_semester
+            and not g.is_final
         ),
         key=lambda g: g.add_date,
         reverse=True,
@@ -1180,10 +1187,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         entry_id = self.config_entry.entry_id if self.config_entry else None
         unlocked: set[str] = set()
 
-        non_proposition_grades = [
-            g for g in grades if not g.is_semester_proposition and not g.is_final_proposition
+        day_to_day_grades = [
+            g
+            for g in grades
+            if not g.is_semester_proposition
+            and not g.is_final_proposition
+            and not g.is_semester
+            and not g.is_final
         ]
-        if any(parse_grade_value(g.value) == 6.0 for g in non_proposition_grades):
+        if any(parse_grade_value(g.value) == 6.0 for g in day_to_day_grades):
             unlocked.add("first_six")
 
         streak = good_grade_streak(grades)
@@ -1369,6 +1381,13 @@ def _parse_grades(
                 add_date=item.get("AddDate"),
                 is_semester_proposition=bool(item.get("IsSemesterProposition")),
                 is_final_proposition=bool(item.get("IsFinalProposition")),
+                # See GradeData.is_semester/is_final's own docstring - the
+                # ACTUAL semester/year grade, distinct from the proposed
+                # one above. Not confirmed live yet (no real semester-end
+                # data on the test account), but confirmed via the
+                # reference parser's own field names.
+                is_semester=bool(item.get("IsSemester")),
+                is_final=bool(item.get("IsFinal")),
                 comments=comments,
             )
         )
