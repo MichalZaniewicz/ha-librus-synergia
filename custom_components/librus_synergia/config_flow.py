@@ -69,7 +69,6 @@ from .librus_api import (
     LibrusConnectionError,
     LibrusError,
     LibrusInvalidCredentialsError,
-    LibrusUnexpectedResponseError,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +82,29 @@ USER_SCHEMA = vol.Schema(
         vol.Required(CONF_PASSWORD): PASSWORD_SELECTOR,
     }
 )
+
+
+def _login_error_code(err: LibrusError) -> str:
+    """Map a `_login` failure to one of strings.json's config-flow error
+    keys.
+
+    Extracted (code review) from `async_step_user`/`async_step_reauth_confirm`/
+    `async_step_reconfigure`, which all run the identical `self._login(...)`
+    call and used to each duplicate this same ~6-clause except chain - a
+    future new `LibrusError` subtype only needs its mapping added here once.
+    Uses isinstance checks, not a dict keyed by exact type, so a subclass
+    not explicitly listed here still falls through to "unknown" the same
+    way the old `except (LibrusUnexpectedResponseError, LibrusError)`
+    catch-all did."""
+    if isinstance(err, LibrusCaptchaRequiredError):
+        return "captcha_needed"
+    if isinstance(err, LibrusAccountActionRequiredError):
+        return "account_action_required"
+    if isinstance(err, LibrusInvalidCredentialsError):
+        return "invalid_auth"
+    if isinstance(err, LibrusConnectionError):
+        return "cannot_connect"
+    return "unknown"
 
 
 class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -174,16 +196,8 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
             username = user_input[CONF_USERNAME].strip()
             try:
                 info = await self._login(username, user_input[CONF_PASSWORD])
-            except LibrusCaptchaRequiredError:
-                errors["base"] = "captcha_needed"
-            except LibrusAccountActionRequiredError:
-                errors["base"] = "account_action_required"
-            except LibrusInvalidCredentialsError:
-                errors["base"] = "invalid_auth"
-            except LibrusConnectionError:
-                errors["base"] = "cannot_connect"
-            except (LibrusUnexpectedResponseError, LibrusError):
-                errors["base"] = "unknown"
+            except LibrusError as err:
+                errors["base"] = _login_error_code(err)
             else:
                 await self.async_set_unique_id(info["unique_id"])
                 self._abort_if_unique_id_configured()
@@ -207,16 +221,8 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 info = await self._login(username, user_input[CONF_PASSWORD])
-            except LibrusCaptchaRequiredError:
-                errors["base"] = "captcha_needed"
-            except LibrusAccountActionRequiredError:
-                errors["base"] = "account_action_required"
-            except LibrusInvalidCredentialsError:
-                errors["base"] = "invalid_auth"
-            except LibrusConnectionError:
-                errors["base"] = "cannot_connect"
-            except (LibrusUnexpectedResponseError, LibrusError):
-                errors["base"] = "unknown"
+            except LibrusError as err:
+                errors["base"] = _login_error_code(err)
             else:
                 return self.async_update_reload_and_abort(
                     reauth_entry,
@@ -254,16 +260,8 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
             username = user_input[CONF_USERNAME].strip()
             try:
                 info = await self._login(username, user_input[CONF_PASSWORD])
-            except LibrusCaptchaRequiredError:
-                errors["base"] = "captcha_needed"
-            except LibrusAccountActionRequiredError:
-                errors["base"] = "account_action_required"
-            except LibrusInvalidCredentialsError:
-                errors["base"] = "invalid_auth"
-            except LibrusConnectionError:
-                errors["base"] = "cannot_connect"
-            except (LibrusUnexpectedResponseError, LibrusError):
-                errors["base"] = "unknown"
+            except LibrusError as err:
+                errors["base"] = _login_error_code(err)
             else:
                 await self.async_set_unique_id(info["unique_id"])
                 self._abort_if_unique_id_mismatch()
