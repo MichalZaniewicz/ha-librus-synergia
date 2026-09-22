@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **A dead session could go undetected on a non-JSON 401/403 response.**
+  `_async_request_url` used to JSON-parse the body before checking for a
+  401/403 status - a plain-text/HTML error body raised the wrong exception
+  first, silently skipping both the forced-relogin-and-retry-once recovery
+  and the "timetable not published yet" (403) detection.
+- **One failing reference-data endpoint could wipe out every other one in
+  the same refresh.** Subjects/teachers/classrooms/school/class/homework
+  categories/free days/note categories/behaviour-grade categories are now
+  fetched independently, the same all-or-nothing `asyncio.gather()` class
+  of bug already fixed once for the core data fetch.
+- A grade category's `Weight: 0` was silently coerced to `1`; an explicit
+  `CountToTheAverage: null` was silently coerced to "doesn't count" instead
+  of defaulting to "counts".
+- `Attendances[].Type.Id` is now defensively coerced the same way the
+  sibling `Id` field already is, instead of assuming it's always numeric.
+- The Agenda calendar now uses proper date-range overlap (not single-point
+  containment) when filtering events, matching the Free Days calendar -
+  currently unobservable (every Agenda event is single-day today) but
+  fixed properly ahead of a future multi-day event.
+
+### Changed
+- The lucky number, reference-data and messages fetches now run
+  concurrently each cycle instead of one after another.
+- Next/Current lesson sensors expose a new `has_parallel_group` attribute
+  when the picked period slot holds more than one lesson (split subject
+  subgroups) - Librus doesn't expose which group a student is actually in,
+  so this makes the ambiguity visible instead of silently guessing.
+- Internal cleanup: the config flow's login-error-to-error-code mapping and
+  the message sender-name resolution (both previously duplicated across
+  3 and 2 call sites respectively) are now single shared helpers.
+
 ## 0.7.3
 
 ### Fixed
