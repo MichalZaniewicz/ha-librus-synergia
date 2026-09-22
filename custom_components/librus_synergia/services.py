@@ -22,7 +22,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from .const import DOMAIN
-from .coordinator import LibrusDataUpdateCoordinator, decode_message_content
+from .coordinator import LibrusDataUpdateCoordinator, decode_message_content, resolve_sender_name
 from .librus_api import LibrusError
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,9 +123,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         if not isinstance(data, dict):
             raise HomeAssistantError(f"Unexpected response fetching message {message_id}.")
 
-        sender_name = data.get("senderName") or (
-            f"{data.get('senderFirstName', '')} {data.get('senderLastName', '')}".strip()
-        )
+        sender_name = resolve_sender_name(data)
         # CONFIRMED live (2026-09-17): each entry is {"filename": ..., "id":
         # ...}. The file itself still can't be downloaded through this
         # integration (see BACKLOG.md) - only the name, so at least someone

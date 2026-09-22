@@ -1806,6 +1806,24 @@ _MESSAGE_MAILBOXES = (
 )
 
 
+def resolve_sender_name(payload: dict[str, Any]) -> str:
+    """Resolve a message's sender display name from a `senderName` field,
+    falling back to `senderFirstName`/`senderLastName` combined when it's
+    absent/empty - CONFIRMED live to be the identical shape on both the
+    mailbox list endpoints (`_parse_message_list` below) AND the single
+    full-message endpoint (`services.py`'s `get_message` handler).
+
+    Extracted (code review) - this exact ~3-line resolution used to be
+    duplicated between the two call sites. Public (not underscore-
+    prefixed) so `services.py` can reuse it: coordinator.py must never
+    import from services.py, so the shared helper has to live on this
+    side of that one-way dependency (same rule `parse_grade_value`'s
+    docstring above documents for sensor.py)."""
+    return payload.get("senderName") or (
+        f"{payload.get('senderFirstName', '')} {payload.get('senderLastName', '')}".strip()
+    )
+
+
 def _parse_message_list(list_payload: dict[str, Any], mailbox: str) -> list[MessageData]:
     """Shared by every mailbox's list endpoint - inbox, substitutions,
     alerts, ... all share the same response shape."""
@@ -1816,9 +1834,7 @@ def _parse_message_list(list_payload: dict[str, Any], mailbox: str) -> list[Mess
     for item in items:
         if not isinstance(item, dict) or item.get("messageId") is None:
             continue
-        sender_name = item.get("senderName") or (
-            f"{item.get('senderFirstName', '')} {item.get('senderLastName', '')}".strip()
-        )
+        sender_name = resolve_sender_name(item)
         messages.append(
             MessageData(
                 id=str(item["messageId"]),

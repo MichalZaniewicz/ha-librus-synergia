@@ -278,6 +278,38 @@ async def test_messages_parsed_when_available(hass) -> None:
     assert data.messages[0].mailbox == "inbox"
 
 
+async def test_message_sender_name_falls_back_to_first_and_last_name(hass) -> None:
+    """`resolve_sender_name` (code review - extracted from a duplicate in
+    `services.py`'s `get_message` handler) must fall back to
+    senderFirstName+senderLastName combined when `senderName` itself is
+    absent, not just when it's falsy-but-present - mirrors the shape
+    CONFIRMED live for both the mailbox list endpoints and the single
+    full-message endpoint."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_messages.return_value = {
+        "data": [
+            {
+                "messageId": "42",
+                "senderFirstName": "Amelia",
+                "senderLastName": "Marciszak",
+                "topic": "Zebranie",
+                "content": "",
+                "sendDate": None,
+                "readDate": None,
+                "isAnyFileAttached": False,
+            }
+        ]
+    }
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.messages) == 1
+    assert data.messages[0].sender_name == "Amelia Marciszak"
+
+
 async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     """New (2026-09-06, librusik-inspired): "substitutions" and "alerts"
     now get their own full message list (not just an unread count, unlike

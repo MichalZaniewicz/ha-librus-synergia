@@ -117,6 +117,37 @@ async def test_get_message_service_returns_attachment_filenames(hass) -> None:
     ]
 
 
+async def test_get_message_service_falls_back_to_first_and_last_name(hass) -> None:
+    """`resolve_sender_name` (code review - shared with coordinator.py's
+    `_parse_message_list`, see test_coordinator.py's own coverage of the
+    same helper) must fall back to senderFirstName+senderLastName combined
+    when `senderName` itself is absent from the single full-message
+    endpoint's response, not just from a mailbox list response."""
+    client = build_mock_client()
+    client.async_get_message.return_value = {
+        "data": {
+            "senderFirstName": "Amelia",
+            "senderLastName": "Marciszak",
+            "topic": "Zebranie z rodzicami",
+            "Message": GOOD_MESSAGE_PAYLOAD["data"]["Message"],
+            "sendDate": "2026-09-04T17:47:10",
+            "readDate": None,
+            "attachments": [],
+        }
+    }
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "get_message",
+        {"device_id": _device_id(hass, entry), "message_id": "186536"},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response["sender"] == "Amelia Marciszak"
+
+
 async def test_get_message_service_mailbox_field_passed_through(hass) -> None:
     """New (2026-09-06): the `mailbox` field lets a card fetch full
     content for a substitutions/alerts message, not just inbox."""
