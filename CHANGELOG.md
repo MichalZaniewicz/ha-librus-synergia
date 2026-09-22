@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.7.4-beta.1
+
+**Beta release** - a code-review round (10 correctness/reliability fixes,
+no new entities/behavior changes visible day-to-day), not yet promoted to
+the stable channel. To try it: HACS -> Librus Synergia -> the three-dot
+menu -> "Redownload" -> enable "Show beta versions" -> pick
+`0.7.4-beta.1`.
 
 ### Fixed
 - **A dead session could go undetected on a non-JSON 401/403 response.**
