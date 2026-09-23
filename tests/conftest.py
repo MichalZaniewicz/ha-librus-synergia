@@ -100,6 +100,7 @@ def build_mock_client(**overrides) -> AsyncMock:
     client.async_get_subjects.return_value = {"Subjects": []}
     client.async_get_teachers.return_value = {"Users": []}
     client.async_get_classrooms.return_value = {"Classrooms": []}
+    client.async_get_lessons.return_value = {"Lessons": []}
     client.async_get_schools.return_value = {"School": {"Name": "Test School"}}
     client.async_get_classes.return_value = {"Class": {"Number": 7, "Symbol": "d"}}
     client.async_get_virtual_classes.return_value = {"VirtualClasses": []}

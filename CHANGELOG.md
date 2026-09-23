@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Absences broken down by subject** (user-requested feature: "widać
+  który przedmiot jest najczęściej opuszczany") - the Attendance sensor
+  gained a `by_subject` attribute, same excused/unexcused/late split
+  already used by the existing `by_weekday` attribute, keyed by subject
+  name instead of weekday. Resolved via a new `Lessons` reference
+  endpoint (global lesson_id -> Subject/Teacher/Class lookup, distinct
+  from `Timetables` - which only covers a rolling 2-week window and never
+  exposes a lesson's own `Id`) - `Attendances[].Lesson.Id` correlates
+  against it, confirmed live (2026-09-23) against 10 real records before
+  writing any integration code. Fetched in the same 24h-cached
+  reference-data batch as Subjects/Teachers/Classrooms. A record whose
+  lesson_id doesn't resolve is skipped rather than bucketed under a
+  fabricated "unknown" subject.
+
 ## 0.7.6
 
 Promoted from the `0.7.6-beta.1`-`0.7.6-beta.3` testing line - a real,

@@ -77,7 +77,7 @@ Polish).
 |---|---|---|
 | `sensor` | Overall grade average | Weighted average across every subject; attributes add `average_arithmetic` and `average_semester_1`/`average_semester_2` |
 | `sensor` | *Subject* average (one per subject) | Discovered automatically from your account; attributes include the subject name, full grade log, latest grade (with any teacher comments), proposed/final semester grades and per-semester / arithmetic averages |
-| `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown, total record count, an independently-computed `percentage` (works even if your school hides this), and a `by_semester` breakdown (count/percentage per semester) in attributes |
+| `sensor` | Attendance | Count of real absences (excludes "present"/"late"/"excused" marks); full per-type breakdown, total record count, an independently-computed `percentage` (works even if your school hides this), and `by_semester`/`by_weekday`/`by_subject` breakdowns in attributes |
 | `sensor` | Unexcused absences | Just the count of absences that still need a justification (the Attendance sensor's state blends excused + unexcused); `recent_dates` in attributes |
 | `sensor` | Next lesson | Subject name of the next lesson that will actually take place (cancelled slots skipped); attributes carry `start`/`end`, `minutes_until`, teacher, classroom, period number and substitution flag |
 | `sensor` | Current lesson | Subject name of the lesson happening right now (`unknown` during breaks / outside school hours); attributes include `minutes_left` and the same period detail |

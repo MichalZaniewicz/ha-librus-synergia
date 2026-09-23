@@ -611,6 +611,46 @@ async def test_reference_data_endpoint_failure_does_not_wipe_other_reference_dat
     assert "Subjects" not in coordinator.degraded_endpoints
 
 
+async def test_lesson_subjects_resolved_from_lessons_endpoint(hass) -> None:
+    """`Lessons` (a global lesson_id -> Subject/Teacher/Class lookup,
+    distinct from Timetables) is fetched in the same 24h-cached
+    reference-data batch as Subjects/Teachers/Classrooms and exposed as
+    `LibrusData.lesson_subjects` (lesson_id -> subject_id) - this is what
+    lets the Attendance sensor's `by_subject` attribute resolve which
+    subject an absence belongs to, since Attendances itself carries no
+    Subject field. CONFIRMED live (2026-09-23) that a real account's
+    Attendances[].Lesson.Id correlates against this endpoint."""
+    client = build_mock_client(
+        async_get_lessons={
+            "Lessons": [
+                {"Id": 100, "Subject": {"Id": 41998}, "Teacher": {"Id": 1}},
+                {"Id": 200, "Subject": {"Id": 41997}, "Teacher": {"Id": 2}, "Class": {"Id": 5}},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.lesson_subjects == {100: 41998, 200: 41997}
+
+
+async def test_lessons_endpoint_failure_does_not_wipe_other_reference_data(hass) -> None:
+    """Same all-or-nothing protection as the Teachers case above, for the
+    newest reference-data endpoint."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+    )
+    client.async_get_lessons.side_effect = LibrusUnexpectedResponseError("HTTP 500 from Lessons")
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.subjects == {100: "Matematyka"}
+    assert data.lesson_subjects == {}
+    assert "Lessons" in coordinator.degraded_endpoints
+
+
 async def test_timetable_and_messages_degrades_are_tracked_too(hass) -> None:
     """The same live-feedback gap as the reference-data test above also
     applied to Timetable (its own confirmed-403 handling predates

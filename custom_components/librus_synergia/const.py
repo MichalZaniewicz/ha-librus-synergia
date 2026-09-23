@@ -150,6 +150,7 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     "ClassFreeDays",
     "NoteCategories",
     "BehaviourGradeCategories",
+    "Lessons",
 )
 
 # The handful of degradable fetches that don't belong to any of the three

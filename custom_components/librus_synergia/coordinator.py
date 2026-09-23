@@ -272,6 +272,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_subjects: dict[int, str] = {}
         self._cached_teachers: dict[int, str] = {}
         self._cached_classrooms: dict[int, str] = {}
+        self._cached_lesson_subjects: dict[int, int] = {}
         self._cached_school: SchoolData | None = None
         self._cached_class: ClassData | None = None
         self._cached_homework_categories: dict[int, str] = {}
@@ -595,6 +596,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             subjects=self._cached_subjects,
             teachers=self._cached_teachers,
             classrooms=self._cached_classrooms,
+            lesson_subjects=self._cached_lesson_subjects,
             messages_available=self._messages_available,
             unread_message_count=unread_count,
             unread_messages_by_mailbox=unread_by_mailbox,
@@ -970,6 +972,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._maybe(
                 behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
             ),
+            self._client.async_get_lessons(),
             return_exceptions=True,
         )
         (
@@ -983,6 +986,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             class_free_days_payload,
             note_categories_payload,
             behaviour_grade_categories_payload,
+            lessons_payload,
         ) = (
             self._degrade_reference_result(label, result)
             for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results)
@@ -990,6 +994,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_subjects = _parse_id_name_map(subjects_payload, ("Subjects",))
         self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
+        self._cached_lesson_subjects = _parse_lesson_subjects(lessons_payload)
         self._cached_school = _parse_school(schools_payload)
         self._cached_class = _parse_class(classes_payload)
         self._check_school_year_rollover()
@@ -2166,4 +2171,22 @@ def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> d
         name = item.get("Name") or item.get("CategoryName") or f"{first} {last}".strip()
         if name:
             result[int(item["Id"])] = name
+    return result
+
+
+def _parse_lesson_subjects(payload: dict[str, Any]) -> dict[int, int]:
+    """lesson_id -> subject_id, from `Lessons` (CONFIRMED live 2026-09-23 -
+    see const.py's ENDPOINT_LESSONS note). Used to resolve which subject an
+    `AttendanceData.lesson_id` belongs to."""
+    items = payload.get("Lessons")
+    if not isinstance(items, list):
+        return {}
+    result: dict[int, int] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        subject = item.get("Subject") or {}
+        subject_id = subject.get("Id")
+        if subject_id is not None:
+            result[int(item["Id"])] = int(subject_id)
     return result

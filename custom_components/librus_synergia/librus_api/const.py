@@ -104,6 +104,17 @@ ENDPOINT_SUBJECTS = "Subjects"
 ENDPOINT_TEACHERS = "Users"
 ENDPOINT_CLASSROOMS = "Classrooms"
 
+# CONFIRMED live (2026-09-23) via a throwaway scratch probe (deleted after
+# use) - a global lesson_id -> Subject/Teacher/Class lookup, distinct from
+# Timetables (which only covers a rolling 2-week window and never exposes
+# a lesson's own `Id`). `Attendances[].Lesson.Id` correlates against this
+# 1:1 (checked live against 10 real records, all resolved) - this is what
+# lets an absence be attributed to a subject. Small (19 entries on this
+# account - one lesson-slot definition per class per week), so it's fetched
+# in the same 24h-cached reference-data batch as Subjects/Teachers/
+# Classrooms rather than every cycle.
+ENDPOINT_LESSONS = "Lessons"
+
 # CONFIRMED reachable, distinct from HomeWorks (the general agenda/events
 # feed). Field names (Id/DueDate/Topic/Text/Teacher.Id/Date - notably NO
 # Subject field) CONFIRMED (2026-09-06) via szkolny-android's

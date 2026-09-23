@@ -39,6 +39,7 @@ from .const import (
     ENDPOINT_HOMEWORK_ASSIGNMENTS,
     ENDPOINT_HOMEWORK_CATEGORIES,
     ENDPOINT_HOMEWORKS,
+    ENDPOINT_LESSONS,
     ENDPOINT_LUCKY_NUMBERS,
     ENDPOINT_ME,
     ENDPOINT_NOTE_CATEGORIES,
@@ -461,6 +462,12 @@ class LibrusApiClient:
     async def async_get_classrooms(self) -> dict[str, Any]:
         """UNVERIFIED endpoint name - see scripts/manual_smoke_test.py."""
         return await self._async_request(ENDPOINT_CLASSROOMS)
+
+    async def async_get_lessons(self) -> dict[str, Any]:
+        """Global lesson_id -> Subject/Teacher/Class lookup - see
+        const.py's note on ENDPOINT_LESSONS for why this exists (resolving
+        an Attendances record's subject)."""
+        return await self._async_request(ENDPOINT_LESSONS)
 
     async def async_get_homework_assignments(self) -> dict[str, Any]:
         """See const.py's note on ENDPOINT_HOMEWORK_ASSIGNMENTS."""

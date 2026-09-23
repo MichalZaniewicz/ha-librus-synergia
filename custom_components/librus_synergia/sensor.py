@@ -650,6 +650,40 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             )
             day_bucket[bucket_key] += 1
 
+        # Same excused/unexcused/late split again, but grouped by SUBJECT
+        # NAME instead of weekday - "which subject is missed most often"
+        # (user-requested feature). Attendances carries no Subject field of
+        # its own; resolved via lesson_id -> Lessons' subject_id -> Subjects'
+        # name (CONFIRMED live 2026-09-23 that a real record's lesson_id
+        # correlates against Lessons). A record whose lesson_id doesn't
+        # resolve (Lessons only covers the current timetable structure, not
+        # necessarily every historical lesson) is skipped rather than
+        # guessed at - same "don't fabricate a bucket" discipline as
+        # everywhere else in this sensor.
+        by_subject: dict[str, dict[str, int]] = {}
+        for a in data.attendances:
+            t = _attendance_type(data, a.type_id)
+            if t is None:
+                continue
+            if t.is_presence_kind:
+                if not _is_late_type_name(t.name):
+                    continue
+                bucket_key = "late"
+            else:
+                bucket_key = "excused" if t.is_excused_absence else "unexcused"
+            if a.lesson_id is None:
+                continue
+            subject_id = data.lesson_subjects.get(a.lesson_id)
+            if subject_id is None:
+                continue
+            subject_name = data.subjects.get(subject_id)
+            if not subject_name:
+                continue
+            subject_bucket = by_subject.setdefault(
+                subject_name, {"excused": 0, "unexcused": 0, "late": 0}
+            )
+            subject_bucket[bucket_key] += 1
+
         return {
             "breakdown": breakdown,
             "presence_by_type": presence_by_type,
@@ -661,6 +695,7 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             "unexcused_count": unexcused_count,
             "by_date": by_date,
             "by_weekday": by_weekday,
+            "by_subject": by_subject,
         }
 
 

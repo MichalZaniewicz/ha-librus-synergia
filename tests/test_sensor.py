@@ -226,6 +226,77 @@ async def test_attendance_by_weekday_splits_excused_unexcused_late(hass) -> None
     assert state.attributes["by_weekday"][key_b] == {"excused": 1, "unexcused": 0, "late": 0}
 
 
+async def test_attendance_by_subject_resolves_via_lessons_lookup(hass) -> None:
+    """`by_subject` groups the same excused/unexcused/late split as
+    `by_weekday` but by subject name - resolved via lesson_id (on each
+    Attendances record) -> Lessons' subject_id -> Subjects' name, since
+    Attendances itself carries no Subject field. A record whose lesson_id
+    doesn't resolve against Lessons (id 999 below) is skipped, not
+    fabricated under an "unknown" bucket."""
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {
+                    "Id": 1,
+                    "Date": "2026-09-07",
+                    "Semester": 1,
+                    "Type": {"Id": 1},
+                    "Lesson": {"Id": 100},
+                },  # unexcused, Matematyka
+                {
+                    "Id": 2,
+                    "Date": "2026-09-08",
+                    "Semester": 1,
+                    "Type": {"Id": 3},
+                    "Lesson": {"Id": 100},
+                },  # excused, Matematyka
+                {
+                    "Id": 3,
+                    "Date": "2026-09-09",
+                    "Semester": 1,
+                    "Type": {"Id": 2},
+                    "Lesson": {"Id": 200},
+                },  # late, Fizyka
+                {
+                    "Id": 4,
+                    "Date": "2026-09-10",
+                    "Semester": 1,
+                    "Type": {"Id": 1},
+                    "Lesson": {"Id": 999},
+                },  # unexcused, but lesson_id 999 doesn't resolve - skipped
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 2, "Name": "Spóźnienie", "IsPresenceKind": True},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+        async_get_lessons={
+            "Lessons": [
+                {"Id": 100, "Subject": {"Id": 41998}, "Teacher": {"Id": 1}},
+                {"Id": 200, "Subject": {"Id": 41997}, "Teacher": {"Id": 2}},
+            ]
+        },
+        async_get_subjects={
+            "Subjects": [
+                {"Id": 41998, "Name": "Matematyka"},
+                {"Id": 41997, "Name": "Fizyka"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance"))
+    by_subject = state.attributes["by_subject"]
+    assert by_subject == {
+        "Matematyka": {"excused": 1, "unexcused": 1, "late": 0},
+        "Fizyka": {"excused": 0, "unexcused": 0, "late": 1},
+    }
+
+
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     client = build_mock_client(
         async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},

@@ -377,3 +377,8 @@ class LibrusData:
     substitution_messages: list[MessageData] = field(default_factory=list)
     alert_messages: list[MessageData] = field(default_factory=list)
     justification_messages: list[MessageData] = field(default_factory=list)
+    # lesson_id -> subject_id, from the `Lessons` reference endpoint -
+    # resolves which subject an AttendanceData record's `lesson_id`
+    # belongs to (Attendances itself carries no Subject field). See
+    # const.py's ENDPOINT_LESSONS note for how this was confirmed.
+    lesson_subjects: dict[int, int] = field(default_factory=dict)
