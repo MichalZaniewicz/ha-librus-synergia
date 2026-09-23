@@ -324,7 +324,11 @@ async def test_messages_primary_fetch_exception_retries_bootstrap_next_cycle(has
     coordinator = _make_coordinator(hass, client)
 
     first = await coordinator._async_update_data()
-    assert first.messages_available is False
+    # messages_available reflects the (successful) bootstrap, not this
+    # cycle's own fetch - correctly stays True even though this cycle's
+    # data degraded to empty (module IS available, just this one attempt
+    # failed).
+    assert first.messages_available is True
     assert first.unread_message_count == 0
 
     second = await coordinator._async_update_data()
