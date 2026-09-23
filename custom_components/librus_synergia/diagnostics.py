@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.loader import async_get_integration
 
 from . import LibrusConfigEntry
 from .const import DOMAIN
@@ -65,12 +66,20 @@ async def async_get_config_entry_diagnostics(
     no direct answer to "why is half of this account unknown/empty" (a
     confirmed-403-degraded endpoint and a genuinely broken one both just
     look like an empty/missing field in that dump, with no way to tell
-    them apart). Added three sections that answer that directly: whether
-    the last update cycle actually succeeded, which endpoints are
-    CURRENTLY degrading and since when (straight from the coordinator's
-    own repair-issue tracking - see `LibrusDataUpdateCoordinator.
-    degraded_endpoints`), and any repair issues HA itself has open for
-    this entry right now."""
+    them apart). Added sections that answer that directly: whether the
+    last update cycle actually succeeded, which endpoints are CURRENTLY
+    degrading and since when (straight from the coordinator's own
+    repair-issue tracking - see `LibrusDataUpdateCoordinator.
+    degraded_endpoints`), any repair issues HA itself has open for this
+    entry right now, and - requested the same round, "co jeszcze
+    potencjalnie problematycznego można by dorzucić" - the integration's
+    own version (confirms which beta someone's actually running, not
+    just what they think they installed), the options-flow feature
+    toggles (a toggled-off feature and a genuinely degraded endpoint both
+    show as "no data" downstream - this tells them apart at a glance),
+    and session/reference-data freshness (is the session actually fresh
+    or right at the edge of our own lifetime assumption, how stale is the
+    cached reference data)."""
     coordinator = entry.runtime_data
     coordinator_data = (
         _stringify_keys(dataclasses.asdict(coordinator.data))
@@ -88,7 +97,10 @@ async def async_get_config_entry_diagnostics(
         for issue in registry.issues.values()
         if issue.domain == DOMAIN and entry.entry_id in issue.issue_id
     ]
+    integration = await async_get_integration(hass, DOMAIN)
+    reference_data_fetched_at = coordinator.reference_data_fetched_at
     return {
+        "integration_version": integration.version,
         "last_update_success": coordinator.last_update_success,
         "last_exception": repr(coordinator.last_exception)
         if coordinator.last_exception
@@ -96,9 +108,18 @@ async def async_get_config_entry_diagnostics(
         "update_interval_seconds": (
             coordinator.update_interval.total_seconds() if coordinator.update_interval else None
         ),
+        # Not sensitive - just which optional features are toggled on, so
+        # a toggled-off feature (e.g. messages_enabled: false) is never
+        # mistaken for a degraded/broken endpoint downstream.
+        "options": dict(entry.options),
+        "session_valid": coordinator.client.is_session_valid(),
+        "session_age_seconds": coordinator.client.session_age_seconds,
+        "reference_data_fetched_at": (
+            reference_data_fetched_at.isoformat() if reference_data_fetched_at is not None else None
+        ),
         # Label -> ISO timestamp it started failing (see
         # `degraded_endpoints`'s own docstring) - empty means every
-        # core+supplementary endpoint succeeded on the last cycle.
+        # degradable endpoint succeeded on the last cycle.
         "degraded_endpoints": {
             label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()
         },

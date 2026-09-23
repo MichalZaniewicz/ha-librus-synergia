@@ -59,6 +59,16 @@ async def test_diagnostics_are_json_serializable(hass) -> None:
     assert diagnostics["last_update_success"] is True
     assert diagnostics["degraded_endpoints"] == {}
     assert diagnostics["open_repair_issues"] == []
+    # BUG FIX (live feedback - "a nie możnma przy okazji więcej danych
+    # potencjalnie problematycznych pobrać do diagnostyki?"): version,
+    # options and session/reference-data freshness, so a toggled-off
+    # feature is never mistaken for a degraded one and a session report
+    # can be checked without guessing.
+    assert diagnostics["integration_version"]
+    assert diagnostics["options"] == {}  # no options overridden in this test
+    assert diagnostics["session_valid"] is True
+    assert diagnostics["session_age_seconds"] >= 0
+    assert diagnostics["reference_data_fetched_at"] is not None
 
 
 async def test_diagnostics_report_a_degraded_endpoint(hass) -> None:

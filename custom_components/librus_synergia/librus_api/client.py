@@ -199,6 +199,19 @@ class LibrusApiClient:
         age = time.time() - self._logged_in_at
         return age < (ASSUMED_SESSION_LIFETIME_SECONDS - SESSION_EXPIRY_SAFETY_MARGIN_SECONDS)
 
+    @property
+    def session_age_seconds(self) -> float | None:
+        """Seconds since the last successful login, or `None` if this
+        client has never logged in (fresh instance, or the entry hasn't
+        finished its first setup yet). Public for `diagnostics.py` - "is
+        the session actually fresh, or right at the edge of our own
+        ASSUMED_SESSION_LIFETIME_SECONDS estimate" is a genuinely useful
+        signal when debugging a session-related report, separate from
+        `is_session_valid()`'s plain yes/no."""
+        if self._logged_in_at <= 0:
+            return None
+        return time.time() - self._logged_in_at
+
     async def async_ensure_session_valid(self, password: str, *, force: bool = False) -> None:
         """Log in if the assumed session lifetime has elapsed, or always if
         `force=True` - used by the coordinator to recover from a

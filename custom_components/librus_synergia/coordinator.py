@@ -334,6 +334,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return self._client
 
     @property
+    def reference_data_fetched_at(self) -> datetime | None:
+        """When `_async_refresh_reference_data` last completed (`None` if
+        never yet, e.g. right after setup). Public for `diagnostics.py` -
+        reference data (subjects/teachers/school/class/...) is only
+        refreshed at most once every 24h, so this tells a diagnostics
+        reader whether it's looking at genuinely fresh data or something
+        cached from up to a day ago."""
+        return self._reference_data_fetched_at
+
+    @property
     def degraded_endpoints(self) -> dict[str, datetime]:
         """Snapshot of `_optional_endpoint_first_failure` - label -> the
         timestamp it started failing (cleared on recovery). Public so

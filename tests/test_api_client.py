@@ -176,10 +176,15 @@ async def test_login_success_sets_session_valid() -> None:
         with _MockedSession(session) as mocked:
             _mock_successful_login(session, mocked)
             client = LibrusApiClient(session, "1234567u")
+            assert client.session_age_seconds is None  # never logged in yet
             session_data = await client.async_login("correct-password")
 
     assert client.is_session_valid()
     assert session_data.logged_in_at > 0
+    # BUG FIX (live feedback - richer diagnostics): session_age_seconds
+    # should now be a small, real, non-negative number just after login.
+    assert client.session_age_seconds is not None
+    assert 0 <= client.session_age_seconds < 5
     cookie_names = {c["name"] for c in session_data.cookies}
     assert "oauth_token" in cookie_names
 

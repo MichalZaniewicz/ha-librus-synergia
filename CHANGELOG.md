@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.5-beta.4
+
+**Beta release** - still the issue #5 fix, with more of "what's going on"
+in diagnostics. To try it: HACS -> Librus Synergia -> the three-dot menu
+-> "Redownload" -> enable "Show beta versions" -> pick `0.7.5-beta.4`.
+
+### Added
+- **Diagnostics now also include the integration's own version, the
+  options-flow feature toggles, and session/reference-data freshness**
+  (`integration_version`, `options`, `session_valid`,
+  `session_age_seconds`, `reference_data_fetched_at`) - a toggled-off
+  feature (e.g. `messages_enabled: false`) is never mistaken for a
+  degraded/broken endpoint, a session report doesn't need guessing, and
+  confirms which beta someone's actually running instead of trusting
+  what HACS says is installed.
+
 ## 0.7.5-beta.3
 
 **Beta release** - still the issue #5 fix, with `degraded_endpoints`
