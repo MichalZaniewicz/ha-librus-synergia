@@ -1,43 +1,33 @@
 # Changelog
 
-## 0.7.6-beta.3
+## 0.7.6
 
-**Beta release** - the `get_message` service (clicking a message in a
-card) had the same "session died" gap the polling path just got fixed
-for. To try it: HACS -> Librus Synergia -> the three-dot menu ->
-"Redownload" -> pick the pre-release version `0.7.6-beta.3`.
-
-### Fixed
-- **Clicking a message to read its full content could fail with a real
-  error ("couldn't load message") instead of just working, once the
-  dedicated Wiadomości session had died.** `get_message`'s on-demand
-  fetch only ever recovered the MAIN Synergia session on a session
-  expiry - correct for the on-demand Timetable fetch it was copied from,
-  but `get_message` lives on the SEPARATE wiadomosci.librus.pl session
-  instead, which this project has now confirmed dies independently and
-  far more often. The retry used to reuse the same now-stale Wiadomości
-  cookies and fail again, this time with no further recovery - now also
-  forces a fresh Wiadomości bootstrap before retrying. Checked every
-  other session-recovery call site in the file for the same gap - this
-  was the only one.
-
-## 0.7.6-beta.2
-
-**Beta release** - still the Wiadomości fix, now recovering within the
-same poll cycle instead of the next one. To try it: HACS -> Librus
-Synergia -> the three-dot menu -> "Redownload" -> pick the pre-release
-version `0.7.6-beta.2`.
+Promoted from the `0.7.6-beta.1`-`0.7.6-beta.3` testing line - a real,
+live-reported Wiadomości reliability problem, confirmed fixed by direct
+repeated observation on a real account throughout testing (empty ->
+recovers on its own, message clicks load full content) rather than just
+reasoning about it.
 
 ### Fixed
-- **The dedicated Wiadomości session turned out to die far more often
-  than expected - repeatedly within an hour on a real account, confirmed
-  by direct repeated observation - so `0.7.6-beta.1`'s "retry next cycle"
-  fix still left the Unread messages sensor sitting empty for however
-  long the poll interval is, each time.** Messages now gets the same
-  immediate same-cycle retry the main session has had since `v0.4.2` -
-  one extra bootstrap+fetch attempt right away if the first one fails,
-  before ever surfacing a gap to the user, instead of waiting out a whole
-  poll cycle.
+- **The Unread messages sensor could go permanently empty (and clicking
+  a message to read it could fail outright) until a full Home Assistant
+  restart.** The dedicated Wiadomości session (bootstrapped separately
+  from the main Synergia one) turned out to die far more often than
+  expected - repeatedly within an hour on a real account. Three related
+  gaps, all fixed:
+  - `_messages_bootstrapped` was only ever set `True`, never back - once
+    either the bootstrap call or the primary fetch raised, every later
+    poll cycle skipped the bootstrap step entirely and never tried again.
+  - Recovering only on the *next* poll cycle still meant sitting empty
+    for however long the poll interval is, every time it happened.
+    Messages now gets the same immediate same-cycle retry the main
+    session has had since `v0.4.2` - one extra bootstrap+fetch attempt
+    right away, before ever surfacing a gap to the user.
+  - The `get_message` service (clicking a message in a card) had its own,
+    separate version of the same bug: its session-expiry recovery only
+    ever refreshed the MAIN Synergia session, never the Wiadomości one -
+    a retry reused the same stale Wiadomości cookies and failed again,
+    this time uncaught. Now also forces a fresh Wiadomości bootstrap.
 - Messages no longer runs in the same `asyncio.gather()` burst as the
   10-request reference-data refresh (`v0.7.4`'s own concurrency
   improvement) - a real, live-identified suspect for why the Wiadomości
