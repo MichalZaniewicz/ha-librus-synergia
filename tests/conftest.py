@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_socket
@@ -57,7 +57,29 @@ def build_mock_client(**overrides) -> AsyncMock:
     `side_effect`, for error-path tests) via keyword args."""
     client = AsyncMock()
     client.username = "1234567u"
-    client.is_session_valid.return_value = True
+    # BUG FIX (CI failure, 2026-09-23): `client = AsyncMock()` with no
+    # `spec=` makes EVERY child attribute an AsyncMock too, including
+    # these two, which are genuinely plain/sync on the real
+    # LibrusApiClient (`is_session_valid()` a plain method,
+    # `session_age_seconds` a property) - calling/reading them the same
+    # synchronous way the real production code does (`__init__.py`'s
+    # `if not client.is_session_valid():`, `diagnostics.py`'s
+    # `client.session_age_seconds`) silently got back an unawaited
+    # coroutine/Mock object instead of a real bool/float. Harmless where
+    # the result was only ever used in a truthy check (a coroutine object
+    # is always truthy, so `__init__.py`'s check never noticed) - but
+    # `diagnostics.py` putting that raw value into a dict for JSON
+    # serialization turned it into a hard `TypeError: Type is not JSON
+    # serializable: coroutine`, confirmed live by CI. Override both with
+    # plain (non-async) values so callers get exactly what the real
+    # client returns.
+    client.is_session_valid = Mock(return_value=True)
+    client.session_age_seconds = 3600.0
+    # Same fix as above - `import_session` is also plain/sync on the real
+    # client (fire-and-forget, no return value ever used, so this one
+    # never actually broke a test - fixed anyway for consistency, so
+    # nothing here relies on a truthy-coroutine accident going forward).
+    client.import_session = Mock(return_value=None)
     client.async_login.return_value = LibrusSessionData(
         cookies=[{"name": "oauth_token", "value": "x", "domain": "synergia.librus.pl"}],
         logged_in_at=1000.0,
