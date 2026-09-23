@@ -1,64 +1,12 @@
 # Changelog
 
-## 0.7.5-beta.4
+## 0.7.5
 
-**Beta release** - still the issue #5 fix, with more of "what's going on"
-in diagnostics. To try it: HACS -> Librus Synergia -> the three-dot menu
--> "Redownload" -> enable "Show beta versions" -> pick `0.7.5-beta.4`.
-
-### Added
-- **Diagnostics now also include the integration's own version, the
-  options-flow feature toggles, and session/reference-data freshness**
-  (`integration_version`, `options`, `session_valid`,
-  `session_age_seconds`, `reference_data_fetched_at`) - a toggled-off
-  feature (e.g. `messages_enabled: false`) is never mistaken for a
-  degraded/broken endpoint, a session report doesn't need guessing, and
-  confirms which beta someone's actually running instead of trusting
-  what HACS says is installed.
-
-## 0.7.5-beta.3
-
-**Beta release** - still the issue #5 fix, with `degraded_endpoints`
-diagnostics now covering EVERY degradable fetch, not just two of four
-tiers. To try it: HACS -> Librus Synergia -> the three-dot menu ->
-"Redownload" -> enable "Show beta versions" -> pick `0.7.5-beta.3`.
-
-### Fixed
-- **`degraded_endpoints` in diagnostics only covered the core and
-  supplementary tiers - reference data (Subjects/Teachers/Classrooms/
-  School/Class/HomeworkCategories/FreeDays/NoteCategories/
-  BehaviourGradeCategories), Timetable, the lucky number, and both
-  messages fetches were silently DEBUG-logged only, invisible in the very
-  diagnostics dump built to debug a degraded account.** Found from real
-  feedback on issue #5's account: its diagnostics correctly showed
-  `Attendances/Types` etc. as degraded, but couldn't explain why the
-  Class sensor was `unknown` while School showed a real name, since
-  reference-data failures weren't tracked at all. All four groups now
-  feed the same `degraded_endpoints`/repair-issue tracking.
-
-## 0.7.5-beta.2
-
-**Beta release** - still the issue #5 fix from `0.7.5-beta.1`, plus a
-diagnostics improvement to actually see what's happening on an account
-with several degraded endpoints. To try it: HACS -> Librus Synergia ->
-the three-dot menu -> "Redownload" -> enable "Show beta versions" ->
-pick `0.7.5-beta.2`.
-
-### Added
-- **"Download diagnostics" now shows whether the last update actually
-  succeeded, exactly which endpoints are currently degraded and since
-  when, and any open repair issues for the entry** - previously the dump
-  only had the raw fetched data, with no way to tell a confirmed-403
-  degraded endpoint apart from one that's genuinely broken or an account
-  that simply has no data for it (all three looked like the same empty
-  field). Requested live while investigating issue #5's account.
-
-## 0.7.5-beta.1
-
-**Beta release** - a fix for a limited/restricted-access account type
-(e.g. preschool), not yet promoted to the stable channel. To try it:
-HACS -> Librus Synergia -> the three-dot menu -> "Redownload" -> enable
-"Show beta versions" -> pick `0.7.5-beta.1`.
+Promoted from the `0.7.5-beta.1`-`0.7.5-beta.4` testing line - confirmed
+live by the reporting user on both a full-access account (zero
+regression) and the actual limited/restricted account the fix targets
+(setup succeeds, exactly the right data comes through, everything else
+degrades cleanly instead of failing).
 
 ### Fixed
 - **A limited/restricted-access account (e.g. a preschool child's login,
@@ -74,6 +22,19 @@ HACS -> Librus Synergia -> the three-dot menu -> "Redownload" -> enable
   Attendances, Attendances/Types, HomeWorks, SchoolNotices) instead of
   just Timetables - a genuine 401 anywhere still triggers the normal
   forced-relogin-and-retry-once recovery, unchanged.
+
+### Added
+- **"Download diagnostics" now shows whether the last update actually
+  succeeded, exactly which endpoints are currently degraded and since
+  when (`degraded_endpoints` - covers every degradable fetch: the core
+  tier, the supplementary tier, reference data, and Timetable/
+  LuckyNumbers/Messages), any open repair issues, the integration's own
+  version, the options-flow feature toggles, and session/reference-data
+  freshness.** Built live while diagnosing issue #5's account - a
+  toggled-off feature is never mistaken for a degraded/broken endpoint,
+  and a confirmed-403-degraded endpoint is never confused with a
+  genuinely broken one or an account that simply has no data for it (all
+  three used to look identical - an empty field - in a bare data dump).
 
 ## 0.7.4
 
