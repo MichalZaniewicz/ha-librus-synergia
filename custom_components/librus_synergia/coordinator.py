@@ -59,6 +59,7 @@ from .const import (
     ISSUE_SCHOOL_YEAR_ROLLOVER,
     LUCKY_NUMBER_PUBLISH_HOUR,
     OPTIONAL_ENDPOINT_LABELS,
+    REFERENCE_DATA_ENDPOINT_LABELS,
 )
 from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSessionExpiredError
 from .librus_api.models import (
@@ -339,10 +340,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         `diagnostics.py` can surface it: for an account where several
         endpoints are degrading (a confirmed-403 module-unavailable case,
         or a genuinely flaky one), this is the single most direct answer
-        to "what's actually going on" - a `{}` here means every core AND
-        supplementary endpoint succeeded on the last cycle. A copy, not
-        the live dict, so a diagnostics consumer can't accidentally
-        mutate coordinator state."""
+        to "what's actually going on" - a `{}` here means every degradable
+        endpoint succeeded on the last cycle. A copy, not the live dict,
+        so a diagnostics consumer can't accidentally mutate coordinator
+        state.
+
+        Covers all four groups that can degrade to empty instead of
+        failing the whole cycle: OPTIONAL_ENDPOINT_LABELS (tier 2 of the
+        core fetch), CORE_ENDPOINT_LABELS (tier 1), REFERENCE_DATA_
+        ENDPOINT_LABELS, and MISC_DEGRADABLE_ENDPOINT_LABELS (Timetable/
+        LuckyNumbers/Messages/Messages-Secondary, each guarding its own
+        call outside any shared gather). BUG FIX (live feedback, issue
+        #5's account): the last three groups were NOT covered when this
+        property was first added - only OPTIONAL_ENDPOINT_LABELS/
+        CORE_ENDPOINT_LABELS were, which made the very diagnostics dump
+        built to debug that account's degraded state genuinely
+        incomplete (it couldn't explain why Class was unknown while
+        School wasn't, since reference-data failures were silently
+        DEBUG-logged only). Should have covered every degrade path from
+        the start rather than needing a second round to notice the gap."""
         return dict(self._optional_endpoint_first_failure)
 
     async def _fetch_timetable_or_unpublished(self, week_start: date) -> dict[str, Any]:
@@ -355,13 +371,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         genuine 401 still means the session actually died and is left to
         propagate, so the normal forced-relogin-and-retry-once recovery
         (see `_async_update_data` / `async_fetch_timetable_week`) still
-        runs for that case."""
+        runs for that case.
+
+        BUG FIX (live feedback, issue #5's account): this predates
+        `degraded_endpoints`/the repair-issue tracking and never fed it -
+        a persistently-403ing Timetable was invisible in diagnostics even
+        though the calendar was correctly showing empty. Now tracked
+        under the "Timetable" label, same as every other degrade path.
+        Called from both TIER 1 (this week/next week) and the on-demand
+        `async_fetch_timetable_week` path - both count as the same
+        endpoint for tracking purposes."""
         try:
-            return await self._client.async_get_timetable(week_start)
+            payload = await self._client.async_get_timetable(week_start)
         except LibrusSessionExpiredError as err:
             if err.status_code == 403:
+                self._note_optional_endpoint_failure("Timetable")
                 return {}
             raise
+        self._note_optional_endpoint_recovery("Timetable")
+        return payload
 
     async def async_fetch_timetable_week(self, week_start: date) -> Any:
         """Fetch one week's raw `Timetable` payload on demand, for
@@ -817,33 +845,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             payload = await self._client.async_get_lucky_number()
         except LibrusError:
             _LOGGER.debug("Lucky number fetch failed (non-fatal)", exc_info=True)
+            self._note_optional_endpoint_failure("LuckyNumbers")
             return self._cached_lucky_number
+        self._note_optional_endpoint_recovery("LuckyNumbers")
         lucky = _parse_lucky_number(payload)
         if lucky is not None:
             self._cached_lucky_number = lucky
             self._lucky_number_fetched_date = today
         return self._cached_lucky_number
-
-    # Labels for `_async_refresh_reference_data`'s own 10-call gather, in
-    # the exact order that gather lists them - used only for the debug log
-    # in `_degrade_reference_result`, NOT hooked into the optional-endpoint-
-    # degraded repair issue tracking (`OPTIONAL_ENDPOINT_LABELS`/
-    # `_note_optional_endpoint_failure` are specifically for
-    # `_async_fetch_core_payloads`' own supplementary tier - raising that
-    # SAME class of user-visible repair issue for reference-data endpoints
-    # too is a bigger behavior change than this fix is about).
-    _REFERENCE_DATA_ENDPOINT_LABELS = (
-        "Subjects",
-        "Teachers",
-        "Classrooms",
-        "Schools",
-        "Classes",
-        "HomeworkCategories",
-        "SchoolFreeDays",
-        "ClassFreeDays",
-        "NoteCategories",
-        "BehaviourGradeCategories",
-    )
 
     def _degrade_reference_result(
         self, label: str, result: dict[str, Any] | BaseException
@@ -856,7 +865,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         gather bug `_degrade_optional_payload` fixed for the core-data
         fetch's own supplementary tier (code review), applied here to
         reference data instead. Anything that ISN'T a LibrusError (a real
-        bug, or asyncio.CancelledError) is re-raised, same as there."""
+        bug, or asyncio.CancelledError) is re-raised, same as there.
+
+        Also feeds the SAME `degraded_endpoints`/repair-issue tracking as
+        `_degrade_optional_payload`/`_degrade_core_payload` - see
+        `REFERENCE_DATA_ENDPOINT_LABELS`' own comment (const.py) for why
+        this wasn't wired in originally and why that was a real gap."""
         if isinstance(result, BaseException):
             if isinstance(result, LibrusError):
                 _LOGGER.debug(
@@ -865,8 +879,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     result,
                     exc_info=result,
                 )
+                self._note_optional_endpoint_failure(label)
                 return {}
             raise result
+        self._note_optional_endpoint_recovery(label)
         return result
 
     async def _async_refresh_reference_data(self) -> None:
@@ -936,7 +952,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             behaviour_grade_categories_payload,
         ) = (
             self._degrade_reference_result(label, result)
-            for label, result in zip(self._REFERENCE_DATA_ENDPOINT_LABELS, results)
+            for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results)
         )
         self._cached_subjects = _parse_id_name_map(subjects_payload, ("Subjects",))
         self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
@@ -1043,8 +1059,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             try:
                 self._messages_available = await self._client.async_bootstrap_messages()
             except LibrusError:
+                # A raised error here is a genuine failure, distinct from
+                # `async_bootstrap_messages()` cleanly returning False
+                # (module not enabled for this school - a normal, expected
+                # outcome, not tracked as a "degraded endpoint" the same
+                # way an exception is).
                 _LOGGER.debug("Messages bootstrap failed (non-fatal)", exc_info=True)
                 self._messages_available = False
+                self._note_optional_endpoint_failure("Messages")
             self._messages_bootstrapped = True
         if not self._messages_available:
             return 0, {}, [], [], [], []
@@ -1056,7 +1078,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
         except LibrusError:
             _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
+            self._note_optional_endpoint_failure("Messages")
             return 0, {}, [], [], [], []
+        self._note_optional_endpoint_recovery("Messages")
         unread_count, unread_by_mailbox, inbox_messages = _parse_messages(unread_payload, inbox_payload)
 
         # BUG FIX (2026-09-06, found live): substitutions/alerts used to be
@@ -1081,11 +1105,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             substitution_messages = _parse_message_list(substitutions_payload, "substitutions")
             alert_messages = _parse_message_list(alerts_payload, "alerts")
             justification_messages = _parse_message_list(justifications_payload, "justifications")
+            self._note_optional_endpoint_recovery("Messages/Secondary")
         except LibrusError:
             _LOGGER.debug(
                 "Secondary mailbox (substitutions/alerts/justifications) fetch failed (non-fatal)",
                 exc_info=True,
             )
+            self._note_optional_endpoint_failure("Messages/Secondary")
 
         return (
             unread_count,

@@ -104,6 +104,18 @@ OPTIONAL_ENDPOINT_LABELS = (
 # to the whole core tier since the SAME class of report would otherwise
 # just recur with a different endpoint name for the next limited-access
 # account type.
+#
+# NOTE: the two "Timetable (this week/next week)" entries below
+# structurally can never show up as degraded - `_fetch_timetable_or_
+# unpublished` already catches its own confirmed 403 and returns `{}`
+# BEFORE `_degrade_core_payload` ever sees an exception for those two
+# gather positions, so they'll only ever be observed as a (harmless,
+# no-op) "recovery". The REAL Timetable tracking happens under the
+# plain "Timetable" label (singular, no week suffix) inside
+# `_fetch_timetable_or_unpublished` itself - see
+# MISC_DEGRADABLE_ENDPOINT_LABELS below. Kept here anyway (rather than
+# reworking the gather's positional zip) since a stray "recovered" call
+# for a label that was never marked failing is a complete no-op.
 CORE_ENDPOINT_LABELS = (
     "Grades",
     "Grades/Categories",
@@ -114,6 +126,48 @@ CORE_ENDPOINT_LABELS = (
     "Timetable (next week)",
     "HomeWorks",
     "SchoolNotices",
+)
+
+# Labels for `_async_refresh_reference_data`'s own 10-call gather, in the
+# exact order that gather lists them - subject/teacher/classroom/school/
+# class/homework-category/free-days-x2/note-category/behaviour-grade-
+# category lookups. Public (moved here from coordinator.py, code review)
+# for the same __init__.py-cleanup reason as the other *_LABELS tuples -
+# this tier's degrades are now tracked the same way as core/supplementary
+# (see coordinator.py::_degrade_reference_result) after a real gap: an
+# account with several reference-data endpoints failing (e.g. Classes,
+# while Schools worked) was invisible in diagnostics before this, which
+# is exactly the account this whole degrade-tracking feature was built to
+# debug (issue #5's live feedback round).
+REFERENCE_DATA_ENDPOINT_LABELS = (
+    "Subjects",
+    "Teachers",
+    "Classrooms",
+    "Schools",
+    "Classes",
+    "HomeworkCategories",
+    "SchoolFreeDays",
+    "ClassFreeDays",
+    "NoteCategories",
+    "BehaviourGradeCategories",
+)
+
+# The handful of degradable fetches that don't belong to any of the three
+# gather-based tiers above - each one guards its own single call (or
+# small asyncio.gather()) with its own try/except rather than a shared
+# gather, but still feeds the SAME degraded_endpoints/repair-issue
+# tracking. "Timetable" is the ACTUAL tracked label for timetable
+# degrades (see CORE_ENDPOINT_LABELS' own note above for why the two
+# per-week labels there are dead weight). "Messages" covers the bootstrap
+# + inbox/unread-count fetch; "Messages/Secondary" covers the
+# substitutions/alerts/justifications mailboxes, tracked separately since
+# `_async_get_messages` already isolates that failure from the primary
+# inbox fetch (see its own docstring - the v0.4.13 all-or-nothing bug).
+MISC_DEGRADABLE_ENDPOINT_LABELS = (
+    "Timetable",
+    "LuckyNumbers",
+    "Messages",
+    "Messages/Secondary",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and

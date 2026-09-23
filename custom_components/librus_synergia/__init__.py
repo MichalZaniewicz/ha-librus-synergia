@@ -17,8 +17,10 @@ from .const import (
     CORE_ENDPOINT_LABELS,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
+    MISC_DEGRADABLE_ENDPOINT_LABELS,
     OPTIONAL_ENDPOINT_LABELS,
     PLATFORMS,
+    REFERENCE_DATA_ENDPOINT_LABELS,
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
@@ -146,7 +148,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
     first)."""
     issue_ids = [school_year_issue_id(entry.entry_id)] + [
         optional_endpoint_issue_id(entry.entry_id, label)
-        for label in (*OPTIONAL_ENDPOINT_LABELS, *CORE_ENDPOINT_LABELS)
+        for label in (
+            *OPTIONAL_ENDPOINT_LABELS,
+            *CORE_ENDPOINT_LABELS,
+            *REFERENCE_DATA_ENDPOINT_LABELS,
+            *MISC_DEGRADABLE_ENDPOINT_LABELS,
+        )
     ]
     for issue_id in issue_ids:
         ir.async_delete_issue(hass, DOMAIN, issue_id)

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.5-beta.3
+
+**Beta release** - still the issue #5 fix, with `degraded_endpoints`
+diagnostics now covering EVERY degradable fetch, not just two of four
+tiers. To try it: HACS -> Librus Synergia -> the three-dot menu ->
+"Redownload" -> enable "Show beta versions" -> pick `0.7.5-beta.3`.
+
+### Fixed
+- **`degraded_endpoints` in diagnostics only covered the core and
+  supplementary tiers - reference data (Subjects/Teachers/Classrooms/
+  School/Class/HomeworkCategories/FreeDays/NoteCategories/
+  BehaviourGradeCategories), Timetable, the lucky number, and both
+  messages fetches were silently DEBUG-logged only, invisible in the very
+  diagnostics dump built to debug a degraded account.** Found from real
+  feedback on issue #5's account: its diagnostics correctly showed
+  `Attendances/Types` etc. as degraded, but couldn't explain why the
+  Class sensor was `unknown` while School showed a real name, since
+  reference-data failures weren't tracked at all. All four groups now
+  feed the same `degraded_endpoints`/repair-issue tracking.
+
 ## 0.7.5-beta.2
 
 **Beta release** - still the issue #5 fix from `0.7.5-beta.1`, plus a

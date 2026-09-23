@@ -520,6 +520,36 @@ async def test_reference_data_endpoint_failure_does_not_wipe_other_reference_dat
     assert data.teachers == {}
     assert data.school is not None
     assert data.school.name == "Test School"
+    # BUG FIX (live feedback, issue #5's account): reference-data failures
+    # used to be DEBUG-logged only, invisible in diagnostics - now feed
+    # the same degraded_endpoints tracking as core/supplementary.
+    assert "Teachers" in coordinator.degraded_endpoints
+    assert "Subjects" not in coordinator.degraded_endpoints
+
+
+async def test_timetable_and_messages_degrades_are_tracked_too(hass) -> None:
+    """The same live-feedback gap as the reference-data test above also
+    applied to Timetable (its own confirmed-403 handling predates
+    degraded_endpoints and never fed it) and to the messages fetch (both
+    the primary inbox/unread-count call and the secondary substitutions/
+    alerts/justifications one) - all three are single-call/small-gather
+    fetches outside any of the three labeled tiers, so they needed their
+    own explicit tracking calls rather than falling out of an existing
+    zip()."""
+    client = build_mock_client()
+    client.async_get_timetable.side_effect = LibrusSessionExpiredError(
+        "Session rejected on .../Timetables (HTTP 403).", status_code=403
+    )
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.side_effect = LibrusUnexpectedResponseError(
+        "HTTP 500 from unread count"
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    await coordinator._async_update_data()
+
+    assert "Timetable" in coordinator.degraded_endpoints
+    assert "Messages" in coordinator.degraded_endpoints
 
 
 def test_decode_message_content_strips_xml_cdata_wrapper() -> None:
