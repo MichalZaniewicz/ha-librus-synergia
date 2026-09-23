@@ -1,9 +1,6 @@
 # Changelog
 
-## 0.7.7-beta.1
-
-**Beta release.** To try it: HACS -> Librus Synergia -> the three-dot menu
--> "Redownload" -> pick the pre-release version `0.7.7-beta.1`.
+## 0.7.7
 
 ### Added
 - **Absences broken down by subject** (user-requested feature: "widać
