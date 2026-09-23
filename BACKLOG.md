@@ -3,6 +3,24 @@
 Ideas raised but deliberately not built yet. Grouped by *why*. Not a
 roadmap; pick from here when it makes sense.
 
+## Known, narrow edge cases - not urgent
+
+- **New-item event-tracking sets can seed wrong on a first-cycle
+  transient failure** (found 2026-09-23 while sweeping for other
+  instances of the `_messages_bootstrapped` "stuck forever" bug class,
+  see CHANGELOG `0.7.6-beta.1`). `_fire_for_new_ids`'s `known is None`
+  check is meant to seed silently on the account's first-ever refresh -
+  but if that VERY FIRST coordinator cycle happens to hit a transient
+  (non-permanent) failure on a given data type, `known` becomes `set()`
+  (empty), not `None` - indistinguishable from "genuinely seeded with
+  zero items". If that data type later recovers with real data, every
+  item in it fires as "new" at once (a flood of `new_grade`/`new_note`/
+  etc. events replaying the account's whole history). Requires bad luck
+  specifically on first setup (a permanent 403 is fine - it never
+  "recovers" later, no flood risk); not fixed yet since a real fix needs
+  `_fire_for_new_ids`'s callers to distinguish "confidently empty" from
+  "degraded/uncertain", which several call sites don't currently track.
+
 ## Waiting for real data
 The test account's gradebook / comments / several endpoints are empty, so
 these can't be built or verified against a real shape:
