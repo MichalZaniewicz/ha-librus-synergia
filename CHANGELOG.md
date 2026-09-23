@@ -1,23 +1,29 @@
 # Changelog
 
-## 0.7.6-beta.1
+## 0.7.6-beta.2
 
-**Beta release** - a real, live-reported bug: Wiadomości can get
-permanently stuck empty. To try it: HACS -> Librus Synergia -> the
-three-dot menu -> "Redownload" -> pick the pre-release version
-`0.7.6-beta.1`.
+**Beta release** - still the Wiadomości fix, now recovering within the
+same poll cycle instead of the next one. To try it: HACS -> Librus
+Synergia -> the three-dot menu -> "Redownload" -> pick the pre-release
+version `0.7.6-beta.2`.
 
 ### Fixed
-- **Once the dedicated Wiadomości session died (independently of the
-  main Synergia session - confirmed live, well within its own ~20h
-  assumed lifetime, sometimes within minutes of a clean start), the
-  Unread messages sensor stayed permanently empty until a full Home
-  Assistant restart.** `_messages_bootstrapped` was only ever set to
-  `True`, never back - so once either the initial bootstrap call or the
-  primary inbox/unread-count fetch raised an error, every later poll
-  cycle skipped straight past the bootstrap step and never tried again.
-  Both failure points now leave a fresh bootstrap attempt scheduled for
-  the very next cycle instead of getting stuck.
+- **The dedicated Wiadomości session turned out to die far more often
+  than expected - repeatedly within an hour on a real account, confirmed
+  by direct repeated observation - so `0.7.6-beta.1`'s "retry next cycle"
+  fix still left the Unread messages sensor sitting empty for however
+  long the poll interval is, each time.** Messages now gets the same
+  immediate same-cycle retry the main session has had since `v0.4.2` -
+  one extra bootstrap+fetch attempt right away if the first one fails,
+  before ever surfacing a gap to the user, instead of waiting out a whole
+  poll cycle.
+- Messages no longer runs in the same `asyncio.gather()` burst as the
+  10-request reference-data refresh (`v0.7.4`'s own concurrency
+  improvement) - a real, live-identified suspect for why the Wiadomości
+  session specifically started dying more often than before: bundling a
+  separate, more fragile session's bootstrap into that same ~15-request
+  burst is cheap to avoid and removes a plausible contributing factor,
+  even without certainty it was the sole cause.
 
 ## 0.7.5
 

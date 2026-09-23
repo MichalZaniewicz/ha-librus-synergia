@@ -519,21 +519,29 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             parent_teacher_conferences_payload,
         ) = core_payloads
 
-        # BUG FIX (code review): these three used to run sequentially, one
-        # `await` after another, even though none of them reads state any
-        # of the others writes - the lucky number, reference data, and
-        # messages fetches are entirely independent. Each already catches
-        # its own LibrusError internally and never lets one raise out to
-        # affect the others (see `_async_get_lucky_number`/
-        # `_async_refresh_reference_data`/`_async_get_messages`'s own
-        # docstrings/try-excepts), so it's safe to run them concurrently via
-        # asyncio.gather() - the cycle now pays the MAX of the three's
-        # latency instead of the SUM.
-        lucky_number, _, messages_result = await asyncio.gather(
+        # BUG FIX (code review, 0.7.4): these three used to run sequentially,
+        # one `await` after another, even though none of them reads state
+        # any of the others writes. Lucky number and reference data both
+        # hit the SAME main Synergia domain and are gathered together
+        # below.
+        #
+        # BUG FIX (live feedback, 2026-09-23): messages is deliberately NOT
+        # in that same gather (it originally was, briefly, same session as
+        # the fix above) - `_async_refresh_reference_data` alone fires 10
+        # concurrent requests; bundling the separate wiadomosci.librus.pl
+        # bootstrap+fetch into that exact same burst (up to ~15 simultaneous
+        # requests sharing one aiohttp session/connector) is a real, live-
+        # identified suspect for why that session specifically started
+        # dying far more often than observed before - not proven as the
+        # sole cause (no pre-2026-09-23 diagnostics exist to compare
+        # against), but cheap and safe to remove as a variable regardless.
+        # Still concurrent with the OTHER two (not back to fully
+        # sequential), just not sharing their exact same burst.
+        lucky_number, _ = await asyncio.gather(
             self._async_get_lucky_number(today),
             self._async_refresh_reference_data(),
-            self._async_get_messages(),
         )
+        messages_result = await self._async_get_messages()
         (
             unread_count,
             unread_by_mailbox,
@@ -1025,6 +1033,32 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         else:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
+    async def _async_bootstrap_and_fetch_primary_messages(
+        self,
+    ) -> tuple[int, dict[str, int], list[MessageData]]:
+        """Ensure the Wiadomości session is bootstrapped (respecting
+        `_messages_bootstrapped` - skipped if already done this login), then
+        fetch the primary inbox/unread-count data. Raises `LibrusError` on
+        ANY genuine failure (bootstrap or fetch) so the caller can retry;
+        does NOT set `_messages_bootstrapped = False` itself on failure -
+        that's the caller's call to make (it needs to happen exactly once
+        across a normal-attempt-then-retry pair, not once per attempt).
+
+        A clean `async_bootstrap_messages() == False` (module not enabled
+        for this school) is NOT an error - sets `_messages_available =
+        False` and returns an empty result instead of raising, same as
+        always."""
+        if not self._messages_bootstrapped:
+            self._messages_available = await self._client.async_bootstrap_messages()
+            self._messages_bootstrapped = True
+        if not self._messages_available:
+            return 0, {}, []
+        unread_payload, inbox_payload = await asyncio.gather(
+            self._client.async_get_unread_messages_count(),
+            self._client.async_get_messages(limit=10),
+        )
+        return _parse_messages(unread_payload, inbox_payload)
+
     async def _async_get_messages(
         self,
     ) -> tuple[
@@ -1061,20 +1095,26 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         on the maintainer's own account too): `_messages_bootstrapped` used
         to only ever get set `True`, never back to `False` - so once EITHER
         the bootstrap call OR the primary fetch below raised a real
-        `LibrusError` (confirmed live: the separate wiadomosci.librus.pl
-        session can apparently die independently of the main Synergia
-        `oauth_token`, well within its ~20h lifetime - messages broke ~15
-        minutes after a clean start on a real account), messages stayed
-        silently empty FOREVER - every later cycle skipped straight past
-        `if not self._messages_bootstrapped` and never attempted a fresh
-        bootstrap again, confirmed live via a real account's own
-        `last_reported` advancing on schedule while `last_updated` stayed
-        frozen on the stale empty result. Only a full HA restart/reload
-        cleared it (`_messages_bootstrapped` is instance state). Both
-        except blocks below now reset the flag so the NEXT cycle always
-        gets a fresh bootstrap attempt - cheap (one GET) even if it keeps
-        failing, same "retry every cycle, no backoff" philosophy the core
-        tier already uses for a confirmed-real failure.
+        `LibrusError`, messages stayed silently empty FOREVER, confirmed
+        live via a real account's own `last_reported` advancing on schedule
+        while `last_updated` stayed frozen on the stale empty result. Only
+        a full HA restart/reload cleared it. Fixed by resetting the flag on
+        failure so the NEXT cycle gets a fresh bootstrap attempt.
+
+        BUG FIX #2 (same day, same live account, confirmed by direct
+        repeated observation): fixing #1 alone still left a real, visible
+        gap - the dedicated wiadomosci.librus.pl session turned out to die
+        far more often than expected (repeatedly, well within an hour, on
+        a real account - unlike the main Synergia session's own ~20h
+        lifetime), so "retry next cycle" meant the sensor could sit empty
+        for however long the poll interval is. The main session has had an
+        IMMEDIATE same-cycle retry for this exact class of problem since
+        v0.4.2 (forced relogin + retry once, before ever surfacing a gap to
+        the user) - messages never got the equivalent. `_async_bootstrap_
+        and_fetch_primary` below is now called up to twice in a row: once
+        normally, once more immediately if that raised, mirroring the main
+        session's own proven pattern instead of waiting out a whole poll
+        cycle.
         """
         if self.config_entry is not None and not self.config_entry.options.get(
             CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED
@@ -1084,38 +1124,35 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._messages_available = False
             return 0, {}, [], [], [], []
 
-        if not self._messages_bootstrapped:
-            try:
-                self._messages_available = await self._client.async_bootstrap_messages()
-            except LibrusError:
-                # A raised error here is a genuine failure, distinct from
-                # `async_bootstrap_messages()` cleanly returning False
-                # (module not enabled for this school - a normal, expected
-                # outcome, not tracked as a "degraded endpoint" the same
-                # way an exception is).
-                _LOGGER.debug("Messages bootstrap failed (non-fatal)", exc_info=True)
-                self._messages_available = False
-                self._note_optional_endpoint_failure("Messages")
-                return 0, {}, [], [], [], []
-            self._messages_bootstrapped = True
-        if not self._messages_available:
-            return 0, {}, [], [], [], []
-
         try:
-            unread_payload, inbox_payload = await asyncio.gather(
-                self._client.async_get_unread_messages_count(),
-                self._client.async_get_messages(limit=10),
+            unread_count, unread_by_mailbox, inbox_messages = (
+                await self._async_bootstrap_and_fetch_primary_messages()
             )
         except LibrusError:
-            _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
-            self._note_optional_endpoint_failure("Messages")
-            # The dedicated wiadomosci.librus.pl session may have died
-            # independently of the main one - force a fresh bootstrap next
-            # cycle instead of staying stuck on a stale one forever.
+            _LOGGER.debug(
+                "Messages primary fetch failed - retrying immediately with a "
+                "fresh bootstrap before giving up for this cycle",
+                exc_info=True,
+            )
+            # Same "force a fresh attempt, retry once, never more than once
+            # per cycle" shape as _async_update_data's own recovery for the
+            # main session - the dedicated wiadomosci session may have died
+            # independently of it.
             self._messages_bootstrapped = False
+            try:
+                unread_count, unread_by_mailbox, inbox_messages = (
+                    await self._async_bootstrap_and_fetch_primary_messages()
+                )
+            except LibrusError:
+                _LOGGER.debug("Messages primary fetch failed again after retry (non-fatal)", exc_info=True)
+                self._note_optional_endpoint_failure("Messages")
+                # Still leave a fresh bootstrap scheduled for NEXT cycle too,
+                # in case this keeps failing beyond just one retry.
+                self._messages_bootstrapped = False
+                return 0, {}, [], [], [], []
+        if not self._messages_available:
             return 0, {}, [], [], [], []
         self._note_optional_endpoint_recovery("Messages")
-        unread_count, unread_by_mailbox, inbox_messages = _parse_messages(unread_payload, inbox_payload)
 
         # BUG FIX (2026-09-06, found live): substitutions/alerts used to be
         # fetched in the SAME asyncio.gather() as the two calls above -

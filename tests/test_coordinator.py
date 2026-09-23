@@ -279,15 +279,23 @@ async def test_messages_unavailable_school_is_non_fatal(hass) -> None:
     client.async_get_unread_messages_count.assert_not_called()
 
 
-async def test_messages_bootstrap_exception_retries_next_cycle(hass) -> None:
+async def test_messages_bootstrap_failure_recovers_via_immediate_retry(hass) -> None:
     """BUG FIX (live feedback, 2026-09-23 - "też tak kurwa mam", reproduced
-    on the maintainer's own account too): `_messages_bootstrapped` used to
-    get set True even when the bootstrap call itself raised - so a single
-    transient bootstrap failure left messages silently empty FOREVER,
-    never attempting another bootstrap on any later cycle. A confirmed-403
-    "module not enabled" (async_bootstrap_messages cleanly returning
-    False) is a different, correctly-final case - this test is
-    specifically about a raised exception."""
+    on the maintainer's own account too), in two parts:
+
+    (1) `_messages_bootstrapped` used to get set True even when the
+    bootstrap call itself raised - so a single transient bootstrap failure
+    left messages silently empty FOREVER, never attempting another
+    bootstrap on any later cycle.
+
+    (2) Fixing (1) alone still left a real, live-observed gap: the
+    dedicated wiadomosci.librus.pl session died far more often than
+    expected (repeatedly within an hour on a real account) - "retry next
+    cycle" meant sitting empty for a whole poll interval each time. Now
+    mirrors the main session's own v0.4.2 immediate-retry pattern: a
+    single failure recovers WITHIN THE SAME cycle if the retry succeeds,
+    confirmed here by a single `_async_update_data()` call ending up with
+    real data despite the first bootstrap attempt raising."""
     client = build_mock_client()
     client.async_bootstrap_messages.side_effect = [
         LibrusUnexpectedResponseError("HTTP 500 from bootstrap"),
@@ -297,23 +305,18 @@ async def test_messages_bootstrap_exception_retries_next_cycle(hass) -> None:
     client.async_get_messages.return_value = {"data": []}
     coordinator = _make_coordinator(hass, client)
 
-    first = await coordinator._async_update_data()
-    assert first.messages_available is False
-    assert first.unread_message_count == 0
+    data = await coordinator._async_update_data()
 
-    second = await coordinator._async_update_data()
-    assert second.messages_available is True
-    assert second.unread_message_count == 1
+    assert data.messages_available is True
+    assert data.unread_message_count == 1
+    # Failed once, retried immediately in the same cycle, succeeded.
     assert client.async_bootstrap_messages.call_count == 2
 
 
-async def test_messages_primary_fetch_exception_retries_bootstrap_next_cycle(hass) -> None:
-    """Same bug, the other trigger: the dedicated wiadomosci.librus.pl
-    session can apparently die independently of the main Synergia one
-    (confirmed live, well within the main session's own ~20h assumed
-    lifetime) - the PRIMARY fetch (not just bootstrap) raising must also
-    force a fresh bootstrap attempt next cycle, not just degrade forever
-    with the stale `_messages_bootstrapped = True` left in place."""
+async def test_messages_primary_fetch_failure_recovers_via_immediate_retry(hass) -> None:
+    """Same immediate-retry behaviour, the other trigger: the PRIMARY
+    fetch (not just bootstrap) raising must also recover within the same
+    cycle, not just schedule a fresh bootstrap for next time."""
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = True
     client.async_get_unread_messages_count.side_effect = [
@@ -323,19 +326,41 @@ async def test_messages_primary_fetch_exception_retries_bootstrap_next_cycle(has
     client.async_get_messages.return_value = {"data": []}
     coordinator = _make_coordinator(hass, client)
 
+    data = await coordinator._async_update_data()
+
+    assert data.messages_available is True
+    assert data.unread_message_count == 2
+    # Bootstrapped again for the retry (the reset is unconditional on any
+    # failure, even a fetch-only one) - cheap, and simpler than tracking
+    # which of the two steps actually needs re-bootstrapping.
+    assert client.async_bootstrap_messages.call_count == 2
+
+
+async def test_messages_still_recovers_next_cycle_if_the_immediate_retry_also_fails(hass) -> None:
+    """If BOTH the normal attempt and the immediate retry fail within the
+    same cycle (a genuinely bad patch, not just one flaky request),
+    messages must still degrade to empty for THAT cycle rather than
+    raising and failing the whole update - and the NEXT cycle must still
+    get a fresh attempt, not stay permanently stuck either."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.side_effect = [
+        LibrusUnexpectedResponseError("HTTP 500 from bootstrap"),
+        LibrusUnexpectedResponseError("HTTP 500 from bootstrap, still"),
+        True,
+    ]
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 3}}
+    client.async_get_messages.return_value = {"data": []}
+    coordinator = _make_coordinator(hass, client)
+
     first = await coordinator._async_update_data()
-    # messages_available reflects the (successful) bootstrap, not this
-    # cycle's own fetch - correctly stays True even though this cycle's
-    # data degraded to empty (module IS available, just this one attempt
-    # failed).
-    assert first.messages_available is True
+    assert first.messages_available is False
     assert first.unread_message_count == 0
+    assert client.async_bootstrap_messages.call_count == 2  # normal + immediate retry, both failed
 
     second = await coordinator._async_update_data()
     assert second.messages_available is True
-    assert second.unread_message_count == 2
-    # Bootstrapped again on the second cycle - not left permanently stuck.
-    assert client.async_bootstrap_messages.call_count == 2
+    assert second.unread_message_count == 3
+    assert client.async_bootstrap_messages.call_count == 3
 
 
 async def test_messages_disabled_via_options_skips_all_message_calls(hass) -> None:
