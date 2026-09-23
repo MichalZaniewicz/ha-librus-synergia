@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.6-beta.1
+
+**Beta release** - a real, live-reported bug: Wiadomości can get
+permanently stuck empty. To try it: HACS -> Librus Synergia -> the
+three-dot menu -> "Redownload" -> pick the pre-release version
+`0.7.6-beta.1`.
+
+### Fixed
+- **Once the dedicated Wiadomości session died (independently of the
+  main Synergia session - confirmed live, well within its own ~20h
+  assumed lifetime, sometimes within minutes of a clean start), the
+  Unread messages sensor stayed permanently empty until a full Home
+  Assistant restart.** `_messages_bootstrapped` was only ever set to
+  `True`, never back - so once either the initial bootstrap call or the
+  primary inbox/unread-count fetch raised an error, every later poll
+  cycle skipped straight past the bootstrap step and never tried again.
+  Both failure points now leave a fresh bootstrap attempt scheduled for
+  the very next cycle instead of getting stuck.
+
 ## 0.7.5
 
 Promoted from the `0.7.5-beta.1`-`0.7.5-beta.4` testing line - confirmed

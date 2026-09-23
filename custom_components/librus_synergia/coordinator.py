@@ -1056,6 +1056,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         returns False, checked via the "Brak dostępu" marker), not an error.
         Any other failure here is also non-fatal - messages are a bonus
         feature, not core data, and must never fail the whole update cycle.
+
+        BUG FIX (live feedback, 2026-09-23 - "też tak kurwa mam", reproduced
+        on the maintainer's own account too): `_messages_bootstrapped` used
+        to only ever get set `True`, never back to `False` - so once EITHER
+        the bootstrap call OR the primary fetch below raised a real
+        `LibrusError` (confirmed live: the separate wiadomosci.librus.pl
+        session can apparently die independently of the main Synergia
+        `oauth_token`, well within its ~20h lifetime - messages broke ~15
+        minutes after a clean start on a real account), messages stayed
+        silently empty FOREVER - every later cycle skipped straight past
+        `if not self._messages_bootstrapped` and never attempted a fresh
+        bootstrap again, confirmed live via a real account's own
+        `last_reported` advancing on schedule while `last_updated` stayed
+        frozen on the stale empty result. Only a full HA restart/reload
+        cleared it (`_messages_bootstrapped` is instance state). Both
+        except blocks below now reset the flag so the NEXT cycle always
+        gets a fresh bootstrap attempt - cheap (one GET) even if it keeps
+        failing, same "retry every cycle, no backoff" philosophy the core
+        tier already uses for a confirmed-real failure.
         """
         if self.config_entry is not None and not self.config_entry.options.get(
             CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED
@@ -1077,6 +1096,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 _LOGGER.debug("Messages bootstrap failed (non-fatal)", exc_info=True)
                 self._messages_available = False
                 self._note_optional_endpoint_failure("Messages")
+                return 0, {}, [], [], [], []
             self._messages_bootstrapped = True
         if not self._messages_available:
             return 0, {}, [], [], [], []
@@ -1089,6 +1109,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         except LibrusError:
             _LOGGER.debug("Messages fetch failed (non-fatal)", exc_info=True)
             self._note_optional_endpoint_failure("Messages")
+            # The dedicated wiadomosci.librus.pl session may have died
+            # independently of the main one - force a fresh bootstrap next
+            # cycle instead of staying stuck on a stale one forever.
+            self._messages_bootstrapped = False
             return 0, {}, [], [], [], []
         self._note_optional_endpoint_recovery("Messages")
         unread_count, unread_by_mailbox, inbox_messages = _parse_messages(unread_payload, inbox_payload)

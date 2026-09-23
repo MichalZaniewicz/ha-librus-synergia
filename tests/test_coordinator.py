@@ -279,6 +279,61 @@ async def test_messages_unavailable_school_is_non_fatal(hass) -> None:
     client.async_get_unread_messages_count.assert_not_called()
 
 
+async def test_messages_bootstrap_exception_retries_next_cycle(hass) -> None:
+    """BUG FIX (live feedback, 2026-09-23 - "też tak kurwa mam", reproduced
+    on the maintainer's own account too): `_messages_bootstrapped` used to
+    get set True even when the bootstrap call itself raised - so a single
+    transient bootstrap failure left messages silently empty FOREVER,
+    never attempting another bootstrap on any later cycle. A confirmed-403
+    "module not enabled" (async_bootstrap_messages cleanly returning
+    False) is a different, correctly-final case - this test is
+    specifically about a raised exception."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.side_effect = [
+        LibrusUnexpectedResponseError("HTTP 500 from bootstrap"),
+        True,
+    ]
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_messages.return_value = {"data": []}
+    coordinator = _make_coordinator(hass, client)
+
+    first = await coordinator._async_update_data()
+    assert first.messages_available is False
+    assert first.unread_message_count == 0
+
+    second = await coordinator._async_update_data()
+    assert second.messages_available is True
+    assert second.unread_message_count == 1
+    assert client.async_bootstrap_messages.call_count == 2
+
+
+async def test_messages_primary_fetch_exception_retries_bootstrap_next_cycle(hass) -> None:
+    """Same bug, the other trigger: the dedicated wiadomosci.librus.pl
+    session can apparently die independently of the main Synergia one
+    (confirmed live, well within the main session's own ~20h assumed
+    lifetime) - the PRIMARY fetch (not just bootstrap) raising must also
+    force a fresh bootstrap attempt next cycle, not just degrade forever
+    with the stale `_messages_bootstrapped = True` left in place."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.side_effect = [
+        LibrusUnexpectedResponseError("HTTP 500 from unread count"),
+        {"data": {"inbox": 2}},
+    ]
+    client.async_get_messages.return_value = {"data": []}
+    coordinator = _make_coordinator(hass, client)
+
+    first = await coordinator._async_update_data()
+    assert first.messages_available is False
+    assert first.unread_message_count == 0
+
+    second = await coordinator._async_update_data()
+    assert second.messages_available is True
+    assert second.unread_message_count == 2
+    # Bootstrapped again on the second cycle - not left permanently stuck.
+    assert client.async_bootstrap_messages.call_count == 2
+
+
 async def test_messages_disabled_via_options_skips_all_message_calls(hass) -> None:
     """`messages_enabled: False` in the options must skip the Wiadomości
     bootstrap and every messages call entirely, leaving the sensor
