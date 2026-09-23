@@ -437,8 +437,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         normal poll cycle (see `LibrusApiClient.async_get_message`'s
         docstring for why: CONFIRMED live this marks the message read
         server-side, so it must only ever run on a user's own explicit
-        action, never automatically). Same one-retry-only session-expiry
-        recovery as `async_fetch_timetable_week`."""
+        action, never automatically).
+
+        BUG FIX (live feedback, 2026-09-23, same session as the messages-
+        polling fixes above): this used to only recover the MAIN Synergia
+        session (`async_ensure_session_valid`) on a `LibrusSessionExpiredError`
+        - correct for `async_fetch_timetable_week` (Timetable lives on that
+        same main session), but `async_get_message` lives on the SEPARATE
+        wiadomosci.librus.pl session instead, which this project has now
+        confirmed dies independently and far more often. The retry used to
+        reuse the same now-stale Wiadomości cookies and fail again, this
+        time uncaught - surfacing as a real "couldn't load message" error
+        to whoever just clicked a message in a card. Now also forces a
+        fresh Wiadomości bootstrap before retrying, mirroring
+        `_async_bootstrap_and_fetch_primary_messages`'s own recovery."""
         assert self.config_entry is not None
         try:
             return await self._client.async_get_message(mailbox, message_id)
@@ -446,6 +458,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             await self._client.async_ensure_session_valid(
                 self.config_entry.data[CONF_PASSWORD], force=True
             )
+            self._messages_bootstrapped = False
+            self._messages_available = await self._client.async_bootstrap_messages()
+            self._messages_bootstrapped = True
             return await self._client.async_get_message(mailbox, message_id)
 
     async def _async_update_data(self) -> LibrusData:

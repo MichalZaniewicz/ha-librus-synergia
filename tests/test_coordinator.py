@@ -790,6 +790,12 @@ async def test_fetch_message_recovers_from_mid_cycle_session_expiry(hass) -> Non
         c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
     ]
     assert len(force_calls) == 1
+    # BUG FIX (live feedback, 2026-09-23): async_get_message lives on the
+    # SEPARATE wiadomosci.librus.pl session, not the main one - recovering
+    # only the main session and retrying with the same stale Wiadomości
+    # cookies used to fail again, uncaught. The retry must also force a
+    # fresh Wiadomości bootstrap.
+    assert client.async_bootstrap_messages.call_count == 1
 
 
 async def test_fetch_message_raises_when_recovery_also_fails(hass) -> None:

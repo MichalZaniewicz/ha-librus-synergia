@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.6-beta.3
+
+**Beta release** - the `get_message` service (clicking a message in a
+card) had the same "session died" gap the polling path just got fixed
+for. To try it: HACS -> Librus Synergia -> the three-dot menu ->
+"Redownload" -> pick the pre-release version `0.7.6-beta.3`.
+
+### Fixed
+- **Clicking a message to read its full content could fail with a real
+  error ("couldn't load message") instead of just working, once the
+  dedicated Wiadomości session had died.** `get_message`'s on-demand
+  fetch only ever recovered the MAIN Synergia session on a session
+  expiry - correct for the on-demand Timetable fetch it was copied from,
+  but `get_message` lives on the SEPARATE wiadomosci.librus.pl session
+  instead, which this project has now confirmed dies independently and
+  far more often. The retry used to reuse the same now-stale Wiadomości
+  cookies and fail again, this time with no further recovery - now also
+  forces a fresh Wiadomości bootstrap before retrying. Checked every
+  other session-recovery call site in the file for the same gap - this
+  was the only one.
+
 ## 0.7.6-beta.2
 
 **Beta release** - still the Wiadomości fix, now recovering within the
