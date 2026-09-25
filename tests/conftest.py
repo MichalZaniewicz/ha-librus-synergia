@@ -86,6 +86,14 @@ def build_mock_client(**overrides) -> AsyncMock:
     )
     client.async_ensure_session_valid.return_value = None
     client.async_get_me.return_value = ME_PAYLOAD
+    client.async_get_token_info.return_value = {}
+    client.async_get_user_info.return_value = {}
+    client.async_get_user.return_value = {}
+    client.async_get_kindergartener.return_value = {}
+    client.async_get_kindergarten_timetable.return_value = {"timetableEntries": []}
+    client.async_get_kindergarten_group.return_value = {}
+    client.async_get_kindergarten_activity_types.return_value = {"activitiesTypes": []}
+    client.async_get_kindergarten_classrooms.return_value = {"data": []}
     client.async_get_grades.return_value = {"Grades": []}
     client.async_get_grade_categories.return_value = {"Categories": []}
     client.async_get_notes.return_value = {"Notes": []}

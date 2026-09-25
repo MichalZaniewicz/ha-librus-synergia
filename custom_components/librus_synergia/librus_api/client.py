@@ -23,6 +23,7 @@ from .const import (
     API_OAUTH_AUTHORIZATION_WITH_SCOPE_URL,
     ASSUMED_SESSION_LIFETIME_SECONDS,
     DATA_BASE_URL,
+    KINDERGARTENS_BASE_URL,
     ENDPOINT_ATTENDANCE_TYPES,
     ENDPOINT_ATTENDANCES,
     ENDPOINT_BEHAVIOUR_GRADES_POINTS,
@@ -441,6 +442,53 @@ class LibrusApiClient:
         return await self._async_request(
             ENDPOINT_TIMETABLES, params={"weekStart": week_start.isoformat()}
         )
+
+    async def async_get_token_info(self) -> dict[str, Any]:
+        """Fetch the current Synergia token identity used by the web UI."""
+        return await self._async_request("Auth/TokenInfo")
+
+    async def async_get_user_info(self, identifier: str) -> dict[str, Any]:
+        """Fetch the auth user profile for one Librus LID identifier."""
+        return await self._async_request(f"Auth/UserInfo/{identifier}")
+
+    async def async_get_user(self, user_id: int | str) -> dict[str, Any]:
+        """Fetch one user record from the standard Synergia Users API."""
+        return await self._async_request(f"Users/{user_id}")
+
+    async def async_get_kindergartener(self, identifier: str) -> dict[str, Any]:
+        """Fetch kindergarten child metadata used by the Synergia web UI."""
+        return await self._async_request(f"Auth/Users/Kindergarteners/{identifier}")
+
+    async def async_get_kindergarten_timetable(
+        self, kindergartener_identifier: str, date_from: date, date_to: date
+    ) -> dict[str, Any]:
+        """Fetch the kindergarten timetable used by Synergia's web UI.
+
+        This is a different API family from the standard `/Timetables`
+        endpoint. It returns `timetableEntries`.
+        """
+        endpoint = f"{KINDERGARTENS_BASE_URL}/timetable/kindergarteners/{kindergartener_identifier}"
+        return await self._async_request_url(
+            endpoint,
+            params={
+                "dateFrom": date_from.isoformat(),
+                "dateTo": date_to.isoformat(),
+            },
+        )
+
+    async def async_get_kindergarten_group(self, group_identifier: str) -> dict[str, Any]:
+        """Fetch kindergarten group metadata (name and tutor LIDs)."""
+        return await self._async_request_url(
+            f"{KINDERGARTENS_BASE_URL}/groups/{group_identifier}"
+        )
+
+    async def async_get_kindergarten_activity_types(self) -> dict[str, Any]:
+        """Fetch kindergarten activity-type names."""
+        return await self._async_request_url(f"{KINDERGARTENS_BASE_URL}/activities-types")
+
+    async def async_get_kindergarten_classrooms(self) -> dict[str, Any]:
+        """Fetch classroom identifiers/symbols used by kindergarten lessons."""
+        return await self._async_request("Auth/Classrooms")
 
     async def async_get_homeworks(self) -> dict[str, Any]:
         return await self._async_request(ENDPOINT_HOMEWORKS)

@@ -269,10 +269,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Subjects/teachers/classrooms are near-static reference data -
         # refetched at most once a day rather than every cycle.
         self._reference_data_fetched_at: datetime | None = None
-        self._cached_subjects: dict[int, str] = {}
-        self._cached_teachers: dict[int, str] = {}
-        self._cached_classrooms: dict[int, str] = {}
+        self._cached_subjects: dict[int | str, str] = {}
+        self._cached_teachers: dict[int | str, str] = {}
+        self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
+        self._kindergarten_identifier: str | None = None
+        self._kindergarten_group_identifier: str | None = None
+        self._kindergarten_identifier_source: str | None = None
+        self._kindergarten_last_entries: int | None = None
+        self._kindergarten_discovery_candidates: int = 0
+        self._is_kindergarten: bool = False
+        self._kindergarten_discovery_attempted: bool = False
         self._cached_school: SchoolData | None = None
         self._cached_class: ClassData | None = None
         self._cached_homework_categories: dict[int, str] = {}
@@ -335,6 +342,31 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return self._client
 
     @property
+    def is_kindergarten(self) -> bool:
+        """Whether the current Librus account uses the kindergarten timetable API."""
+        return self._is_kindergarten and self._kindergarten_identifier is not None
+
+    @property
+    def kindergarten_identifier(self) -> str | None:
+        """Resolved kindergarten child LID (for diagnostics/UI)."""
+        return self._kindergarten_identifier
+
+    @property
+    def kindergarten_identifier_source(self) -> str | None:
+        """How the kindergarten child LID was resolved."""
+        return self._kindergarten_identifier_source
+
+    @property
+    def kindergarten_last_entries(self) -> int | None:
+        """Number of timetableEntries seen in the last kindergarten fetch."""
+        return self._kindergarten_last_entries
+
+    @property
+    def kindergarten_discovery_candidates(self) -> int:
+        """Number of candidate identifiers tested during discovery."""
+        return self._kindergarten_discovery_candidates
+
+    @property
     def reference_data_fetched_at(self) -> datetime | None:
         """When `_async_refresh_reference_data` last completed (`None` if
         never yet, e.g. right after setup). Public for `diagnostics.py` -
@@ -372,28 +404,240 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         the start rather than needing a second round to notice the gap."""
         return dict(self._optional_endpoint_first_failure)
 
-    async def _fetch_timetable_or_unpublished(self, week_start: date) -> dict[str, Any]:
-        """Fetch one week's raw `Timetable` payload, treating a CONFIRMED
-        403 as "this class's timetable isn't published yet" (issue #4,
-        reported live) rather than a session problem - Synergia's own web
-        UI shows an explicit "Plan lekcji klasy ... nie został jeszcze
-        opublikowany" message for this exact case, and a fresh re-login
-        can never fix it (the login itself succeeds fine, as reported). A
-        genuine 401 still means the session actually died and is left to
-        propagate, so the normal forced-relogin-and-retry-once recovery
-        (see `_async_update_data` / `async_fetch_timetable_week`) still
-        runs for that case.
+    async def _update_kindergarten_context(self, me_payload: dict[str, Any]) -> None:
+        """Resolve the actual kindergarten child identity used by the timetable API.
 
-        BUG FIX (live feedback, issue #5's account): this predates
-        `degraded_endpoints`/the repair-issue tracking and never fed it -
-        a persistently-403ing Timetable was invisible in diagnostics even
-        though the calendar was correctly showing empty. Now tracked
-        under the "Timetable" label, same as every other degrade path.
-        Called from both TIER 1 (this week/next week) and the on-demand
-        `async_fetch_timetable_week` path - both count as the same
-        endpoint for tracking purposes."""
+        A parent/guardian session can expose the parent's LID in /Me and
+        Auth/TokenInfo. The web UI ultimately requests the CHILD LID. We therefore
+        collect plausible LIDs and verify them against the real kindergarten
+        timetable endpoint before selecting one.
+
+        Once the child LID is verified, also fetch the child record so we can
+        retain its groupIdentifier for the existing school_class sensor.
+        """
+        me = _parse_me(me_payload)
+
+        # A previously verified identity is safe to reuse. If the group ID is
+        # missing (e.g. after a transient group lookup failure), refresh the child
+        # metadata without repeating the potentially expensive LID discovery.
+        if self._is_kindergarten and self._kindergarten_identifier:
+            if self._kindergarten_group_identifier is None:
+                try:
+                    child_payload = await self._client.async_get_kindergartener(
+                        self._kindergarten_identifier
+                    )
+                    child_data = child_payload.get("data") if isinstance(child_payload, dict) else None
+                    if isinstance(child_data, dict):
+                        group_identifier = child_data.get("groupIdentifier")
+                        if isinstance(group_identifier, str) and group_identifier:
+                            self._kindergarten_group_identifier = group_identifier
+                except LibrusSessionExpiredError:
+                    raise
+                except LibrusError as err:
+                    _LOGGER.debug(
+                        "Kindergarten child metadata refresh failed for %s: %s",
+                        self._kindergarten_identifier,
+                        err,
+                    )
+            return
+
+        if self._kindergarten_discovery_attempted and not me.is_kindergarten:
+            return
+
+        self._is_kindergarten = me.is_kindergarten
+        candidates: list[str] = []
+        sources: dict[str, str] = {}
+
+        def add_candidate(value: Any, source: str) -> None:
+            if isinstance(value, str) and value.startswith("LID-AUTH-USER-"):
+                if value not in candidates:
+                    candidates.append(value)
+                sources.setdefault(value, source)
+
+        # Prefer identifiers exposed directly in /Me.
+        student_payload = (
+            (me_payload.get("Me") or {}).get("User")
+            if isinstance(me_payload, dict)
+            else None
+        )
+        for value in _collect_lid_user_identifiers(student_payload):
+            add_candidate(value, "Me.User")
+        for value in _collect_lid_user_identifiers(me_payload):
+            add_candidate(value, "Me")
+
         try:
-            payload = await self._client.async_get_timetable(week_start)
+            token_info = await self._client.async_get_token_info()
+            token_identifier = _extract_token_user_identifier(token_info)
+            if token_identifier:
+                add_candidate(token_identifier, "Auth/TokenInfo")
+                try:
+                    user_info = await self._client.async_get_user_info(token_identifier)
+                except LibrusSessionExpiredError:
+                    raise
+                except LibrusError:
+                    user_info = {}
+
+                for value in _collect_lid_user_identifiers(user_info):
+                    add_candidate(value, "Auth/UserInfo")
+                if _looks_like_kindergarten_account(user_info, user_info):
+                    self._is_kindergarten = True
+
+                # Bridge numeric User.Id -> /Users/{id} -> AccountId/LID.
+                numeric_ids = _collect_numeric_user_ids(me_payload)
+                numeric_ids.extend(_collect_numeric_user_ids(user_info))
+                for numeric_id in dict.fromkeys(numeric_ids):
+                    try:
+                        user_record = await self._client.async_get_user(numeric_id)
+                    except LibrusSessionExpiredError:
+                        raise
+                    except LibrusError:
+                        continue
+                    for value in _collect_lid_user_identifiers(user_record):
+                        add_candidate(value, f"Users/{numeric_id}")
+
+            self._kindergarten_discovery_candidates = len(candidates)
+
+            # Probe the exact endpoint used by the official kindergarten UI.
+            # This is the decisive check that distinguishes the parent's LID
+            # from the child's LID on parent/guardian accounts.
+            if self._is_kindergarten and candidates:
+                today = dt_util.now().date()
+                month_start = today.replace(day=1)
+                if month_start.month == 12:
+                    next_month = month_start.replace(
+                        year=month_start.year + 1, month=1, day=1
+                    )
+                else:
+                    next_month = month_start.replace(month=month_start.month + 1, day=1)
+                month_end = next_month - timedelta(days=1)
+
+                for candidate in dict.fromkeys(candidates):
+                    try:
+                        payload = await self._client.async_get_kindergarten_timetable(
+                            candidate, month_start, month_end
+                        )
+                    except LibrusSessionExpiredError:
+                        raise
+                    except LibrusError:
+                        continue
+
+                    entries = payload.get("timetableEntries") if isinstance(payload, dict) else None
+                    if isinstance(entries, list) and entries:
+                        self._kindergarten_identifier = candidate
+                        self._kindergarten_identifier_source = (
+                            f"timetable:{sources.get(candidate, 'probe')}"
+                        )
+                        self._kindergarten_last_entries = len(entries)
+                        self._is_kindergarten = True
+
+                        # Resolve the child's group used by the kindergarten UI
+                        # and by the existing Home Assistant class sensor.
+                        try:
+                            child_payload = await self._client.async_get_kindergartener(candidate)
+                            child_data = (
+                                child_payload.get("data")
+                                if isinstance(child_payload, dict)
+                                else None
+                            )
+                            if isinstance(child_data, dict):
+                                group_identifier = child_data.get("groupIdentifier")
+                                if isinstance(group_identifier, str) and group_identifier:
+                                    self._kindergarten_group_identifier = group_identifier
+                        except LibrusSessionExpiredError:
+                            raise
+                        except LibrusError as err:
+                            _LOGGER.debug(
+                                "Kindergarten child/group metadata fetch failed for %s: %s",
+                                candidate,
+                                err,
+                            )
+
+                        self._kindergarten_discovery_attempted = True
+                        _LOGGER.debug(
+                            "Resolved Librus kindergarten CHILD identifier: %s "
+                            "(source %s, entries %s, group %s)",
+                            self._kindergarten_identifier,
+                            self._kindergarten_identifier_source,
+                            self._kindergarten_last_entries,
+                            self._kindergarten_group_identifier,
+                        )
+                        return
+
+            self._kindergarten_identifier = None
+            self._kindergarten_identifier_source = "no_timetable_candidate"
+            self._kindergarten_last_entries = 0
+            self._kindergarten_discovery_attempted = True
+
+        except LibrusSessionExpiredError:
+            raise
+        except LibrusError as err:
+            _LOGGER.debug("Kindergarten identity discovery failed: %s", err)
+            self._kindergarten_discovery_attempted = True
+
+        if self._is_kindergarten:
+            _LOGGER.warning(
+                "Librus reported a kindergarten account, but no candidate LID "
+                "returned timetableEntries. Candidates tested: %s",
+                len(candidates),
+            )
+
+    async def _fetch_timetable_or_unpublished(self, week_start: date) -> dict[str, Any]:
+        """Fetch one week's timetable, using the kindergarten API when appropriate.
+
+        Kindergarten accounts can legitimately return 403 or an empty payload
+        from the standard /Timetables endpoint. A verified child LID always wins
+        and uses the kindergarten endpoint directly.
+        """
+        try:
+            if self._is_kindergarten and self._kindergarten_identifier:
+                payload = await self._client.async_get_kindergarten_timetable(
+                    self._kindergarten_identifier,
+                    week_start,
+                    week_start + timedelta(days=6),
+                )
+                entries = payload.get("timetableEntries") if isinstance(payload, dict) else None
+                self._kindergarten_last_entries = len(entries) if isinstance(entries, list) else 0
+            else:
+                try:
+                    payload = await self._client.async_get_timetable(week_start)
+                except LibrusSessionExpiredError as standard_err:
+                    # Some preschool accounts do expose a LID before the
+                    # kindergarten identity is fully detected and return 403
+                    # from the standard timetable endpoint. If we have that LID,
+                    # probe the confirmed kindergarten endpoint before degrading.
+                    if standard_err.status_code == 403 and self._kindergarten_identifier:
+                        kindergarten_payload = await self._client.async_get_kindergarten_timetable(
+                            self._kindergarten_identifier,
+                            week_start,
+                            week_start + timedelta(days=6),
+                        )
+                        if isinstance(kindergarten_payload.get("timetableEntries"), list):
+                            self._is_kindergarten = True
+                            self._kindergarten_last_entries = len(
+                                kindergarten_payload["timetableEntries"]
+                            )
+                            payload = kindergarten_payload
+                        else:
+                            raise
+                    else:
+                        raise
+
+                # Defensive fallback for variants where /Me exposes a child LID
+                # but the explicit kindergarten marker is missing.
+                if (
+                    not self._is_kindergarten
+                    and self._kindergarten_identifier
+                    and not payload.get("Timetable")
+                ):
+                    kindergarten_payload = await self._client.async_get_kindergarten_timetable(
+                        self._kindergarten_identifier,
+                        week_start,
+                        week_start + timedelta(days=6),
+                    )
+                    if isinstance(kindergarten_payload.get("timetableEntries"), list):
+                        self._is_kindergarten = True
+                        self._kindergarten_last_entries = len(kindergarten_payload["timetableEntries"])
+                        payload = kindergarten_payload
         except LibrusSessionExpiredError as err:
             if err.status_code == 403:
                 self._note_optional_endpoint_failure("Timetable")
@@ -574,7 +818,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         homeworks = _parse_homeworks(homeworks_payload)
         attendances = _parse_attendances(attendances_payload)
         attendance_types = _parse_attendance_types(attendance_types_payload)
-        timetable = merge_timetables(timetable_this_week, timetable_next_week)
+        if self._is_kindergarten:
+            timetable = merge_kindergarten_timetables(timetable_this_week, timetable_next_week)
+        else:
+            timetable = merge_timetables(timetable_this_week, timetable_next_week)
         self._async_fire_new_item_events(
             grades, school_notices, notes, messages, homeworks, me.display_name
         )
@@ -708,6 +955,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
 
         me_payload = await self._client.async_get_me()
+        await self._update_kindergarten_context(me_payload)
 
         core_results = await asyncio.gather(
             self._client.async_get_grades(),
@@ -995,8 +1243,70 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
         self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
         self._cached_lesson_subjects = _parse_lesson_subjects(lessons_payload)
+
+        # Kindergarten uses the same /Users source as the normal UI, but
+        # matches teachers by Users[].AccountId rather than Users[].Id.
+        # Its classroom symbols come from /Auth/Classrooms, activity names
+        # come from /kindergartens/activities-types, and its group comes from
+        # /kindergartens/groups/<groupIdentifier>. All are merged into the
+        # existing lookup dictionaries/model so normal school entities keep
+        # working unchanged.
+        kindergarten_group_payload: dict[str, Any] = {}
+        if self._is_kindergarten:
+            kindergarten_results = await asyncio.gather(
+                self._client.async_get_kindergarten_activity_types(),
+                self._client.async_get_kindergarten_classrooms(),
+                (
+                    self._client.async_get_kindergarten_group(self._kindergarten_group_identifier)
+                    if self._kindergarten_group_identifier
+                    else asyncio.sleep(0, result={})
+                ),
+                return_exceptions=True,
+            )
+            (
+                kindergarten_activity_payload,
+                kindergarten_classrooms_payload,
+                kindergarten_group_payload,
+            ) = kindergarten_results
+            if isinstance(kindergarten_activity_payload, BaseException):
+                _LOGGER.debug(
+                    "Kindergarten activity-types fetch failed: %s",
+                    kindergarten_activity_payload,
+                    exc_info=kindergarten_activity_payload,
+                )
+                kindergarten_activity_payload = {}
+            if isinstance(kindergarten_classrooms_payload, BaseException):
+                _LOGGER.debug(
+                    "Kindergarten classrooms fetch failed: %s",
+                    kindergarten_classrooms_payload,
+                    exc_info=kindergarten_classrooms_payload,
+                )
+                kindergarten_classrooms_payload = {}
+            if isinstance(kindergarten_group_payload, BaseException):
+                _LOGGER.debug(
+                    "Kindergarten group fetch failed: %s",
+                    kindergarten_group_payload,
+                    exc_info=kindergarten_group_payload,
+                )
+                kindergarten_group_payload = {}
+
+            self._cached_subjects.update(
+                _parse_identifier_name_map(
+                    kindergarten_activity_payload,
+                    list_key="activitiesTypes",
+                    identifier_keys=("identifier", "Identifier"),
+                    name_keys=("name", "Name"),
+                )
+            )
+            self._cached_teachers.update(_parse_kindergarten_teachers(teachers_payload))
+            self._cached_classrooms.update(_parse_kindergarten_classrooms(kindergarten_classrooms_payload))
+
         self._cached_school = _parse_school(schools_payload)
         self._cached_class = _parse_class(classes_payload)
+        if self._is_kindergarten and isinstance(kindergarten_group_payload, dict):
+            kindergarten_class = _parse_kindergarten_group(kindergarten_group_payload)
+            if kindergarten_class is not None:
+                self._cached_class = kindergarten_class
         self._check_school_year_rollover()
         self._cached_homework_categories = _parse_id_name_map(
             homework_categories_payload, ("Categories",)
@@ -1462,6 +1772,68 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 # ----------------------------------------------------------------------
 
 
+def _collect_numeric_user_ids(value: Any) -> list[int]:
+    """Collect numeric user IDs from common Librus payload fields."""
+    found: list[int] = []
+    id_keys = {"id", "userid", "user_id", "userId", "userID"}
+    if isinstance(value, dict):
+        for key, candidate in value.items():
+            if str(key) in id_keys and not isinstance(candidate, bool):
+                if isinstance(candidate, int) and candidate > 0:
+                    found.append(candidate)
+                elif isinstance(candidate, str) and candidate.isdigit():
+                    numeric_id = int(candidate)
+                    if numeric_id > 0:
+                        found.append(numeric_id)
+            found.extend(_collect_numeric_user_ids(candidate))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_collect_numeric_user_ids(item))
+    return list(dict.fromkeys(found))
+
+
+def _collect_lid_user_identifiers(value: Any) -> list[str]:
+    """Collect every LID-AUTH-USER identifier from an arbitrary payload."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, candidate in value.items():
+            if isinstance(candidate, str) and candidate.startswith("LID-AUTH-USER-"):
+                found.append(candidate)
+            if str(key).lower() in {
+                "identifier",
+                "accountidentifier",
+                "accountid",
+                "useridentifier",
+                "identifierofloggeduser",
+                "identifierofstudent",
+            } and isinstance(candidate, str) and candidate.startswith("LID-AUTH-USER-"):
+                found.append(candidate)
+            found.extend(_collect_lid_user_identifiers(candidate))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_collect_lid_user_identifiers(item))
+    return list(dict.fromkeys(found))
+
+
+def _extract_token_user_identifier(payload: dict[str, Any]) -> str | None:
+    for key in ("UserIdentifier", "userIdentifier", "Identifier", "identifier"):
+        value = payload.get(key) if isinstance(payload, dict) else None
+        if isinstance(value, str) and value.startswith("LID-AUTH-USER-"):
+            return value
+    return None
+
+
+def _extract_kindergartener_identifier(
+    payload: dict[str, Any], *, fallback: str
+) -> str:
+    """Resolve a child LID from a kindergarten-user response if present."""
+    candidates = _collect_lid_user_identifiers(payload)
+    for candidate in candidates:
+        if candidate != fallback:
+            return candidate
+    return fallback
+
+
 def _parse_me(payload: dict[str, Any]) -> MeData:
     me = payload.get("Me") or {}
     account = me.get("Account") or {}
@@ -1471,10 +1843,19 @@ def _parse_me(payload: dict[str, Any]) -> MeData:
     # actual student) - `MeData` is meant to represent the student, so read
     # the name from `User`, keeping only the id from `Account`.
     student = me.get("User") or {}
+    user_identifier = _find_lid_user_identifier(student)
+    if user_identifier is None:
+        # Some Synergia variants expose the identifier one level higher
+        # than `User`; keep this defensive fallback narrow so a normal
+        # numeric User.Id is never treated as a kindergarten identifier.
+        user_identifier = _find_lid_user_identifier(me)
+    is_kindergarten = _looks_like_kindergarten_account(me, student)
     return MeData(
         account_id=account.get("Id"),
         first_name=student.get("FirstName", ""),
         last_name=student.get("LastName", ""),
+        user_identifier=user_identifier,
+        is_kindergarten=is_kindergarten,
     )
 
 
@@ -1707,16 +2088,179 @@ def _parse_lesson(raw: dict[str, Any]) -> LessonData:
     subject = raw.get("Subject") or {}
     teacher = raw.get("Teacher") or {}
     classroom = raw.get("Classroom") or {}
+    teacher_id = _as_int(teacher.get("Id"))
     return LessonData(
         lesson_no=_as_int(raw.get("LessonNo")),
         hour_from=raw.get("HourFrom"),
         hour_to=raw.get("HourTo"),
         subject_id=_as_int(subject.get("Id")),
-        teacher_id=_as_int(teacher.get("Id")),
+        teacher_id=teacher_id,
         classroom_id=_as_int(classroom.get("Id")),
         is_canceled=bool(raw.get("IsCanceled")),
         is_substitution=bool(raw.get("IsSubstitutionClass")),
+        teacher_ids=(teacher_id,) if teacher_id is not None else (),
     )
+
+
+def merge_kindergarten_timetables(*payloads: dict[str, Any]) -> dict[date, list[LessonData]]:
+    """Normalize the kindergarten `timetableEntries` payload to LessonData.
+
+    Kindergarten lessons carry string identifiers (`activityTypeIdentifier`,
+    `teachers[]`, `classroomIdentifier`) instead of the numeric Subject/
+    Teacher/Classroom objects used by the standard Timetables endpoint.
+    """
+    result: dict[date, list[LessonData]] = {}
+    for payload in payloads:
+        entries = payload.get("timetableEntries")
+        if not isinstance(entries, list):
+            continue
+        for raw in entries:
+            if not isinstance(raw, dict):
+                continue
+            date_str = raw.get("date")
+            try:
+                day = date.fromisoformat(str(date_str)[:10])
+            except (TypeError, ValueError):
+                continue
+
+            raw_activity_id = raw.get("activityTypeIdentifier")
+            raw_classroom_id = raw.get("classroomIdentifier")
+            activity_id = str(raw_activity_id) if raw_activity_id is not None else None
+            classroom_id = str(raw_classroom_id) if raw_classroom_id is not None else None
+            raw_teacher_ids = raw.get("teachers")
+            if isinstance(raw_teacher_ids, list):
+                teacher_ids = tuple(
+                    str(value)
+                    for value in raw_teacher_ids
+                    if isinstance(value, (str, int)) and str(value)
+                )
+            else:
+                teacher_ids = ()
+
+            entry_type = str(raw.get("type") or "planned").lower()
+            is_canceled = "cancel" in entry_type
+            is_substitution = "substitut" in entry_type
+            teacher_id = teacher_ids[0] if teacher_ids else None
+            result.setdefault(day, []).append(
+                LessonData(
+                    lesson_no=None,
+                    hour_from=raw.get("startTime"),
+                    hour_to=raw.get("endTime"),
+                    subject_id=activity_id,
+                    teacher_id=teacher_id,
+                    classroom_id=classroom_id,
+                    is_canceled=is_canceled,
+                    is_substitution=is_substitution,
+                    teacher_ids=teacher_ids,
+                )
+            )
+    return result
+
+
+def _find_lid_user_identifier(value: Any) -> str | None:
+    """Find a Librus LID user identifier in a decoded Me/User structure."""
+    if isinstance(value, dict):
+        for key in ("identifier", "Identifier", "accountIdentifier", "AccountIdentifier", "AccountId"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.startswith("LID-AUTH-USER-"):
+                return candidate
+        for nested in value.values():
+            found = _find_lid_user_identifier(nested)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for nested in value:
+            found = _find_lid_user_identifier(nested)
+            if found:
+                return found
+    return None
+
+
+def _looks_like_kindergarten_account(me: dict[str, Any], student: dict[str, Any]) -> bool:
+    """Recognize kindergarten accounts from fields the live UI exposes.
+
+    This intentionally avoids assuming every account with a LID identifier is
+    a kindergarten account; the kindergarten-specific path is enabled when
+    Librus exposes an explicit kindergarten account marker or a kindergarten
+    user/group field.
+    """
+    text = repr(me).upper()
+    if any(marker in text for marker in (
+        "KINDERGARTENER",
+        "KINDERGARTENER_PARENT",
+        "KINDERGARTENER_GUARDIAN",
+    )):
+        return True
+    if isinstance(student, dict):
+        lowered_keys = {str(key).lower() for key in student}
+        if {"groupidentifier", "kindergartengraduationyear"} & lowered_keys:
+            return True
+    return False
+
+
+def _parse_identifier_name_map(
+    payload: dict[str, Any],
+    *,
+    list_key: str,
+    identifier_keys: tuple[str, ...],
+    name_keys: tuple[str, ...],
+) -> dict[str, str]:
+    items = payload.get(list_key)
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        identifier = next(
+            (item.get(key) for key in identifier_keys if isinstance(item.get(key), (str, int))),
+            None,
+        )
+        if identifier is None:
+            continue
+        name = next(
+            (item.get(key) for key in name_keys if isinstance(item.get(key), str) and item.get(key)),
+            "",
+        )
+        if name:
+            result[str(identifier)] = name
+    return result
+
+
+def _parse_kindergarten_teachers(payload: dict[str, Any]) -> dict[str, str]:
+    items = payload.get("Users")
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        identifier = item.get("AccountId")
+        if not isinstance(identifier, (str, int)):
+            continue
+        first = item.get("FirstName") or ""
+        last = item.get("LastName") or ""
+        name = f"{first} {last}".strip()
+        if name:
+            result[str(identifier)] = name
+    return result
+
+
+def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[str, str]:
+    items = payload.get("data")
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        identifier = item.get("identifier")
+        if not isinstance(identifier, (str, int)):
+            continue
+        symbol = item.get("symbol") or item.get("name") or ""
+        if symbol:
+            result[str(identifier)] = str(symbol)
+    return result
 
 
 def merge_timetables(*payloads: dict[str, Any]) -> dict[date, list[LessonData]]:
@@ -1749,6 +2293,22 @@ def merge_timetables(*payloads: dict[str, Any]) -> dict[date, list[LessonData]]:
             result[day] = lessons
     return result
 
+
+
+def _parse_lesson_subjects(payload: dict[str, Any]) -> dict[int, int]:
+    """lesson_id -> subject_id from the Lessons reference endpoint."""
+    items = payload.get("Lessons")
+    if not isinstance(items, list):
+        return {}
+    result: dict[int, int] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("Id") is None:
+            continue
+        subject = item.get("Subject") or {}
+        subject_id = subject.get("Id")
+        if subject_id is not None:
+            result[int(item["Id"])] = int(subject_id)
+    return result
 
 def _parse_homeworks(payload: dict[str, Any]) -> list[HomeworkEventData]:
     items = payload.get("HomeWorks")
@@ -2109,6 +2669,30 @@ def _parse_school(payload: dict[str, Any]) -> SchoolData | None:
     )
 
 
+def _parse_kindergarten_group(payload: dict[str, Any]) -> ClassData | None:
+    """Map kindergarten group metadata onto the existing class model."""
+    name = payload.get("name")
+    if not isinstance(name, str) or not name:
+        return None
+
+    tutors = payload.get("tutors")
+    tutor_id: int | str | None = None
+    if isinstance(tutors, list):
+        tutor_id = next(
+            (value for value in tutors if isinstance(value, (str, int))),
+            None,
+        )
+
+    return ClassData(
+        number=None,
+        symbol=name,
+        tutor_id=tutor_id,
+        begin_school_year=None,
+        end_first_semester=None,
+        end_school_year=None,
+    )
+
+
 def _parse_class(payload: dict[str, Any]) -> ClassData | None:
     cls = payload.get("Class")
     if not isinstance(cls, dict):
@@ -2171,22 +2755,4 @@ def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> d
         name = item.get("Name") or item.get("CategoryName") or f"{first} {last}".strip()
         if name:
             result[int(item["Id"])] = name
-    return result
-
-
-def _parse_lesson_subjects(payload: dict[str, Any]) -> dict[int, int]:
-    """lesson_id -> subject_id, from `Lessons` (CONFIRMED live 2026-09-23 -
-    see const.py's ENDPOINT_LESSONS note). Used to resolve which subject an
-    `AttendanceData.lesson_id` belongs to."""
-    items = payload.get("Lessons")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, int] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        subject = item.get("Subject") or {}
-        subject_id = subject.get("Id")
-        if subject_id is not None:
-            result[int(item["Id"])] = int(subject_id)
     return result

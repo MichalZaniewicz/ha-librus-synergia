@@ -20,6 +20,8 @@ class MeData:
     account_id: int | None
     first_name: str
     last_name: str
+    user_identifier: str | None = None
+    is_kindergarten: bool = False
 
     @property
     def display_name(self) -> str:
@@ -147,11 +149,12 @@ class LessonData:
     lesson_no: int | None
     hour_from: str | None
     hour_to: str | None
-    subject_id: int | None
-    teacher_id: int | None
-    classroom_id: int | None
+    subject_id: int | str | None
+    teacher_id: int | str | None
+    classroom_id: int | str | None
     is_canceled: bool
     is_substitution: bool
+    teacher_ids: tuple[int | str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -244,7 +247,7 @@ class ClassData:
 
     number: int | None
     symbol: str
-    tutor_id: int | None
+    tutor_id: int | str | None
     begin_school_year: str | None
     end_first_semester: str | None
     end_school_year: str | None
@@ -352,9 +355,9 @@ class LibrusData:
     homeworks: list[HomeworkEventData]
     school_notices: list[SchoolNoticeData]
     lucky_number: LuckyNumberData | None
-    subjects: dict[int, str]
-    teachers: dict[int, str]
-    classrooms: dict[int, str]
+    subjects: dict[int | str, str]
+    teachers: dict[int | str, str]
+    classrooms: dict[int | str, str]
     messages_available: bool = False
     unread_message_count: int = 0
     unread_messages_by_mailbox: dict[str, int] = field(default_factory=dict)
