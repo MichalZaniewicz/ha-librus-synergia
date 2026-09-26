@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8-beta.2
+
+### Fixed
+- Kindergarten classrooms now show their full name ("sala 1") instead of
+  the bare symbol ("1") - reported on a live kindergarten account.
+
 ## 0.7.8-beta.1
 
 ### Added

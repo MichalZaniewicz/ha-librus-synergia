@@ -2055,7 +2055,11 @@ def _parse_kindergarten_teachers(payload: dict[str, Any]) -> dict[int | str, str
 
 
 def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[int | str, str]:
-    """`Auth/Classrooms` -> identifier: symbol (as Synergia's UI shows it)."""
+    """`Auth/Classrooms` -> identifier: room name.
+
+    Prefers `name` ("sala 1") over the bare `symbol` ("1") - reported on a
+    live kindergarten account (0.7.8-beta.1) that the symbol alone reads as
+    a meaningless number in the cards, which show the room verbatim."""
     items = payload.get("data")
     if not isinstance(items, list):
         return {}
@@ -2064,9 +2068,9 @@ def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[int | str, s
         if not isinstance(item, dict):
             continue
         identifier = item.get("identifier")
-        symbol = item.get("symbol") or item.get("name")
-        if isinstance(identifier, (str, int)) and symbol:
-            result[str(identifier)] = str(symbol)
+        room = item.get("name") or item.get("symbol")
+        if isinstance(identifier, (str, int)) and room:
+            result[str(identifier)] = str(room)
     return result
 
 
