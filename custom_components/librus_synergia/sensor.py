@@ -161,7 +161,16 @@ def _has_parallel_group(day: date, lesson: LessonData, data: LibrusData) -> bool
     just takes the first lesson in `_sorted_lessons`' flattened order,
     which may or may not be the student's real group. This makes that
     ambiguity visible (via the `has_parallel_group` attribute) instead of
-    silently showing a subject that might be wrong (code review)."""
+    silently showing a subject that might be wrong (code review).
+
+    Kindergarten lessons have no LessonNo at all (always None) - comparing
+    None to None would flag every lesson of the day, so those match on the
+    same start time instead."""
+    if lesson.lesson_no is None:
+        return (
+            sum(1 for other in data.timetable.get(day, []) if other.hour_from == lesson.hour_from)
+            > 1
+        )
     return sum(1 for other in data.timetable.get(day, []) if other.lesson_no == lesson.lesson_no) > 1
 
 

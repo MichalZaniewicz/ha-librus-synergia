@@ -40,6 +40,7 @@ DEVICE_COOKIE = "DeviceCookie"
 # Data endpoints live behind the Synergia gateway now, authenticated by the
 # session cookies obtained above - confirmed live against `Me`.
 DATA_BASE_URL = "https://synergia.librus.pl/gateway/api/2.0"
+KINDERGARTENS_BASE_URL = "https://synergia.librus.pl/gateway/ms/kindergartens"
 
 # A real desktop browser UA making an XHR request - this is what the login
 # endpoint (an AJAX-style form POST, not a bare mobile-app API call) expects;

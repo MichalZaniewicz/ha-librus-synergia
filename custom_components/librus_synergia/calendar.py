@@ -95,7 +95,12 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
     elif lesson.is_substitution:
         summary = f"{summary} (zastępstwo)"
 
-    teacher_name = data.teachers.get(lesson.teacher_id) if lesson.teacher_id is not None else None
+    # Kindergarten blocks can list several teachers (PR #8).
+    teacher_ids = lesson.teacher_ids or (
+        (lesson.teacher_id,) if lesson.teacher_id is not None else ()
+    )
+    teacher_names = [name for tid in teacher_ids if (name := data.teachers.get(tid))]
+    teacher_name = ", ".join(dict.fromkeys(teacher_names)) or None
     classroom_name = (
         data.classrooms.get(lesson.classroom_id) if lesson.classroom_id is not None else None
     )
