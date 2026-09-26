@@ -20,8 +20,6 @@ class MeData:
     account_id: int | None
     first_name: str
     last_name: str
-    user_identifier: str | None = None
-    is_kindergarten: bool = False
 
     @property
     def display_name(self) -> str:

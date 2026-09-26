@@ -13,7 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from . import LibrusConfigEntry, librus_device_info
 from .const import CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED
-from .coordinator import LibrusDataUpdateCoordinator, merge_kindergarten_timetables, merge_timetables
+from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
 from .librus_api import LibrusError
 from .librus_api.models import (
     FreeDayData,
@@ -95,13 +95,12 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
     elif lesson.is_substitution:
         summary = f"{summary} (zastępstwo)"
 
-    teacher_ids = lesson.teacher_ids or ((lesson.teacher_id,) if lesson.teacher_id is not None else ())
-    teacher_names = []
-    for teacher_id in teacher_ids:
-        name = data.teachers.get(teacher_id)
-        if name and name not in teacher_names:
-            teacher_names.append(name)
-    teacher_name = ", ".join(teacher_names) or None
+    # Kindergarten blocks can list several teachers (PR #8).
+    teacher_ids = lesson.teacher_ids or (
+        (lesson.teacher_id,) if lesson.teacher_id is not None else ()
+    )
+    teacher_names = [name for tid in teacher_ids if (name := data.teachers.get(tid))]
+    teacher_name = ", ".join(dict.fromkeys(teacher_names)) or None
     classroom_name = (
         data.classrooms.get(lesson.classroom_id) if lesson.classroom_id is not None else None
     )
@@ -244,11 +243,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
                 week_start,
             )
             return {}
-        merged = (
-            merge_kindergarten_timetables(payload)
-            if self.coordinator.is_kindergarten
-            else merge_timetables(payload)
-        )
+        merged = merge_timetables(payload)
         self._week_cache[week_start] = (merged, dt_util.utcnow())
         return merged
 

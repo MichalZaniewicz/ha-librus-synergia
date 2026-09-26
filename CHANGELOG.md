@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.8-beta.1
+
+### Added
+- **Kindergarten (przedszkole) timetable** (issue #5, based on PR #8 by
+  @Lucaspog). Kindergarten accounts get HTTP 403 from the regular
+  `Timetables` endpoint; their timetable lives in a separate
+  `/gateway/ms/kindergartens/...` API keyed by the child's own identifier.
+  When `Timetables` is forbidden, the integration now looks for that
+  identifier and, once found, fills the timetable calendar and
+  current/next lesson sensors from the kindergarten API. Activity names
+  ("Edukacja przedszkolna", "Religia"...), classrooms, teachers and the
+  kindergarten group (shown as the class) are resolved too.
+  - Regular student accounts are unaffected and make **no** extra
+    requests. The lookup only runs after a `Timetables` 403, at most once
+    a day if it finds nothing (e.g. a school that simply hasn't published
+    its timetable yet, issue #4), and a failure in any of its requests
+    can never fail the update or trigger re-authentication.
+  - Diagnostics gained a `kindergarten` section (detected / where the
+    identifier came from - never the identifier itself).
+- Calendar lesson events list every teacher when a block has several.
+
 ## 0.7.7
 
 ### Added

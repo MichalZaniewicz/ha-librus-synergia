@@ -124,6 +124,9 @@ async def async_get_config_entry_diagnostics(
             label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()
         },
         "open_repair_issues": open_issues,
+        # Kindergarten timetable discovery (issue #5) - state only, never
+        # the child's LID itself.
+        "kindergarten": coordinator.kindergarten_diagnostics,
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
         "coordinator_data": async_redact_data(coordinator_data, TO_REDACT)
         if coordinator_data is not None
