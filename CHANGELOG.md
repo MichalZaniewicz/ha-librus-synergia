@@ -1,12 +1,8 @@
 # Changelog
 
-## 0.7.8-beta.2
+## 0.7.8
 
-### Fixed
-- Kindergarten classrooms now show their full name ("sala 1") instead of
-  the bare symbol ("1") - reported on a live kindergarten account.
-
-## 0.7.8-beta.1
+Promoted from the `0.7.8-beta.1`-`0.7.8-beta.2` testing line, plus PR #9.
 
 ### Added
 - **Kindergarten (przedszkole) timetable** (issue #5, based on PR #8 by
@@ -26,6 +22,12 @@
   - Diagnostics gained a `kindergarten` section (detected / where the
     identifier came from - never the identifier itself).
 - Calendar lesson events list every teacher when a block has several.
+
+### Fixed
+- Kindergarten classrooms show their full name ("sala 1") instead of the
+  bare symbol ("1"); a purely numeric room with no name gets a "sala"
+  prefix, anything else ("s. 1", "12a") is kept as Librus returns it
+  (PR #9 by @Lucaspog).
 
 ## 0.7.7
 
