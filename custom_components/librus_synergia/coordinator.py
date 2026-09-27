@@ -2055,11 +2055,12 @@ def _parse_kindergarten_teachers(payload: dict[str, Any]) -> dict[int | str, str
 
 
 def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[int | str, str]:
-    """`Auth/Classrooms` -> identifier: room name.
+    """`Auth/Classrooms` -> identifier: room name with a ``sala`` prefix.
 
-    Prefers `name` ("sala 1") over the bare `symbol` ("1") - reported on a
-    live kindergarten account (0.7.8-beta.1) that the symbol alone reads as
-    a meaningless number in the cards, which show the room verbatim."""
+    Librus can return the room as a bare symbol (e.g. ``"1"``) even when the
+    frontend displays it as ``"sala 1"``. Normalize that here so the same
+    value is used consistently by the HA calendar and cards.
+    """
     items = payload.get("data")
     if not isinstance(items, list):
         return {}
@@ -2069,8 +2070,14 @@ def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[int | str, s
             continue
         identifier = item.get("identifier")
         room = item.get("name") or item.get("symbol")
-        if isinstance(identifier, (str, int)) and room:
-            result[str(identifier)] = str(room)
+        if not isinstance(identifier, (str, int)) or not room:
+            continue
+        room = str(room).strip()
+        if not room:
+            continue
+        if room.isdigit():
+            room = f"sala {room}"
+        result[str(identifier)] = room
     return result
 
 

@@ -104,10 +104,15 @@ def test_kindergarten_lookup_parsers() -> None:
     assert _parse_kindergarten_classrooms(
         {"data": [{"identifier": "ROOM1", "symbol": "1", "name": "sala 1"}]}
     ) == {"ROOM1": "sala 1"}
-    # No name -> fall back to the symbol.
+    # No name -> a bare numeric symbol gets the "sala" prefix.
     assert _parse_kindergarten_classrooms(
         {"data": [{"identifier": "ROOM2", "symbol": "2"}]}
-    ) == {"ROOM2": "2"}
+    ) == {"ROOM2": "sala 2"}
+
+    # Existing abbreviated room names must remain unchanged.
+    assert _parse_kindergarten_classrooms(
+        {"data": [{"identifier": "ROOM3", "symbol": "s. 1"}]}
+    ) == {"ROOM3": "s. 1"}
 
 
 async def test_regular_account_makes_no_discovery_requests(hass) -> None:
