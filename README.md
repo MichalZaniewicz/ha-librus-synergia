@@ -184,7 +184,6 @@ Returns `grades` (a list of `subject`, `subject_id`, `value`, `category`,
 Almost everything this integration reads has been checked against a real account. The open points below are data the test account simply hasn't had yet. For some of them, the field names come from other open-source Librus clients' documentation of the API (see [Acknowledgments](#acknowledgments)); no code was copied from those projects.
 
 **Waiting for real data:**
-- **A `-` grade modifier** (e.g. `4-`) is assumed to count as −0.25. The `+` modifier is confirmed as +0.5: a real `4+` shows as 4.5 in Librus's own app.
 - **Final semester and year grades** (as opposed to the *proposed* ones, which are confirmed) are left out of averages and streaks. None exist yet, because the first semester ends on 2027-01-31.
 - **Behaviour grade** and **descriptive grades** sensors are in place, but their endpoints have been empty on every check so far.
 
