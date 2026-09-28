@@ -34,7 +34,7 @@ An integration for Librus already exists ([`LukMaverick/LibrusSynergiaHA`](https
 
 This integration instead uses the login flow Librus's own website/app uses for its private API gateway - reverse-engineered from [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT), which was itself updated to track a Librus authentication change on 2026-03-28. Confirmed live (2026-09-05) to complete without a captcha challenge for a normal login. An older password-grant login (the one documented by the open-source [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android) app) no longer works: Librus now answers it with `unsupported_grant_type`.
 
-The Librus client itself lives in a separate library, [**librus-synergia**](https://github.com/MichalZaniewicz/librus-synergia) (`pip install librus-synergia`). You can use it outside Home Assistant, and it comes with an [unofficial Librus API reference](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs).
+The Librus client itself lives in a separate library, [**librus-synergia**](https://github.com/MichalZaniewicz/librus-synergia) (`pip install librus-synergia`). You can use it outside Home Assistant, and it comes with an [unofficial Librus API reference](https://michalzaniewicz.github.io/librus-synergia/).
 
 **This is an unofficial integration using a private API and may violate Librus's Terms of Service. Use your own account at your own risk.**
 
@@ -195,13 +195,13 @@ Almost everything this integration reads has been checked against a real account
 **Never tested on purpose:**
 - **A wrong password.** To avoid tripping Librus's abuse protection on a real family's account, it was never tried. "Invalid credentials" is inferred from the shape of the login response.
 
-For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs) in the librus-synergia library. If you see something that contradicts them, please open an issue with what you saw (redact personal data first).
+For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/) in the librus-synergia library. If you see something that contradicts them, please open an issue with what you saw (redact personal data first).
 
 ## Related projects
 
 - **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 54 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
-- **[Unofficial Librus API notes](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs)**: the login flow and every endpoint's response shape.
+- **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
 ## Acknowledgments
 
