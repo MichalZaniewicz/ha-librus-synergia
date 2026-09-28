@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.9-beta.1
+
+### Fixed
+- **The long-lived `DeviceCookie` is now actually saved.** Librus sets it
+  under the `/OAuth` path, and saving the session only looked at cookies
+  for the site root, so it was always left out. The design of this
+  integration relies on that cookie to mark Home Assistant as a known
+  device and keep logins free of captcha/2FA. Found live on 2026-09-28.
+  It's picked up on the next login. Nothing to do on your side.
+
 ## 0.7.8
 
 Promoted from the `0.7.8-beta.1`-`0.7.8-beta.2` testing line, plus PR #9.

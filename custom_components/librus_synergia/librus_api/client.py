@@ -12,6 +12,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date
+from http.cookies import SimpleCookie
 from typing import Any
 from urllib.parse import urljoin
 
@@ -179,20 +180,32 @@ class LibrusApiClient:
         if session_data is None:
             return
         self._logged_in_at = session_data.logged_in_at
-        by_domain: dict[str, dict[str, str]] = {}
         for cookie in session_data.cookies:
-            by_domain.setdefault(cookie["domain"], {})[cookie["name"]] = cookie["value"]
-        for domain, cookies in by_domain.items():
-            self._session.cookie_jar.update_cookies(cookies, response_url=URL(f"https://{domain}/"))
+            morsel: SimpleCookie = SimpleCookie()
+            morsel[cookie["name"]] = cookie["value"]
+            # Entries persisted before 0.7.9 have no "path" - "/" is what
+            # they were always imported with.
+            morsel[cookie["name"]]["path"] = cookie.get("path", "/")
+            self._session.cookie_jar.update_cookies(
+                morsel, response_url=URL(f"https://{cookie['domain']}/")
+            )
 
     def _export_session(self) -> LibrusSessionData:
+        # BUG FIX (found live 2026-09-28, while extracting the standalone
+        # `librus-synergia` library): this used to read
+        # `filter_cookies(https://<domain>/)`, but Librus sets DeviceCookie
+        # with `Path=/OAuth` - so a root-URL filter never returned it and
+        # the long-lived "known device" cookie (see const.py) was never
+        # persisted at all. Walk the jar directly and keep the path.
         exported: list[dict[str, str]] = []
-        for domain, names in PERSISTED_COOKIE_NAMES.items():
-            jar_cookies = self._session.cookie_jar.filter_cookies(URL(f"https://{domain}/"))
-            for name in names:
-                morsel = jar_cookies.get(name)
-                if morsel is not None:
-                    exported.append({"name": name, "value": morsel.value, "domain": domain})
+        for morsel in self._session.cookie_jar:
+            domain = morsel["domain"].lstrip(".")
+            if morsel.key not in PERSISTED_COOKIE_NAMES.get(domain, ()):
+                continue
+            cookie = {"name": morsel.key, "value": morsel.value, "domain": domain}
+            if morsel["path"] not in ("", "/"):
+                cookie["path"] = morsel["path"]
+            exported.append(cookie)
         return LibrusSessionData(cookies=exported, logged_in_at=self._logged_in_at)
 
     def is_session_valid(self) -> bool:

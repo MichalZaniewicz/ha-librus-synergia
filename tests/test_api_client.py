@@ -366,6 +366,42 @@ async def test_import_session_restores_validity_without_network() -> None:
         assert client.is_session_valid()
 
 
+@pytest.mark.asyncio
+async def test_device_cookie_on_subpath_survives_export_and_import() -> None:
+    """CONFIRMED live (2026-09-28): DeviceCookie is set with `Path=/OAuth`.
+    It must be exported (a root-URL cookie filter used to drop it) and
+    restored with its path, so it's sent to the OAuth login endpoints."""
+    from http.cookies import SimpleCookie
+
+    async with aiohttp.ClientSession() as session:
+        client = LibrusApiClient(session, "1234567u")
+        cookie: SimpleCookie = SimpleCookie()
+        cookie["DeviceCookie"] = "device123"
+        cookie["DeviceCookie"]["path"] = "/OAuth"
+        session.cookie_jar.update_cookies(cookie, response_url=URL("https://api.librus.pl/OAuth"))
+        session.cookie_jar.update_cookies(
+            {"oauth_token": "tok"}, response_url=URL("https://synergia.librus.pl/")
+        )
+        exported = client._export_session()
+
+    assert {
+        "name": "DeviceCookie",
+        "value": "device123",
+        "domain": "api.librus.pl",
+        "path": "/OAuth",
+    } in exported.cookies
+    assert {"name": "oauth_token", "value": "tok", "domain": "synergia.librus.pl"} in (
+        exported.cookies
+    )
+
+    async with aiohttp.ClientSession() as session:
+        LibrusApiClient(session, "1234567u").import_session(exported)
+        sent = session.cookie_jar.filter_cookies(
+            URL("https://api.librus.pl/OAuth/Authorization?client_id=46")
+        )
+        assert sent["DeviceCookie"].value == "device123"
+
+
 async def test_async_close_closes_the_underlying_session() -> None:
     """`async_close` must close whatever session this client was given -
     the caller (see `custom_components/librus_synergia/__init__.py`) relies
