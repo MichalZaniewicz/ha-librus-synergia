@@ -26,6 +26,8 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 [![Star this repo](https://img.shields.io/github/stars/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&logo=github&label=STAR%20THIS%20REPO&labelColor=555555&color=ffc107)](https://github.com/MichalZaniewicz/ha-librus-synergia) [![Buy me a coffee](https://img.shields.io/badge/BUY%20ME%20A%20COFFEE-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/zanula)
 
+**Contents:** [Why this exists](#why-this-exists) · [Credential model](#credential-model-read-this-before-installing) · [Installation](#installation) · [Cards](#custom-lovelace-cards) · [Entities](#entities) · [Blueprints](#automation-blueprints) · [Services](#services) · [Known limitations](#known-limitations--unverified-details) · [Related projects](#related-projects)
+
 ## Why this exists
 
 An integration for Librus already exists ([`LukMaverick/LibrusSynergiaHA`](https://github.com/LukMaverick/LibrusSynergiaHA), built on [`RustySnek/librus-apix`](https://github.com/RustySnek/librus-apix)), but it logs into the legacy HTML Synergia portal, which can demand a reCAPTCHA a human has to solve - unworkable for something meant to sync unattended in the background.
@@ -57,21 +59,10 @@ Each child/student is a separate login and a separate integration entry.
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 54 purpose-built cards - grade averages, a full
-grade log (per-subject or across every subject), a grade trend chart, a grade
-distribution histogram, a grade profile radar and a grades-by-category donut,
-attendance (plus a percentage/semester breakdown, a year-at-a-glance heatmap,
-and an absences-by-weekday chart), behaviour notices and the formal behaviour
-grade, messages, substitutions & alerts, announcements, homework assignments,
-a combined "what's new" activity feed, today's timetable, a week-at-a-glance
-grid, a lesson-time-by-subject donut, the agenda, free days, a "Today"
-overview, a weekly summary, the lucky number, a playful trading-card style
-student summary, an absence-free streak counter, a deterministic "hero or
-archetype" result computed from your child's own stats, and compact
-single-row tiles for several of the above. Each card auto-detects
-your child's device (zero YAML for the common case of one student), themes with
-your Home Assistant theme automatically, and follows your HA language (English,
-Polish).
+is a companion HACS repo with 54 purpose-built cards: grades and trends, attendance,
+timetable, agenda, messages, announcements, a "Today" overview, and a few playful ones.
+Each card finds your child's device on its own (no YAML for one student), follows your
+Home Assistant theme and language (English, Polish).
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
@@ -114,6 +105,9 @@ Ready-to-import blueprints under
 the events above so you don't have to write the YAML yourself - each just asks for an
 *action* (e.g. "Send a notification"):
 
+<details>
+<summary><b>Show all 14 blueprints</b></summary>
+
 | Blueprint | What it does | |
 | --- | --- | --- |
 | [New Grade Notification](blueprints/automation/librus_synergia/new_grade_notification.yaml) | Runs your action with a one-line summary whenever `librus_synergia_new_grade` fires. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fnew_grade_notification.yaml) |
@@ -130,6 +124,8 @@ the events above so you don't have to write the YAML yourself - each just asks f
 | [Homework Due Tomorrow](blueprints/automation/librus_synergia/homework_due_tomorrow_notification.yaml) | At a set time each day, runs your action with a `{{ homework_summary }}` only when a real Homework assignment ("zadanie domowe") is due the next day - silent otherwise. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fhomework_due_tomorrow_notification.yaml) |
 | [Time to Leave](blueprints/automation/librus_synergia/time_to_leave_notification.yaml) | Runs your action once, right when it's time to leave for the next lesson (its start time minus your travel time), checked every minute for accuracy regardless of your poll interval. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Ftime_to_leave_notification.yaml) |
 | [Achievement Unlocked](blueprints/automation/librus_synergia/achievement_unlocked_notification.yaml) | Runs your action whenever `librus_synergia_achievement_unlocked` fires - a gamification milestone (first six, grade streaks, absence/behaviour-free streaks). Fires at most once per achievement, ever. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fachievement_unlocked_notification.yaml) |
+
+</details>
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.
@@ -200,6 +196,12 @@ Almost everything this integration reads has been checked against a real account
 - **A wrong password.** To avoid tripping Librus's abuse protection on a real family's account, it was never tried. "Invalid credentials" is inferred from the shape of the login response.
 
 For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs) in the librus-synergia library. If you see something that contradicts them, please open an issue with what you saw (redact personal data first).
+
+## Related projects
+
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 54 Lovelace cards for this integration.
+- **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
+- **[Unofficial Librus API notes](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs)**: the login flow and every endpoint's response shape.
 
 ## Acknowledgments
 
