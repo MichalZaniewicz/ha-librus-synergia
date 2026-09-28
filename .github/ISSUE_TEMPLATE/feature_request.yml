@@ -1,0 +1,22 @@
+name: Pomysł / Feature request
+description: Nowy sensor, zdarzenie, blueprint albo usprawnienie / A new sensor, event, blueprint or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Możesz pisać po polsku albo po angielsku. / Polish or English are both fine.
+
+        Pomysł na **kartę** zgłoś w [ha-librus-synergia-cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards/issues). / Card ideas go to [ha-librus-synergia-cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards/issues).
+  - type: textarea
+    id: idea
+    attributes:
+      label: Czego brakuje? / What's missing?
+      description: Co chcesz zobaczyć w Home Assistant i do czego ci się przyda. / What you'd like to see in Home Assistant and what you'd use it for.
+    validations:
+      required: true
+  - type: textarea
+    id: librus
+    attributes:
+      label: Gdzie to jest w Librusie? / Where is it in Librus?
+      description: Zakładka lub ekran w aplikacji albo na stronie Librusa, gdzie widać te dane. / The tab or screen in the Librus app or website where this data shows up.

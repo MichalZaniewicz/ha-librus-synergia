@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Karty Lovelace / Lovelace cards
+    url: https://github.com/MichalZaniewicz/ha-librus-synergia-cards/issues
+    about: Problemy i pomysły dotyczące kart / Issues and ideas about the dashboard cards
+  - name: Biblioteka Pythona / Python library
+    url: https://github.com/MichalZaniewicz/librus-synergia/issues
+    about: Używasz librus-synergia we własnym kodzie? / Using librus-synergia in your own code?

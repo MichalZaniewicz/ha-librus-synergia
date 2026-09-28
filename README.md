@@ -28,7 +28,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 An integration for Librus already exists ([`LukMaverick/LibrusSynergiaHA`](https://github.com/LukMaverick/LibrusSynergiaHA), built on [`RustySnek/librus-apix`](https://github.com/RustySnek/librus-apix)), but it logs into the legacy HTML Synergia portal, which can demand a reCAPTCHA a human has to solve - unworkable for something meant to sync unattended in the background.
 
-This integration instead uses the login flow Librus's own website/app uses for its private API gateway - reverse-engineered from [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT), which was itself updated to track a Librus authentication change on 2026-03-28. Confirmed live (2026-09-05) to complete without a captcha challenge for a normal login. An earlier, now-dead password-grant flow (documented by the open-sourced [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android), GPL-3.0) informed the initial data-endpoint research but no longer works (`unsupported_grant_type`).
+This integration instead uses the login flow Librus's own website/app uses for its private API gateway - reverse-engineered from [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT), which was itself updated to track a Librus authentication change on 2026-03-28. Confirmed live (2026-09-05) to complete without a captcha challenge for a normal login. An older password-grant login (the one documented by the open-source [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android) app) no longer works: Librus now answers it with `unsupported_grant_type`.
 
 The Librus client itself lives in a separate library, [**librus-synergia**](https://github.com/MichalZaniewicz/librus-synergia) (`pip install librus-synergia`). You can use it outside Home Assistant, and it comes with an [unofficial Librus API reference](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs).
 
@@ -183,24 +183,27 @@ Returns `grades` (a list of `subject`, `subject_id`, `value`, `category`,
 
 ## Known limitations / unverified details
 
-A few details couldn't be confirmed against a real account with data yet. Most field names below come straight from reading szkolny-eu/szkolny-android's own reference parser (the same GPL-3.0 source this whole integration is modeled on), not guesswork:
+Almost everything this integration reads has been checked against a real account. The open points below are data the test account simply hasn't had yet. For some of them, the field names come from other open-source Librus clients' documentation of the API (see [Acknowledgments](#acknowledgments)); no code was copied from those projects.
 
-- **Grade value parsing**: real numeric grades (e.g. a plain `4` or `6`) and non-numeric marks (e.g. a bare `+` for "aktywność") are CONFIRMED live to parse and average correctly - a non-numeric mark is correctly excluded from the average rather than crashing or counting as 0. The `+0.5` half of the modifier convention is now CONFIRMED correct too - independently cross-checked (2026-09-22) against the real Librus app's own displayed average for a `4+` grade (also 4.5), not just this integration's own self-consistent math (Librus's raw `/Grades` API itself carries no numeric value for a modified grade - only the string, e.g. `"4+"` - so this cross-check against the real app was the only way to actually confirm it). The `-0.25` half is still unverified - no `-`-modified grade has appeared yet to check it against.
-- **Homework assignments** (`HomeWorkAssignments`) now has CONFIRMED real data (first time since this sensor was built) and is parsing correctly. **Behaviour grade** and **Descriptive grades** sensors are still wired up but unverified - their endpoints (`BehaviourGrades/Points`, `DescriptiveGrades`) have been empty every time they've been checked so far.
-- **`Grades/Comments`**: a real grade comment is now CONFIRMED to resolve correctly end-to-end (visible in a subject sensor's `latest_grade_comments`). The exact underlying shape (ids into the separate `Grades/Comments` endpoint vs. text embedded directly in each grade) is still unconfirmed either way, since the parser handles both defensively and it works correctly regardless of which one is real.
-- **Actual semester/year grades** (`Grades[].IsSemester`/`IsFinal` - distinct from the already-confirmed `IsSemesterProposition`/`IsFinalProposition`) are excluded from the weighted average and `latest_grade`/grade-streak logic, same as the proposed ones - but this is unverified against real data, since no semester has ended on the test account yet (first semester ends 2027-01-31). Field names come from the reference parser, not a live observation.
-- `VirtualClasses` (split/group classes, e.g. language subgroups), `PointGrades` (confirmed *disabled* for this account's school via the `Units` endpoint) and `TextGrades` (enablement unknown) all have client methods available but aren't wired into any entity - nothing to build a parser against, or nothing that would ever populate for this account.
-- Whether the `HomeWorks` (agenda) endpoint accepts a date-range query, or only ever returns a fixed window, is unconfirmed - the Agenda calendar works either way, just without server-side range filtering if not.
-- A genuinely wrong password was deliberately never tested against a real account (to avoid tripping any credential-attempt-counting abuse heuristic), so the "invalid credentials" detection is a reasonable inference from the login response shape, not a confirmed observation.
-- Message attachments still can't be downloaded through this integration - only a `has_attachment` flag is exposed. Investigated live: the modern JSON API does expose each attachment's `filename`/`id`, but the actual download goes through a completely separate legacy XML protocol with its own session cookie, not the `oauth_token` this integration is built around - not pursuing it further without a stronger signal that a same-session download path exists.
+**Waiting for real data:**
+- **A `-` grade modifier** (e.g. `4-`) is assumed to count as −0.25. The `+` modifier is confirmed as +0.5: a real `4+` shows as 4.5 in Librus's own app.
+- **Final semester and year grades** (as opposed to the *proposed* ones, which are confirmed) are left out of averages and streaks. None exist yet, because the first semester ends on 2027-01-31.
+- **Behaviour grade** and **descriptive grades** sensors are in place, but their endpoints have been empty on every check so far.
 
-If you hit one of these, please open an issue with what you saw (redact personal data).
+**Deliberately not supported:**
+- **Downloading message attachments.** `get_message` returns each attachment's file name, but the download itself only works through Librus's older XML protocol, which uses a separate session.
+- **Point grades, text grades and virtual classes.** The client can fetch them, but no entity uses them: point grades are disabled at the test school, and the others had nothing to show.
+
+**Never tested on purpose:**
+- **A wrong password.** To avoid tripping Librus's abuse protection on a real family's account, it was never tried. "Invalid credentials" is inferred from the shape of the login response.
+
+For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs) in the librus-synergia library. If you see something that contradicts them, please open an issue with what you saw (redact personal data first).
 
 ## Acknowledgments
 
-- [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT) - the current login flow this integration uses is closely modeled on this project's implementation.
-- [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android) (GPL-3.0) - Librus's open-sourced former Android client; informed the data-endpoint research even though its own login flow no longer works.
-- [`RustySnek/librus-apix`](https://github.com/RustySnek/librus-apix) - referenced for grade-value parsing conventions.
+- [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT): the current login flow is based on this project's implementation.
+- [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android) (GPL-3.0): an independent, open-source e-register app. Its source helped identify Librus's endpoint and field names. No code was taken from it.
+- [`RustySnek/librus-apix`](https://github.com/RustySnek/librus-apix): referenced for grade-value conventions.
 
 ## License
 

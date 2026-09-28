@@ -1,0 +1,60 @@
+name: Błąd / Bug report
+description: Coś nie działa albo działa źle / Something is broken or wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dzięki za zgłoszenie! Możesz pisać po polsku albo po angielsku.
+        Thanks for reporting! Polish or English are both fine.
+
+        **Przed wysłaniem usuń dane osobowe** (imiona, nazwiska, treść wiadomości, loginy).
+        **Remove personal data before submitting** (names, message text, logins).
+  - type: textarea
+    id: what
+    attributes:
+      label: Co się dzieje? / What happens?
+      description: Co widzisz i co powinno się dziać zamiast tego. / What you see and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Wersja integracji / Integration version
+      description: HACS → Librus Synergia, np. / e.g. 0.8.0
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Wersja Home Assistant / Home Assistant version
+      description: Ustawienia → Informacje / Settings → About
+    validations:
+      required: true
+  - type: dropdown
+    id: account
+    attributes:
+      label: Rodzaj konta / Account type
+      options:
+        - Rodzic / Parent
+        - Uczeń / Student
+        - Przedszkole / Kindergarten
+        - Inne / Other
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Plik diagnostyczny / Diagnostics
+      description: |
+        Ustawienia → Urządzenia i usługi → Librus Synergia → ⋮ → Pobierz diagnostykę, a potem przeciągnij plik tutaj.
+        Hasło, login i ciasteczka są w nim automatycznie ukryte.
+
+        Settings → Devices & services → Librus Synergia → ⋮ → Download diagnostics, then drag the file here.
+        Password, login and cookies are redacted automatically.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logi / Logs
+      description: Wpisy z `librus_synergia` z Ustawienia → System → Logi. / Entries mentioning `librus_synergia` from Settings → System → Logs.
+      render: text
