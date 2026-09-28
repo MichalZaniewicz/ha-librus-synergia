@@ -16,6 +16,10 @@ pytest-asyncio
 pytest-homeassistant-custom-component
 freezegun
 
+# The integration's own runtime requirement (manifest.json) - HA installs
+# it for real users; the test suite needs it installed explicitly.
+librus-synergia==0.1.0
+
 # Windows-only: zoneinfo has no system tz database to fall back to there
 # (unlike Linux/macOS), and pytest-homeassistant-custom-component's hass
 # fixture sets a fixed test timezone on every run.

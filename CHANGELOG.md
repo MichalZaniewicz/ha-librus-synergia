@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0-beta.1
+
+### Changed
+- **The Librus client now comes from the standalone
+  [`librus-synergia`](https://pypi.org/project/librus-synergia/) library**
+  ([repo](https://github.com/MichalZaniewicz/librus-synergia)) instead of a
+  copy bundled inside the integration. It's the same code, extracted so
+  other projects can use it, together with an
+  [unofficial Librus API reference](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs).
+  Home Assistant installs it automatically. Behaviour is unchanged, and
+  entities, automations and blueprints keep working as before.
+
 ## 0.7.9-beta.1
 
 ### Fixed

@@ -17,6 +17,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from librus_synergia.models import (
+    AttendanceTypeData,
+    BehaviourGradeData,
+    GradeCategoryData,
+    GradeData,
+    HomeworkEventData,
+    LessonData,
+    LibrusData,
+    MessageData,
+)
+
 from . import LibrusConfigEntry, librus_device_info
 from .const import (
     ATTR_SUBJECT_ID,
@@ -34,16 +45,6 @@ from .coordinator import (
     days_since_last_negative_note,
     good_grade_streak,
     parse_grade_value,
-)
-from .librus_api.models import (
-    AttendanceTypeData,
-    BehaviourGradeData,
-    GradeCategoryData,
-    GradeData,
-    HomeworkEventData,
-    LessonData,
-    LibrusData,
-    MessageData,
 )
 
 

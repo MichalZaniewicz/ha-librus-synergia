@@ -21,9 +21,10 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
+from librus_synergia import LibrusError
+
 from .const import DOMAIN
 from .coordinator import LibrusDataUpdateCoordinator, decode_message_content, resolve_sender_name
-from .librus_api import LibrusError
 
 _LOGGER = logging.getLogger(__name__)
 

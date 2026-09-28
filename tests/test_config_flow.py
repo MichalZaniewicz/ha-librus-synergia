@@ -23,7 +23,7 @@ from custom_components.librus_synergia.const import (
     CONF_STUDENT_NUMBER,
     DOMAIN,
 )
-from custom_components.librus_synergia.librus_api import (
+from librus_synergia import (
     LibrusAccountActionRequiredError,
     LibrusCaptchaRequiredError,
     LibrusConnectionError,

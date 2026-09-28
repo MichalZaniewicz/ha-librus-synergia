@@ -13,11 +13,8 @@ single edge case.
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
-import re
 from datetime import date, datetime, time, timedelta
-from html import unescape as html_unescape
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -28,6 +25,65 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from librus_synergia import (
+    LibrusApiClient,
+    LibrusAuthError,
+    LibrusError,
+    LibrusSessionExpiredError,
+)
+from librus_synergia.models import (
+    AttendanceData,
+    AttendanceTypeData,
+    ClassData,
+    FreeDayData,
+    GradeData,
+    HomeworkEventData,
+    LessonData,
+    LibrusData,
+    LuckyNumberData,
+    MessageData,
+    NoteData,
+    SchoolData,
+    SchoolNoticeData,
+)
+
+# Parsers live in the `librus-synergia` library. `merge_timetables`,
+# `decode_message_content`, `resolve_sender_name` and `parse_grade_value`
+# are re-exported from here for calendar.py/services.py/sensor.py.
+from librus_synergia.parsers import (  # noqa: F401
+    collect_lid_user_identifiers,
+    decode_message_content,
+    extract_token_user_identifier,
+    merge_timetables,
+    parse_attendance_types,
+    parse_attendances,
+    parse_behaviour_grades,
+    parse_class,
+    parse_comment_text_map,
+    parse_descriptive_grades,
+    parse_free_days,
+    parse_grade_categories,
+    parse_grade_value,
+    parse_grades,
+    parse_homework_assignments,
+    parse_homeworks,
+    parse_id_name_map,
+    parse_kindergarten_activity_types,
+    parse_kindergarten_classrooms,
+    parse_kindergarten_group,
+    parse_kindergarten_teachers,
+    parse_lesson_subjects,
+    parse_lucky_number,
+    parse_me,
+    parse_message_list,
+    parse_messages,
+    parse_notes,
+    parse_parent_teacher_conferences,
+    parse_school,
+    parse_school_notices,
+    resolve_sender_name,
+)
+
 from .const import (
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_BEHAVIOUR_GRADES_ENABLED,
@@ -37,6 +93,7 @@ from .const import (
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
+    CORE_ENDPOINT_LABELS,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
@@ -52,7 +109,6 @@ from .const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_MESSAGE,
-    CORE_ENDPOINT_LABELS,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
     ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
@@ -60,28 +116,6 @@ from .const import (
     LUCKY_NUMBER_PUBLISH_HOUR,
     OPTIONAL_ENDPOINT_LABELS,
     REFERENCE_DATA_ENDPOINT_LABELS,
-)
-from .librus_api import LibrusApiClient, LibrusAuthError, LibrusError, LibrusSessionExpiredError
-from .librus_api.models import (
-    AttendanceData,
-    AttendanceTypeData,
-    BehaviourGradeData,
-    ClassData,
-    DescriptiveGradeData,
-    FreeDayData,
-    GradeCategoryData,
-    GradeData,
-    HomeworkAssignmentData,
-    HomeworkEventData,
-    LessonData,
-    LibrusData,
-    LuckyNumberData,
-    MeData,
-    MessageData,
-    NoteData,
-    ParentTeacherConferenceData,
-    SchoolData,
-    SchoolNoticeData,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,7 +125,6 @@ _LOGGER = logging.getLogger(__name__)
 # candidate LIDs to probe per attempt.
 _KINDERGARTEN_DISCOVERY_RETRY = timedelta(hours=24)
 _KINDERGARTEN_MAX_CANDIDATES = 6
-_LID_USER_PREFIX = "LID-AUTH-USER-"
 
 
 def optional_endpoint_issue_id(entry_id: str, label: str) -> str:
@@ -106,48 +139,6 @@ def school_year_issue_id(entry_id: str) -> str:
     """Stable repair-issue id for one entry's school-year-rollover check -
     see `optional_endpoint_issue_id`'s docstring for why this is public."""
     return f"{ISSUE_SCHOOL_YEAR_ROLLOVER}_{entry_id}"
-
-
-def parse_grade_value(value: str) -> float | None:
-    """Convert a Librus grade string ("5+", "4-", "3", "bz"...) to a number.
-
-    The "+"/"-" modifiers (+0.5 / -0.25) follow the convention used by most
-    third-party Polish gradebook average calculators. CONFIRMED live
-    (2026-09-05) via the `Grades/Types` reference endpoint that every
-    non-numeric value Librus actually uses (`bz`, `np`, `nk`, `uł`, `nł`,
-    `zl`, `nz`, `zw`, `uc`, `nu`, bare `+`/`-`) correctly falls through to
-    returning None here and is excluded from the average.
-
-    The +0.5 half is now CONFIRMED correct (2026-09-22): a raw probe of
-    Librus's own `/Grades` API (real `4+`/`5+` grades that appeared live,
-    2026-09) showed it carries NO numeric value for a modified grade at
-    all - only the string (`"Grade": "4+"`), so this function computing
-    4.5 from that string is not, by itself, proof of anything (it's the
-    same assumed convention checking itself). The real independent check
-    was cross-referencing the real Librus app's own displayed average for
-    that `4+` grade - also 4.5, confirmed by the account owner. -0.25
-    remains unverified - no `-`-modified grade has appeared live yet to
-    cross-check the same way.
-
-    Public (not underscore-prefixed) - shared by sensor.py's average
-    calculation AND the good-grade-streak/achievement logic below, which
-    is why it lives here rather than in sensor.py (coordinator.py must
-    never import from sensor.py - the dependency only runs the other way).
-    """
-    value = value.strip()
-    if not value:
-        return None
-    modifier = 0.0
-    if value.endswith("+"):
-        modifier = 0.5
-        value = value[:-1]
-    elif value.endswith("-"):
-        modifier = -0.25
-        value = value[:-1]
-    try:
-        return float(value.replace(",", ".")) + modifier
-    except ValueError:
-        return None
 
 
 # "Dobra" ocena, for the good-grade-streak sensor/achievements below - 4
@@ -513,15 +504,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         me = me_payload.get("Me") if isinstance(me_payload, dict) else None
         me = me if isinstance(me, dict) else {}
-        add(_collect_lid_user_identifiers(me.get("User")), "Me.User")
-        add(_collect_lid_user_identifiers(me), "Me")
+        add(collect_lid_user_identifiers(me.get("User")), "Me.User")
+        add(collect_lid_user_identifiers(me), "Me")
 
         token_info = await self._async_probe(self._client.async_get_token_info())
-        token_lid = _extract_token_user_identifier(token_info)
+        token_lid = extract_token_user_identifier(token_info)
         if token_lid:
             add([token_lid], "Auth/TokenInfo")
             user_info = await self._async_probe(self._client.async_get_user_info(token_lid))
-            add(_collect_lid_user_identifiers(user_info), "Auth/UserInfo")
+            add(collect_lid_user_identifiers(user_info), "Auth/UserInfo")
 
         account = me.get("Account")
         account = account if isinstance(account, dict) else {}
@@ -532,7 +523,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ]
         for numeric_id in dict.fromkeys(numeric_ids):
             user_record = await self._async_probe(self._client.async_get_user(numeric_id))
-            add(_collect_lid_user_identifiers(user_record), f"Users/{numeric_id}")
+            add(collect_lid_user_identifiers(user_record), f"Users/{numeric_id}")
 
         today = dt_util.now().date()
         for lid, source in list(candidates.items())[:_KINDERGARTEN_MAX_CANDIDATES]:
@@ -729,13 +720,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             justification_messages,
         ) = messages_result
 
-        me = _parse_me(me_payload)
-        grades = _parse_grades(grades_payload, _parse_comment_text_map(grade_comments_payload))
-        school_notices = _parse_school_notices(notices_payload)
-        notes = _parse_notes(notes_payload)
-        homeworks = _parse_homeworks(homeworks_payload)
-        attendances = _parse_attendances(attendances_payload)
-        attendance_types = _parse_attendance_types(attendance_types_payload)
+        me = parse_me(me_payload)
+        grades = parse_grades(grades_payload, parse_comment_text_map(grade_comments_payload))
+        school_notices = parse_school_notices(notices_payload)
+        notes = parse_notes(notes_payload)
+        homeworks = parse_homeworks(homeworks_payload)
+        attendances = parse_attendances(attendances_payload)
+        attendance_types = parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
         self._async_fire_new_item_events(
             grades, school_notices, notes, messages, homeworks, me.display_name
@@ -747,7 +738,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return LibrusData(
             me=me,
             grades=grades,
-            grade_categories=_parse_grade_categories(categories_payload),
+            grade_categories=parse_grade_categories(categories_payload),
             notes=notes,
             attendances=attendances,
             attendance_types=attendance_types,
@@ -769,15 +760,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             school=self._cached_school,
             school_class=self._cached_class,
             free_days=self._cached_free_days,
-            homework_assignments=_parse_homework_assignments(homework_assignments_payload),
-            behaviour_grades=_parse_behaviour_grades(
-                behaviour_grades_payload, _parse_comment_text_map(behaviour_grade_comments_payload)
+            homework_assignments=parse_homework_assignments(homework_assignments_payload),
+            behaviour_grades=parse_behaviour_grades(
+                behaviour_grades_payload, parse_comment_text_map(behaviour_grade_comments_payload)
             ),
             homework_categories=self._cached_homework_categories,
             note_categories=self._cached_note_categories,
             behaviour_grade_categories=self._cached_behaviour_grade_categories,
-            descriptive_grades=_parse_descriptive_grades(descriptive_grades_payload),
-            parent_teacher_conferences=_parse_parent_teacher_conferences(
+            descriptive_grades=parse_descriptive_grades(descriptive_grades_payload),
+            parent_teacher_conferences=parse_parent_teacher_conferences(
                 parent_teacher_conferences_payload
             ),
         )
@@ -1045,7 +1036,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._note_optional_endpoint_failure("LuckyNumbers")
             return self._cached_lucky_number
         self._note_optional_endpoint_recovery("LuckyNumbers")
-        lucky = _parse_lucky_number(payload)
+        lucky = parse_lucky_number(payload)
         if lucky is not None:
             self._cached_lucky_number = lucky
             self._lucky_number_fetched_date = today
@@ -1153,28 +1144,28 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._degrade_reference_result(label, result)
             for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results)
         )
-        self._cached_subjects = _parse_id_name_map(subjects_payload, ("Subjects",))
-        self._cached_teachers = _parse_id_name_map(teachers_payload, ("Users", "Teachers"))
-        self._cached_classrooms = _parse_id_name_map(classrooms_payload, ("Classrooms",))
-        self._cached_lesson_subjects = _parse_lesson_subjects(lessons_payload)
-        self._cached_school = _parse_school(schools_payload)
-        self._cached_class = _parse_class(classes_payload)
+        self._cached_subjects = parse_id_name_map(subjects_payload, ("Subjects",))
+        self._cached_teachers = parse_id_name_map(teachers_payload, ("Users", "Teachers"))
+        self._cached_classrooms = parse_id_name_map(classrooms_payload, ("Classrooms",))
+        self._cached_lesson_subjects = parse_lesson_subjects(lessons_payload)
+        self._cached_school = parse_school(schools_payload)
+        self._cached_class = parse_class(classes_payload)
         if self._kindergarten_lid is not None:
             await self._async_refresh_kindergarten_reference_data(teachers_payload)
         self._check_school_year_rollover()
-        self._cached_homework_categories = _parse_id_name_map(
+        self._cached_homework_categories = parse_id_name_map(
             homework_categories_payload, ("Categories",)
         )
         # A disabled toggle's payload is already `{}` (via `_maybe`), which
-        # `_parse_free_days`/`_parse_id_name_map` below already treat the
+        # `parse_free_days`/`parse_id_name_map` below already treat the
         # same as a genuinely empty account - no extra branching needed.
-        self._cached_free_days = _parse_free_days(
+        self._cached_free_days = parse_free_days(
             school_free_days_payload, "SchoolFreeDays"
-        ) + _parse_free_days(class_free_days_payload, "ClassFreeDays")
-        self._cached_note_categories = _parse_id_name_map(
+        ) + parse_free_days(class_free_days_payload, "ClassFreeDays")
+        self._cached_note_categories = parse_id_name_map(
             note_categories_payload, ("Categories",)
         )
-        self._cached_behaviour_grade_categories = _parse_id_name_map(
+        self._cached_behaviour_grade_categories = parse_id_name_map(
             behaviour_grade_categories_payload, ("Categories",)
         )
         self._reference_data_fetched_at = now
@@ -1204,10 +1195,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 results,
             )
         )
-        self._cached_subjects.update(_parse_kindergarten_activity_types(activity_payload))
-        self._cached_classrooms.update(_parse_kindergarten_classrooms(classrooms_payload))
-        self._cached_teachers.update(_parse_kindergarten_teachers(teachers_payload))
-        group = _parse_kindergarten_group(group_payload)
+        self._cached_subjects.update(parse_kindergarten_activity_types(activity_payload))
+        self._cached_classrooms.update(parse_kindergarten_classrooms(classrooms_payload))
+        self._cached_teachers.update(parse_kindergarten_teachers(teachers_payload))
+        group = parse_kindergarten_group(group_payload)
         if group is not None:
             self._cached_class = group
 
@@ -1273,7 +1264,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_unread_messages_count(),
             self._client.async_get_messages(limit=10),
         )
-        return _parse_messages(unread_payload, inbox_payload)
+        return parse_messages(unread_payload, inbox_payload)
 
     async def _async_get_messages(
         self,
@@ -1389,9 +1380,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._client.async_get_messages(mailbox="alerts", limit=10),
                 self._client.async_get_messages(mailbox="justifications", limit=10),
             )
-            substitution_messages = _parse_message_list(substitutions_payload, "substitutions")
-            alert_messages = _parse_message_list(alerts_payload, "alerts")
-            justification_messages = _parse_message_list(justifications_payload, "justifications")
+            substitution_messages = parse_message_list(substitutions_payload, "substitutions")
+            alert_messages = parse_message_list(alerts_payload, "alerts")
+            justification_messages = parse_message_list(justifications_payload, "justifications")
             self._note_optional_endpoint_recovery("Messages/Secondary")
         except LibrusError:
             _LOGGER.debug(
@@ -1656,889 +1647,3 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 # doesn't publish a schema and per-school variations are known to exist
 # upstream (see RustySnek/librus-apix's README).
 # ----------------------------------------------------------------------
-
-
-def _parse_me(payload: dict[str, Any]) -> MeData:
-    me = payload.get("Me") or {}
-    account = me.get("Account") or {}
-    # CONFIRMED live: `Account` is the LOGIN's own identity, which for a
-    # child's account under a parent-managed portal is the PARENT's name
-    # (e.g. Account.FirstName/LastName was the parent, while `User` was the
-    # actual student) - `MeData` is meant to represent the student, so read
-    # the name from `User`, keeping only the id from `Account`.
-    student = me.get("User") or {}
-    return MeData(
-        account_id=account.get("Id"),
-        first_name=student.get("FirstName", ""),
-        last_name=student.get("LastName", ""),
-    )
-
-
-def _parse_grade_categories(payload: dict[str, Any]) -> dict[int, GradeCategoryData]:
-    items = payload.get("Categories")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, GradeCategoryData] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        item_id = int(item["Id"])
-        # BUG FIX (code review): `bool(item.get("CountToTheAverage", True))`
-        # only applied the `True` default when the KEY was absent - an
-        # explicit JSON `null` resolved to `bool(None)` == False. Same
-        # "present but null" failure mode already hit and fixed once for
-        # Users[].FirstName (see const.py's/CLAUDE.md's "Empirically
-        # confirmed" notes) - an explicit null must default to True
-        # ("counts unless explicitly told False"), same as a missing key.
-        raw_count_to_average = item.get("CountToTheAverage")
-        count_to_average = True if raw_count_to_average is None else bool(raw_count_to_average)
-        # BUG FIX (code review): `int(item.get("Weight") or 1)` silently
-        # coerced a legitimate API `Weight: 0` to `1` via Python's
-        # falsy-zero evaluation (`0 or 1` == `1`) - only a genuinely
-        # absent/None Weight should default to 1.
-        raw_weight = item.get("Weight")
-        weight = int(raw_weight) if raw_weight is not None else 1
-        result[item_id] = GradeCategoryData(
-            id=item_id,
-            name=item.get("Name", ""),
-            count_to_average=count_to_average,
-            weight=weight,
-        )
-    return result
-
-
-def _parse_comment_text_map(payload: dict[str, Any] | None) -> dict[int, str]:
-    """Parses a `{"Comments": [{"Id", "Text"}, ...]}`-shaped payload (used
-    by both `Grades/Comments` and `BehaviourGrades/Points/Comments`,
-    CONFIRMED live 2026-09-06 to share this shape) into an id->text map."""
-    if not payload:
-        return {}
-    items = payload.get("Comments")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, str] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        text = item.get("Text")
-        if text:
-            result[int(item["Id"])] = text
-    return result
-
-
-def _resolve_comment_ids(raw: Any, comment_text_by_id: dict[int, str]) -> list[str]:
-    """Resolves a per-grade/-behaviour-grade `Comments` field against a
-    `_parse_comment_text_map` lookup.
-
-    CONFIRMED (2026-09-06) via szkolny-android's reference parsers that
-    this field is a list of ids into the separate Comments endpoint, NOT
-    embedded `{"Text": ...}` objects as previously assumed here - but the
-    exact per-id shape (bare int vs. `{"Id": ...}`) is still unconfirmed
-    (empty on this account either way), so both are handled, plus the old
-    embedded-`Text` shape as a fallback in case that turns out right after
-    all.
-    """
-    if not isinstance(raw, list):
-        return []
-    resolved: list[str] = []
-    for entry in raw:
-        if isinstance(entry, dict):
-            if entry.get("Text"):
-                resolved.append(str(entry["Text"]))
-                continue
-            comment_id = entry.get("Id")
-        else:
-            comment_id = entry
-        if comment_id is None:
-            continue
-        try:
-            text = comment_text_by_id.get(int(comment_id))
-        except (TypeError, ValueError):
-            text = None
-        if text:
-            resolved.append(text)
-    return resolved
-
-
-def _parse_grades(
-    payload: dict[str, Any], comment_text_by_id: dict[int, str] | None = None
-) -> list[GradeData]:
-    items = payload.get("Grades")
-    if not isinstance(items, list):
-        return []
-    grades: list[GradeData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        category = item.get("Category") or {}
-        subject = item.get("Subject") or {}
-        comments = _resolve_comment_ids(item.get("Comments"), comment_text_by_id or {})
-        grades.append(
-            GradeData(
-                id=int(item["Id"]),
-                value=str(item.get("Grade", "")),
-                category_id=category.get("Id"),
-                subject_id=subject.get("Id"),
-                semester=item.get("Semester"),
-                add_date=item.get("AddDate"),
-                is_semester_proposition=bool(item.get("IsSemesterProposition")),
-                is_final_proposition=bool(item.get("IsFinalProposition")),
-                # See GradeData.is_semester/is_final's own docstring - the
-                # ACTUAL semester/year grade, distinct from the proposed
-                # one above. Not confirmed live yet (no real semester-end
-                # data on the test account), but confirmed via the
-                # reference parser's own field names.
-                is_semester=bool(item.get("IsSemester")),
-                is_final=bool(item.get("IsFinal")),
-                comments=comments,
-            )
-        )
-    return grades
-
-
-def _parse_notes(payload: dict[str, Any]) -> list[NoteData]:
-    items = payload.get("Notes")
-    if not isinstance(items, list):
-        return []
-    notes: list[NoteData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        category = item.get("Category") or {}
-        teacher = item.get("Teacher") or {}
-        notes.append(
-            NoteData(
-                id=int(item["Id"]),
-                text=item.get("Text", ""),
-                category_id=category.get("Id"),
-                teacher_id=teacher.get("Id"),
-                date=item.get("Date"),
-                positive=item.get("Positive"),
-            )
-        )
-    return notes
-
-
-def _parse_attendances(payload: dict[str, Any]) -> list[AttendanceData]:
-    items = payload.get("Attendances")
-    if not isinstance(items, list):
-        return []
-    attendances: list[AttendanceData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        lesson = item.get("Lesson") or {}
-        type_ = item.get("Type") or {}
-        raw_id = item["Id"]
-        try:
-            item_id: int | str = int(raw_id)
-        except (TypeError, ValueError):
-            # CONFIRMED live: some records use a "t"-prefixed id (e.g.
-            # "t41685") instead of a plain numeric one - see AttendanceData.
-            item_id = str(raw_id)
-        raw_type_id = type_.get("Id")
-        type_id: int | str | None
-        if raw_type_id is None:
-            type_id = None
-        else:
-            try:
-                type_id = int(raw_type_id)
-            except (TypeError, ValueError):
-                # BUG FIX (code review): same defensive fallback as the
-                # sibling `id` field above - not confirmed live for Type.Id
-                # specifically, but this API has already proven the record's
-                # own Id can be "t"-prefixed, so Type.Id could plausibly do
-                # the same someday. A raw str here just misses
-                # attendance_types.get(...) (keyed by int) and is treated
-                # as an unknown type, instead of crashing the whole
-                # coordinator update.
-                type_id = str(raw_type_id)
-        attendances.append(
-            AttendanceData(
-                id=item_id,
-                lesson_id=lesson.get("Id"),
-                lesson_no=item.get("LessonNo"),
-                date=item.get("Date"),
-                semester=item.get("Semester"),
-                type_id=type_id,
-            )
-        )
-    return attendances
-
-
-def _parse_attendance_types(payload: dict[str, Any]) -> dict[int, AttendanceTypeData]:
-    # CONFIRMED live: the response root key is "Types" (matching the
-    # Attendances/Types endpoint path), not "AttendanceTypes". `IsPresenceKind`
-    # is real - see AttendanceTypeData's docstring.
-    items = payload.get("Types")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, AttendanceTypeData] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        item_id = int(item["Id"])
-        name = item.get("Name") or item.get("Short") or item.get("Shortcut") or ""
-        result[item_id] = AttendanceTypeData(
-            id=item_id, name=name, is_presence_kind=bool(item.get("IsPresenceKind"))
-        )
-    return result
-
-
-def _as_int(value: Any) -> int | None:
-    """Coerce an id to int. CONFIRMED live: Timetables returns Subject/
-    Teacher/Classroom/Lesson ids as STRINGS ("41999"), unlike every other
-    endpoint (Grades, Attendances, ...) which use plain ints - normalize
-    here so lookups against `subjects`/`teachers`/`classrooms` (keyed by
-    int) work regardless of which endpoint an id came from."""
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_lesson(raw: dict[str, Any]) -> LessonData:
-    subject = raw.get("Subject") or {}
-    teacher = raw.get("Teacher") or {}
-    classroom = raw.get("Classroom") or {}
-    teacher_id = _as_int(teacher.get("Id"))
-    return LessonData(
-        lesson_no=_as_int(raw.get("LessonNo")),
-        hour_from=raw.get("HourFrom"),
-        hour_to=raw.get("HourTo"),
-        subject_id=_as_int(subject.get("Id")),
-        teacher_id=teacher_id,
-        teacher_ids=(teacher_id,) if teacher_id is not None else (),
-        classroom_id=_as_int(classroom.get("Id")),
-        is_canceled=bool(raw.get("IsCanceled")),
-        is_substitution=bool(raw.get("IsSubstitutionClass")),
-    )
-
-
-def _merge_kindergarten_entries(
-    entries: list[Any], result: dict[date, list[LessonData]]
-) -> None:
-    """Add kindergarten `timetableEntries` (PR #8) to `result`.
-
-    Unlike `Timetables`, identifiers are LID strings
-    (`activityTypeIdentifier`, `classroomIdentifier`, `teachers[]`) and
-    there's no lesson number - entries are plain time blocks, so
-    `lesson_no` stays None."""
-    for raw in entries:
-        if not isinstance(raw, dict):
-            continue
-        try:
-            day = date.fromisoformat(str(raw.get("date"))[:10])
-        except ValueError:
-            continue
-        activity_id = raw.get("activityTypeIdentifier")
-        classroom_id = raw.get("classroomIdentifier")
-        raw_teachers = raw.get("teachers")
-        teacher_ids = tuple(
-            str(value)
-            for value in (raw_teachers if isinstance(raw_teachers, list) else ())
-            if isinstance(value, (str, int)) and str(value)
-        )
-        # Only "planned" has been seen live; the rest is a best guess.
-        entry_type = str(raw.get("type") or "planned").lower()
-        result.setdefault(day, []).append(
-            LessonData(
-                lesson_no=None,
-                hour_from=raw.get("startTime"),
-                hour_to=raw.get("endTime"),
-                subject_id=str(activity_id) if activity_id is not None else None,
-                teacher_id=teacher_ids[0] if teacher_ids else None,
-                classroom_id=str(classroom_id) if classroom_id is not None else None,
-                is_canceled="cancel" in entry_type,
-                is_substitution="substitut" in entry_type,
-                teacher_ids=teacher_ids,
-            )
-        )
-
-
-def merge_timetables(*payloads: dict[str, Any]) -> dict[date, list[LessonData]]:
-    """Merge one or more `Timetables?weekStart=...` responses into a single
-    date-keyed dict of lessons.
-
-    CONFIRMED live: each date maps to a list of PERIOD SLOTS (one per
-    lesson-number, always the same length even on days with no school),
-    each itself a list of 0+ lesson dicts (more than one when a period is
-    split into parallel groups, e.g. two language classes at once) - NOT a
-    flat list of lessons per day as the reverse-engineered spec assumed.
-
-    Also accepts the kindergarten API's `timetableEntries` payload (see
-    `_merge_kindergarten_entries`), so the calendar/coordinator don't need
-    to know which kind of account they're serving.
-    """
-    result: dict[date, list[LessonData]] = {}
-    for payload in payloads:
-        entries = payload.get("timetableEntries")
-        if isinstance(entries, list):
-            _merge_kindergarten_entries(entries, result)
-            continue
-        timetable = payload.get("Timetable")
-        if not isinstance(timetable, dict):
-            continue
-        for date_str, day_slots in timetable.items():
-            if not isinstance(day_slots, list):
-                continue
-            try:
-                day = date.fromisoformat(date_str)
-            except (TypeError, ValueError):
-                continue
-            lessons: list[LessonData] = []
-            for slot in day_slots:
-                if not isinstance(slot, list):
-                    continue
-                lessons.extend(_parse_lesson(lesson) for lesson in slot if isinstance(lesson, dict))
-            result[day] = lessons
-    return result
-
-
-def _collect_lid_user_identifiers(value: Any) -> list[str]:
-    """Every `LID-AUTH-USER-...` string anywhere in a payload, in order."""
-    found: list[str] = []
-    if isinstance(value, str):
-        if value.startswith(_LID_USER_PREFIX):
-            found.append(value)
-    elif isinstance(value, dict):
-        for nested in value.values():
-            found.extend(_collect_lid_user_identifiers(nested))
-    elif isinstance(value, list):
-        for nested in value:
-            found.extend(_collect_lid_user_identifiers(nested))
-    return list(dict.fromkeys(found))
-
-
-def _extract_token_user_identifier(payload: dict[str, Any]) -> str | None:
-    for key in ("UserIdentifier", "userIdentifier", "Identifier", "identifier"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.startswith(_LID_USER_PREFIX):
-            return value
-    return None
-
-
-def _parse_kindergarten_activity_types(payload: dict[str, Any]) -> dict[int | str, str]:
-    """`kindergartens/activities-types` -> identifier: name ("Religia"...)."""
-    items = payload.get("activitiesTypes")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int | str, str] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        identifier = item.get("identifier")
-        name = item.get("name")
-        if isinstance(identifier, str) and identifier and isinstance(name, str) and name:
-            result[identifier] = name
-    return result
-
-
-def _parse_kindergarten_teachers(payload: dict[str, Any]) -> dict[int | str, str]:
-    """`Users` keyed by `AccountId` - what kindergarten `teachers[]` holds."""
-    items = payload.get("Users")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int | str, str] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        identifier = item.get("AccountId")
-        if not isinstance(identifier, (str, int)) or isinstance(identifier, bool):
-            continue
-        name = f"{item.get('FirstName') or ''} {item.get('LastName') or ''}".strip()
-        if name:
-            result[str(identifier)] = name
-    return result
-
-
-def _parse_kindergarten_classrooms(payload: dict[str, Any]) -> dict[int | str, str]:
-    """`Auth/Classrooms` -> identifier: room name.
-
-    Prefers `name` ("sala 1") over the bare `symbol` ("1"). A purely numeric
-    value gets a ``sala`` prefix, since the cards show the room verbatim and
-    a bare number reads as meaningless; anything else ("s. 1", "12a", "Sala
-    gimnastyczna") is kept exactly as Librus returns it.
-    """
-    items = payload.get("data")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int | str, str] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        identifier = item.get("identifier")
-        room = item.get("name") or item.get("symbol")
-        if not isinstance(identifier, (str, int)) or not room:
-            continue
-        room = str(room).strip()
-        if not room:
-            continue
-        if room.isdigit():
-            room = f"sala {room}"
-        result[str(identifier)] = room
-    return result
-
-
-def _parse_kindergarten_group(payload: dict[str, Any]) -> ClassData | None:
-    """A kindergarten group mapped onto the class model (name + first tutor)."""
-    name = payload.get("name")
-    if not isinstance(name, str) or not name:
-        return None
-    tutors = payload.get("tutors")
-    tutor_id = next(
-        (value for value in tutors if isinstance(value, str) and value),
-        None,
-    ) if isinstance(tutors, list) else None
-    return ClassData(
-        number=None,
-        symbol=name,
-        tutor_id=tutor_id,
-        begin_school_year=None,
-        end_first_semester=None,
-        end_school_year=None,
-    )
-
-
-def _parse_homeworks(payload: dict[str, Any]) -> list[HomeworkEventData]:
-    items = payload.get("HomeWorks")
-    if not isinstance(items, list):
-        return []
-    events: list[HomeworkEventData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        category = item.get("Category") or {}
-        subject = item.get("Subject") or {}
-        events.append(
-            HomeworkEventData(
-                id=int(item["Id"]),
-                date=item.get("Date"),
-                content=item.get("Content", ""),
-                category_id=category.get("Id"),
-                subject_id=subject.get("Id"),
-                time_from=item.get("TimeFrom"),
-            )
-        )
-    return events
-
-
-def _parse_homework_assignments(payload: dict[str, Any]) -> list[HomeworkAssignmentData]:
-    """Real homework assignments ("Zadania domowe") - distinct from the
-    general `HomeWorks` agenda feed above (`_parse_homeworks`), which
-    covers tests/trips/etc. too. Fields CONFIRMED (2026-09-06) via
-    szkolny-android's `LibrusApiHomework.kt`. Notably NO `Subject` field
-    appears in the reference parser - unlike the general agenda feed,
-    there's no subject to resolve here. Still empty on this account, so
-    unverified against a real populated example."""
-    items = payload.get("HomeWorkAssignments")
-    if not isinstance(items, list):
-        return []
-    assignments: list[HomeworkAssignmentData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        teacher = item.get("Teacher") or {}
-        assignments.append(
-            HomeworkAssignmentData(
-                id=int(item["Id"]),
-                topic=item.get("Topic", ""),
-                text=item.get("Text", ""),
-                teacher_id=teacher.get("Id"),
-                date=item.get("Date"),
-                due_date=item.get("DueDate"),
-            )
-        )
-    return assignments
-
-
-def _parse_behaviour_grades(
-    payload: dict[str, Any], comment_text_by_id: dict[int, str] | None = None
-) -> list[BehaviourGradeData]:
-    """A formal "ocena zachowania" (behaviour grade) - distinct from Notes
-    ("uwagi", free-text remarks). Fields CONFIRMED (2026-09-06) via
-    szkolny-android's `LibrusApiBehaviourGrades.kt`. Still empty on this
-    account, so unverified against a real populated example."""
-    items = payload.get("Grades")
-    if not isinstance(items, list):
-        return []
-    grades: list[BehaviourGradeData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        category = item.get("Category") or {}
-        added_by = item.get("AddedBy") or {}
-        comments = _resolve_comment_ids(item.get("Comments"), comment_text_by_id or {})
-        grades.append(
-            BehaviourGradeData(
-                id=int(item["Id"]),
-                value=item.get("Value"),
-                short_name=item.get("ShortName", ""),
-                semester=item.get("Semester"),
-                category_id=category.get("Id"),
-                teacher_id=added_by.get("Id"),
-                add_date=item.get("AddDate"),
-                text=item.get("Text", ""),
-                comments=comments,
-            )
-        )
-    return grades
-
-
-def _parse_descriptive_grades(payload: dict[str, Any]) -> list[DescriptiveGradeData]:
-    """An alternate, non-numeric grading system - CONFIRMED (via the
-    `Units` endpoint) to be enabled for this school, unlike `PointGrades`.
-    Fields CONFIRMED (2026-09-06) via szkolny-android's
-    `LibrusApiDescriptiveGrades.kt`. `Skill`/`Category` are kept as raw ids
-    - their own name-lookup endpoints (`DescriptiveGrades/Skills`,
-    `/Types`) weren't probed this session, so no name to resolve them to
-    yet. Still empty on this account, so unverified against a real
-    populated example."""
-    items = payload.get("Grades")
-    if not isinstance(items, list):
-        return []
-    grades: list[DescriptiveGradeData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        subject = item.get("Subject") or {}
-        skill = item.get("Skill") or {}
-        category = item.get("Category") or {}
-        grades.append(
-            DescriptiveGradeData(
-                id=int(item["Id"]),
-                subject_id=subject.get("Id"),
-                value=item.get("Grade", ""),
-                skill_id=skill.get("Id"),
-                category_id=category.get("Id"),
-                add_date=item.get("AddDate"),
-            )
-        )
-    return grades
-
-
-def _parse_parent_teacher_conferences(payload: dict[str, Any]) -> list[ParentTeacherConferenceData]:
-    """Fields CONFIRMED (2026-09-06) via szkolny-android's
-    `LibrusApiPtMeetings.kt`. Live-verified separately that this kind of
-    meeting already surfaces through `HomeWorks` too - see
-    `ParentTeacherConferenceData`'s docstring. Never seen populated here."""
-    items = payload.get("ParentTeacherConferences")
-    if not isinstance(items, list):
-        return []
-    conferences: list[ParentTeacherConferenceData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        teacher = item.get("Teacher") or {}
-        conferences.append(
-            ParentTeacherConferenceData(
-                id=int(item["Id"]),
-                topic=item.get("Topic", ""),
-                teacher_id=teacher.get("Id"),
-                date=item.get("Date"),
-                time=item.get("Time"),
-            )
-        )
-    return conferences
-
-
-def _parse_school_notices(payload: dict[str, Any]) -> list[SchoolNoticeData]:
-    items = payload.get("SchoolNotices")
-    if not isinstance(items, list):
-        return []
-    notices: list[SchoolNoticeData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        notices.append(
-            SchoolNoticeData(
-                id=str(item["Id"]),
-                subject=item.get("Subject", ""),
-                content=item.get("Content", ""),
-                start_date=item.get("StartDate"),
-                end_date=item.get("EndDate"),
-                creation_date=item.get("CreationDate"),
-                was_read=bool(item.get("WasRead")),
-            )
-        )
-    return notices
-
-
-def _parse_lucky_number(payload: dict[str, Any]) -> LuckyNumberData | None:
-    raw = payload.get("LuckyNumber")
-    if not isinstance(raw, dict) or raw.get("LuckyNumber") is None:
-        return None
-    try:
-        number = int(raw["LuckyNumber"])
-    except (TypeError, ValueError):
-        return None
-    return LuckyNumberData(day=raw.get("LuckyNumberDay"), number=number)
-
-
-# CONFIRMED live (2026-09-06): the single-message endpoint's `Message`
-# field (LibrusApiClient.async_get_message), once base64-decoded, is NOT
-# plain text - it's a tiny XML wrapper,
-# `<Message><Content><![CDATA[the real text...]]></Content></Message>`,
-# and the real content lives inside the CDATA section. Found live: a
-# card's expanded message view showed the literal
-# "<Message><Content><![CDATA[" prefix leaking into the display. The list
-# endpoint's `content` field does NOT do this (confirmed plain text, no
-# wrapper) - decode_message_content is shared by both, so this regex is a
-# no-op there (it simply won't match).
-_MESSAGE_XML_CDATA_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.DOTALL)
-# Defensive fallback for a CDATA section missing its closing "]]>" - e.g.
-# if a future endpoint truncates this XML-wrapped text the way the list
-# endpoint's plain-text `content` is known to (unconfirmed whether
-# async_get_message's response can be truncated at all, but showing "cut
-# off mid-sentence" beats showing raw XML markup either way).
-_MESSAGE_XML_CDATA_OPEN_RE = re.compile(r"<!\[CDATA\[(.*)$", re.DOTALL)
-
-# CONFIRMED live (2026-09-10): Librus rewrites every link in a message
-# body into an <a href="https://liblink.pl/..." title="Link został
-# skonwertowany...">...</a> tag (its own "link converter"), and the list
-# endpoint's content can carry other light HTML (<br>, <p>). Rendered as
-# plain text in the Wiadomości card that reads as raw tag soup. Flatten
-# it: keep the link (its visible text, or the href), turn <br>/</p> into
-# newlines, drop the rest, unescape entities.
-_A_TAG_RE = re.compile(r'<a\b[^>]*?\bhref="([^"]*)"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
-_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
-_BLOCK_END_RE = re.compile(r"</(?:p|div|li|h[1-6])>", re.IGNORECASE)
-_ANY_TAG_RE = re.compile(r"<[^>]+>")
-_MULTI_NL_RE = re.compile(r"\n{3,}")
-
-
-def _flatten_message_html(text: str) -> str:
-    if "<" not in text:
-        return text
-
-    def _anchor(match: re.Match[str]) -> str:
-        href = match.group(1).strip()
-        inner = _ANY_TAG_RE.sub("", match.group(2)).strip()
-        if not inner or inner == href:
-            return href
-        return f"{inner} ({href})"
-
-    text = _A_TAG_RE.sub(_anchor, text)
-    text = _BR_RE.sub("\n", text)
-    text = _BLOCK_END_RE.sub("\n", text)
-    text = _ANY_TAG_RE.sub("", text)
-    text = html_unescape(text)
-    return _MULTI_NL_RE.sub("\n\n", text).strip()
-
-
-def decode_message_content(raw: str) -> str:
-    """The list endpoint's `content` field (and the single-message
-    endpoint's `Message` field - see `LibrusApiClient.async_get_message`)
-    are base64-encoded (CONFIRMED live - decoding several real messages
-    produced readable Polish text). Falls back to the raw string if the
-    payload isn't valid base64 at all, rather than raising and losing the
-    whole messages feature over one bad entry. Public (not
-    underscore-prefixed) - shared with `services.py`'s `get_message`
-    handler, which decodes the full-content field the same way.
-
-    CONFIRMED live (2026-09-06): Librus truncates this field to a fixed
-    BYTE length, which can land mid-multi-byte UTF-8 character (e.g. a
-    Polish "ą"/"ę"/"ń") - a plain `.decode("utf-8")` then raises
-    UnicodeDecodeError on an otherwise-valid message, and previously this
-    fell all the way back to the raw, still-base64-encoded string (visible
-    in the Wiadomości card as an unbroken hash-like blob causing horizontal
-    scroll). Retry with `errors="ignore"` first, which just drops the
-    incomplete trailing bytes and keeps the readable prefix - matches how
-    every OTHER truncated message already reads (cut off mid-word, not
-    mid-character).
-    """
-    try:
-        decoded_bytes = base64.b64decode(raw)
-    except ValueError:
-        return raw
-    try:
-        text = decoded_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        text = decoded_bytes.decode("utf-8", errors="ignore")
-
-    if (match := _MESSAGE_XML_CDATA_RE.search(text)) is not None:
-        text = match.group(1)
-    elif (match := _MESSAGE_XML_CDATA_OPEN_RE.search(text)) is not None:
-        text = match.group(1)
-    return _flatten_message_html(text)
-
-
-# CONFIRMED live: the unread-count response is a per-mailbox breakdown
-# ({"data": {"inbox": N, "notes": N, "alerts": N, "substitutions": N,
-# "absences": N, "justifications": N, "trash": N, "archiveInbox": N, ...}}),
-# not a flat number. The non-"archive*" ones are surfaced - "substitutions"
-# in particular is likely the single most actionable one for a parent
-# (schedule changes), and it costs nothing extra since this whole response
-# is already being fetched for the plain inbox count.
-_MESSAGE_MAILBOXES = (
-    "inbox",
-    "notes",
-    "alerts",
-    "substitutions",
-    "absences",
-    "justifications",
-    "trash",
-)
-
-
-def resolve_sender_name(payload: dict[str, Any]) -> str:
-    """Resolve a message's sender display name from a `senderName` field,
-    falling back to `senderFirstName`/`senderLastName` combined when it's
-    absent/empty - CONFIRMED live to be the identical shape on both the
-    mailbox list endpoints (`_parse_message_list` below) AND the single
-    full-message endpoint (`services.py`'s `get_message` handler).
-
-    Extracted (code review) - this exact ~3-line resolution used to be
-    duplicated between the two call sites. Public (not underscore-
-    prefixed) so `services.py` can reuse it: coordinator.py must never
-    import from services.py, so the shared helper has to live on this
-    side of that one-way dependency (same rule `parse_grade_value`'s
-    docstring above documents for sensor.py)."""
-    return payload.get("senderName") or (
-        f"{payload.get('senderFirstName', '')} {payload.get('senderLastName', '')}".strip()
-    )
-
-
-def _parse_message_list(list_payload: dict[str, Any], mailbox: str) -> list[MessageData]:
-    """Shared by every mailbox's list endpoint - inbox, substitutions,
-    alerts, ... all share the same response shape."""
-    items = list_payload.get("data")
-    if not isinstance(items, list):
-        return []
-    messages: list[MessageData] = []
-    for item in items:
-        if not isinstance(item, dict) or item.get("messageId") is None:
-            continue
-        sender_name = resolve_sender_name(item)
-        messages.append(
-            MessageData(
-                id=str(item["messageId"]),
-                sender_name=sender_name,
-                topic=item.get("topic", ""),
-                content=decode_message_content(item.get("content", "")),
-                send_date=item.get("sendDate"),
-                read_date=item.get("readDate"),
-                has_attachment=bool(item.get("isAnyFileAttached")),
-                mailbox=mailbox,
-            )
-        )
-    return messages
-
-
-def _parse_messages(
-    unread_payload: dict[str, Any], list_payload: dict[str, Any]
-) -> tuple[int, dict[str, int], list[MessageData]]:
-    unread_by_mailbox: dict[str, int] = {}
-    unread_data = unread_payload.get("data")
-    if isinstance(unread_data, dict):
-        for mailbox in _MESSAGE_MAILBOXES:
-            try:
-                unread_by_mailbox[mailbox] = int(unread_data.get(mailbox) or 0)
-            except (TypeError, ValueError):
-                unread_by_mailbox[mailbox] = 0
-    unread_count = unread_by_mailbox.get("inbox", 0)
-    return unread_count, unread_by_mailbox, _parse_message_list(list_payload, "inbox")
-
-
-def _parse_school(payload: dict[str, Any]) -> SchoolData | None:
-    school = payload.get("School")
-    if not isinstance(school, dict):
-        return None
-    head_first = school.get("NameHeadTeacher") or ""
-    head_last = school.get("SurnameHeadTeacher") or ""
-    head_name = f"{head_first} {head_last}".strip() or None
-    return SchoolData(
-        name=school.get("Name", ""),
-        town=school.get("Town"),
-        street=school.get("Street"),
-        building_number=school.get("BuildingNumber"),
-        post_code=school.get("PostCode"),
-        head_teacher_name=head_name,
-        email=school.get("Email"),
-        phone_number=school.get("PhoneNumber"),
-    )
-
-
-def _parse_class(payload: dict[str, Any]) -> ClassData | None:
-    cls = payload.get("Class")
-    if not isinstance(cls, dict):
-        return None
-    tutor = cls.get("ClassTutor") or {}
-    return ClassData(
-        number=cls.get("Number"),
-        symbol=cls.get("Symbol", ""),
-        tutor_id=tutor.get("Id"),
-        begin_school_year=cls.get("BeginSchoolYear"),
-        end_first_semester=cls.get("EndFirstSemester"),
-        end_school_year=cls.get("EndSchoolYear"),
-    )
-
-
-def _parse_free_days(payload: dict[str, Any], root_key: str) -> list[FreeDayData]:
-    items = payload.get(root_key)
-    if not isinstance(items, list):
-        return []
-    free_days: list[FreeDayData] = []
-    for item in items:
-        if (
-            not isinstance(item, dict)
-            or item.get("Id") is None
-            or not item.get("DateFrom")
-            or not item.get("DateTo")
-        ):
-            continue
-        free_days.append(
-            FreeDayData(
-                id=int(item["Id"]),
-                name=item.get("Name", ""),
-                date_from=item["DateFrom"],
-                date_to=item["DateTo"],
-            )
-        )
-    return free_days
-
-
-def _parse_id_name_map(payload: dict[str, Any], list_keys: tuple[str, ...]) -> dict[int, str]:
-    items: Any = None
-    for key in list_keys:
-        if key in payload:
-            items = payload[key]
-            break
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, str] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        # CONFIRMED live: some Users entries (school admin/secretariat
-        # accounts) have FirstName explicitly `null`, not just absent - `or
-        # ""` is required here, `.get(key, "")` alone does NOT catch a
-        # present-but-None value.
-        first = item.get("FirstName") or ""
-        last = item.get("LastName") or ""
-        # CONFIRMED live: Notes/Categories uses "CategoryName", not "Name"
-        # like every other id-name lookup this helper is used for.
-        name = item.get("Name") or item.get("CategoryName") or f"{first} {last}".strip()
-        if name:
-            result[int(item["Id"])] = name
-    return result
-
-
-def _parse_lesson_subjects(payload: dict[str, Any]) -> dict[int, int]:
-    """lesson_id -> subject_id, from `Lessons` (CONFIRMED live 2026-09-23 -
-    see const.py's ENDPOINT_LESSONS note). Used to resolve which subject an
-    `AttendanceData.lesson_id` belongs to."""
-    items = payload.get("Lessons")
-    if not isinstance(items, list):
-        return {}
-    result: dict[int, int] = {}
-    for item in items:
-        if not isinstance(item, dict) or item.get("Id") is None:
-            continue
-        subject = item.get("Subject") or {}
-        subject_id = subject.get("Id")
-        if subject_id is not None:
-            result[int(item["Id"])] = int(subject_id)
-    return result

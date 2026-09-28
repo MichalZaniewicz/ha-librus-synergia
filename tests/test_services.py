@@ -7,7 +7,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 
 from custom_components.librus_synergia.const import DOMAIN
-from custom_components.librus_synergia.librus_api import LibrusInvalidCredentialsError
+from librus_synergia import LibrusInvalidCredentialsError
 
 from .conftest import build_mock_client, setup_integration
 

@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 from custom_components.librus_synergia.diagnostics import (
     async_get_config_entry_diagnostics,
 )
-from custom_components.librus_synergia.librus_api import LibrusSessionExpiredError
+from librus_synergia import LibrusSessionExpiredError
 
 from .conftest import build_mock_client, setup_integration
 

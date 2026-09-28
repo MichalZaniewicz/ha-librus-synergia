@@ -11,6 +11,8 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from librus_synergia import LibrusApiClient, LibrusSessionData
+
 from .const import (
     CONF_COOKIES,
     CONF_SESSION_LOGGED_IN_AT,
@@ -27,7 +29,6 @@ from .coordinator import (
     optional_endpoint_issue_id,
     school_year_issue_id,
 )
-from .librus_api import LibrusApiClient, LibrusSessionData
 from .services import async_setup_services, async_unload_services
 
 type LibrusConfigEntry = ConfigEntry[LibrusDataUpdateCoordinator]

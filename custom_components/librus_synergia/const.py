@@ -8,12 +8,12 @@ DOMAIN = "librus_synergia"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CALENDAR]
 
-# The session (see librus_api.LibrusSessionData) is cookie-based with a
+# The session (see librus_synergia.LibrusSessionData) is cookie-based with a
 # ~24h lifetime and no separate refresh grant - unlike a bearer-token API,
 # staying logged in silently requires the password, so (unlike ha-suunto's
 # revocable-session-key-only model) it is persisted here too. Only the
 # cookie jar and login timestamp are the model's *addition* over a plain
-# password store - see librus_api/client.py's class docstring.
+# password store - see the librus-synergia library's LibrusApiClient docstring.
 CONF_COOKIES = "cookies"
 CONF_SESSION_LOGGED_IN_AT = "session_logged_in_at"
 

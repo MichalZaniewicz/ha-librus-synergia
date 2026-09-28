@@ -29,13 +29,13 @@ from custom_components.librus_synergia.coordinator import (
     optional_endpoint_issue_id,
     school_year_issue_id,
 )
-from custom_components.librus_synergia.librus_api import (
+from librus_synergia import (
     LibrusConnectionError,
     LibrusInvalidCredentialsError,
     LibrusSessionExpiredError,
     LibrusUnexpectedResponseError,
 )
-from custom_components.librus_synergia.librus_api.models import (
+from librus_synergia.models import (
     AttendanceData,
     AttendanceTypeData,
     ClassData,

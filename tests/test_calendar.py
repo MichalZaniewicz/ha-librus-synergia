@@ -10,7 +10,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.librus_synergia.calendar import _event_overlaps
 from custom_components.librus_synergia.const import DOMAIN
-from custom_components.librus_synergia.librus_api import (
+from librus_synergia import (
     LibrusAuthError,
     LibrusSessionExpiredError,
 )

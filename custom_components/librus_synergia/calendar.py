@@ -11,17 +11,18 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from . import LibrusConfigEntry, librus_device_info
-from .const import CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED
-from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
-from .librus_api import LibrusError
-from .librus_api.models import (
+from librus_synergia import LibrusError
+from librus_synergia.models import (
     FreeDayData,
     HomeworkEventData,
     LessonData,
     LibrusData,
     ParentTeacherConferenceData,
 )
+
+from . import LibrusConfigEntry, librus_device_info
+from .const import CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED
+from .coordinator import LibrusDataUpdateCoordinator, merge_timetables
 
 _LOGGER = logging.getLogger(__name__)
 

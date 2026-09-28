@@ -4,7 +4,7 @@ NOT part of the Home Assistant integration - dev-only, lives outside
 custom_components/ so HA never loads it. Run against a real Librus account to
 verify the wire protocol (reverse-engineered from `emsi/librus_pyapi`, the
 currently-working flow after Librus's 2026-03-28 auth change - see
-librus_api/const.py's module docstring) and to close the remaining empirical
+the librus-synergia library's docs/authentication.md) and to close the remaining empirical
 gaps: how grade values like "5+"/"4-"/"bz" should be parsed, whether the
 Grades/Comments id-correlation actually holds once a real commented grade
 exists, and the real Wiadomości (messages) response shapes.
@@ -27,22 +27,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 from datetime import date, timedelta
-from pathlib import Path
 
-# Import the client package directly from the integration source tree -
-# this script only needs aiohttp, not a full Home Assistant install.
-# Appended (not inserted at 0): that directory also contains a calendar.py
-# (the HA calendar platform), which would otherwise shadow the stdlib
-# `calendar` module that aiohttp's own dependency chain imports.
-sys.path.append(
-    str(Path(__file__).resolve().parent.parent / "custom_components" / "librus_synergia")
-)
+# Uses the `librus-synergia` library (pip install librus-synergia) - the
+# same client the integration depends on. No Home Assistant install needed.
+import aiohttp
 
-import aiohttp  # noqa: E402
-
-from librus_api import LibrusApiClient, LibrusError  # noqa: E402
+from librus_synergia import LibrusApiClient, LibrusError
 
 
 def _print_section(title: str) -> None:
@@ -183,7 +174,7 @@ async def main() -> int:
             "normal inbox message - see coordinator.py's own docstring for "
             "this open question). (Notes[].Positive is CONFIRMED - "
             "0=negative/1=positive/else=neutral - no longer needs checking "
-            "here.) Update librus_api/const.py, librus_api/models.py and "
+            "here.) Update the librus-synergia library's const.py/models.py and "
             "coordinator.py's parsers if anything here differs from what "
             "they currently assume."
         )

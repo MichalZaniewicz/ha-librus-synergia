@@ -11,7 +11,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import DOMAIN
-from custom_components.librus_synergia.librus_api.client import LibrusSessionData
+from librus_synergia.client import LibrusSessionData
 
 # pytest-homeassistant-custom-component's own fixture setup calls
 # `pytest_socket.disable_socket(allow_unix_socket=True)` directly (plugins.py,

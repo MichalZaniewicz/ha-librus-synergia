@@ -7,14 +7,15 @@ from datetime import date, timedelta
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.util import dt as dt_util
 
-from custom_components.librus_synergia.coordinator import (
-    LibrusDataUpdateCoordinator,
-    _parse_kindergarten_classrooms,
-    _parse_kindergarten_group,
-    _parse_kindergarten_teachers,
+from librus_synergia import LibrusSessionExpiredError
+from librus_synergia.parsers import (
     merge_timetables,
+    parse_kindergarten_classrooms,
+    parse_kindergarten_group,
+    parse_kindergarten_teachers,
 )
-from custom_components.librus_synergia.librus_api import LibrusSessionExpiredError
+
+from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
 
 from .conftest import build_mock_client, make_config_entry
 
@@ -94,23 +95,23 @@ def test_merge_timetables_understands_kindergarten_entries() -> None:
 
 
 def test_kindergarten_lookup_parsers() -> None:
-    group = _parse_kindergarten_group({"name": "0B", "tutors": [TEACHER_LID]})
+    group = parse_kindergarten_group({"name": "0B", "tutors": [TEACHER_LID]})
     assert group is not None
     assert (group.symbol, group.tutor_id, group.number) == ("0B", TEACHER_LID, None)
-    assert _parse_kindergarten_group({}) is None
-    assert _parse_kindergarten_teachers(
+    assert parse_kindergarten_group({}) is None
+    assert parse_kindergarten_teachers(
         {"Users": [{"AccountId": "T1", "FirstName": None, "LastName": "Gigiel"}]}
     ) == {"T1": "Gigiel"}
-    assert _parse_kindergarten_classrooms(
+    assert parse_kindergarten_classrooms(
         {"data": [{"identifier": "ROOM1", "symbol": "1", "name": "sala 1"}]}
     ) == {"ROOM1": "sala 1"}
     # No name -> a bare numeric symbol gets the "sala" prefix.
-    assert _parse_kindergarten_classrooms(
+    assert parse_kindergarten_classrooms(
         {"data": [{"identifier": "ROOM2", "symbol": "2"}]}
     ) == {"ROOM2": "sala 2"}
 
     # Existing abbreviated room names must remain unchanged.
-    assert _parse_kindergarten_classrooms(
+    assert parse_kindergarten_classrooms(
         {"data": [{"identifier": "ROOM3", "symbol": "s. 1"}]}
     ) == {"ROOM3": "s. 1"}
 

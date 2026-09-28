@@ -30,6 +30,8 @@ An integration for Librus already exists ([`LukMaverick/LibrusSynergiaHA`](https
 
 This integration instead uses the login flow Librus's own website/app uses for its private API gateway - reverse-engineered from [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT), which was itself updated to track a Librus authentication change on 2026-03-28. Confirmed live (2026-09-05) to complete without a captcha challenge for a normal login. An earlier, now-dead password-grant flow (documented by the open-sourced [`szkolny-eu/szkolny-android`](https://github.com/szkolny-eu/szkolny-android), GPL-3.0) informed the initial data-endpoint research but no longer works (`unsupported_grant_type`).
 
+The Librus client itself lives in a separate library, [**librus-synergia**](https://github.com/MichalZaniewicz/librus-synergia) (`pip install librus-synergia`). You can use it outside Home Assistant, and it comes with an [unofficial Librus API reference](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs).
+
 **This is an unofficial integration using a private API and may violate Librus's Terms of Service. Use your own account at your own risk.**
 
 ## Credential model (read this before installing)

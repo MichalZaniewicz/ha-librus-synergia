@@ -1,13 +1,14 @@
 """Config flow for the Librus Synergia (unofficial) integration.
 
 Credential model: unlike a bearer-token OAuth API, this integration's
-session (see librus_api.LibrusSessionData) is a cookie-based login with an
-observed ~24h lifetime and no separate refresh grant. Silent, unattended
-daily re-login therefore requires the password itself, not just a revocable
-token - so, unlike ha-suunto's "password used once then discarded" model,
-the password IS persisted here (alongside the session cookies, which matter
-for staying recognized as a known device - see librus_api/const.py). This is
-disclosed to the user in the setup form's description.
+session (see librus_synergia.LibrusSessionData) is a cookie-based login
+with an observed ~24h lifetime and no separate refresh grant. Silent,
+unattended daily re-login therefore requires the password itself, not just
+a revocable token - so, unlike ha-suunto's "password used once then
+discarded" model, the password IS persisted here (alongside the session
+cookies, which matter for staying recognized as a known device - see the
+librus-synergia library's docs/authentication.md). This is disclosed to the
+user in the setup form's description.
 """
 
 from __future__ import annotations
@@ -37,6 +38,15 @@ from homeassistant.helpers.selector import (
     TimeSelector,
 )
 
+from librus_synergia import (
+    LibrusAccountActionRequiredError,
+    LibrusApiClient,
+    LibrusCaptchaRequiredError,
+    LibrusConnectionError,
+    LibrusError,
+    LibrusInvalidCredentialsError,
+)
+
 from .const import (
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_BEHAVIOUR_GRADES_ENABLED,
@@ -61,14 +71,6 @@ from .const import (
     DOMAIN,
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
-)
-from .librus_api import (
-    LibrusAccountActionRequiredError,
-    LibrusApiClient,
-    LibrusCaptchaRequiredError,
-    LibrusConnectionError,
-    LibrusError,
-    LibrusInvalidCredentialsError,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,7 +122,7 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Authenticate once, fetch a display name, and shape entry data.
 
         Returns ``{"data": ..., "title": ..., "unique_id": ...}``. Raises one
-        of the `librus_api` exceptions on failure.
+        of the `librus_synergia` exceptions on failure.
         """
         # A throwaway, dedicated session for this one-off validation login -
         # NOT the hass-wide `async_get_clientsession(hass)`. That shared
