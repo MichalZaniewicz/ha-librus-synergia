@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.8.0-beta.1
+## 0.8.0
+
+Promoted from the `0.7.9-beta.1` and `0.8.0-beta.1` testing line.
 
 ### Changed
 - **The Librus client now comes from the standalone
@@ -8,19 +10,17 @@
   ([repo](https://github.com/MichalZaniewicz/librus-synergia)) instead of a
   copy bundled inside the integration. It's the same code, extracted so
   other projects can use it, together with an
-  [unofficial Librus API reference](https://github.com/MichalZaniewicz/librus-synergia/tree/main/docs).
+  [unofficial Librus API reference](https://michalzaniewicz.github.io/librus-synergia/).
   Home Assistant installs it automatically. Behaviour is unchanged, and
   entities, automations and blueprints keep working as before.
-
-## 0.7.9-beta.1
 
 ### Fixed
 - **The long-lived `DeviceCookie` is now actually saved.** Librus sets it
   under the `/OAuth` path, and saving the session only looked at cookies
-  for the site root, so it was always left out. The design of this
-  integration relies on that cookie to mark Home Assistant as a known
-  device and keep logins free of captcha/2FA. Found live on 2026-09-28.
-  It's picked up on the next login. Nothing to do on your side.
+  for the site root, so it was always left out. The integration relies on
+  that cookie to mark Home Assistant as a known device and keep logins
+  free of captcha/2FA. It's picked up on the next login, with nothing to
+  do on your side.
 
 ## 0.7.8
 
