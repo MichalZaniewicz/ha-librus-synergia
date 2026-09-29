@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1-beta.1
 
 ### Added
 - **Grade details in the new-grade event and blueprint** ([#12](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/12)).
