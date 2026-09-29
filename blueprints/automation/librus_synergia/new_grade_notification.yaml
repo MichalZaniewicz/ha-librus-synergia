@@ -2,24 +2,41 @@ blueprint:
   name: "Librus: New Grade Notification"
   description: >
     Runs an action - typically "Send a notification" to your phone - with a
-    one-line summary whenever a new grade appears via the
-    `librus_synergia_new_grade` event.
+    summary whenever a new grade appears via the `librus_synergia_new_grade`
+    event.
 
 
     Inside your chosen action, use `{{ grade_summary }}` for the ready-made
     summary, or reference the individual fields directly, e.g.
-    `{{ trigger.event.data.subject }}` or `{{ trigger.event.data.value }}`.
-    If you use this blueprint for more than one child, `grade_summary` is
-    already prefixed with `{{ trigger.event.data.student }}` (the child's
-    name) so one shared notification still says whose grade it is.
+    `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.value }}`,
+    `{{ trigger.event.data.category }}`, `{{ trigger.event.data.weight }}`,
+    `{{ trigger.event.data.comments }}` (a list), `{{ trigger.event.data.date }}`
+    or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
+    semester / final_proposition / final).
+    With "Include details" on, `grade_summary` gets a second line with the
+    category, weight, date and the teacher's comment. If you use this
+    blueprint for more than one child, `grade_summary` is already prefixed
+    with `{{ trigger.event.data.student }}` (the child's name) so one shared
+    notification still says whose grade it is.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_grade_notification.yaml
   input:
+    include_details:
+      name: Include details
+      description: >
+        Add a second line with the grade's category, weight, date and
+        comment (whatever Librus provides for that grade).
+      default: true
+      selector:
+        boolean: {}
     notify_action:
       name: Notification action
       description: The action to run for each new grade.
       selector:
         action: {}
+
+variables:
+  include_details: !input include_details
 
 triggers:
   - trigger: event
@@ -27,9 +44,26 @@ triggers:
 
 actions:
   - variables:
-      grade_summary: >-
-        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa ocena: {{ trigger.event.data.value }}
-        {{ '(' + trigger.event.data.subject + ')' if trigger.event.data.subject else '' }}
+      grade_summary: |-
+        {%- set d = trigger.event.data -%}
+        {%- set kinds = {
+          'semester_proposition': 'Propozycja oceny semestralnej',
+          'semester': 'Ocena semestralna',
+          'final_proposition': 'Propozycja oceny rocznej',
+          'final': 'Ocena roczna',
+        } -%}
+        {{ (d.student ~ ': ') if d.student else '' }}{{ kinds.get(d.kind, 'Nowa ocena') }}: {{ d.value }}{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}
+        {%- if include_details -%}
+          {%- set parts = [] -%}
+          {%- if d.category -%}{%- set parts = parts + [d.category] -%}{%- endif -%}
+          {%- if d.weight is not none and d.counts_to_average is not false -%}{%- set parts = parts + ['waga ' ~ d.weight] -%}{%- endif -%}
+          {%- if d.counts_to_average is false -%}{%- set parts = parts + ['nie liczy się do średniej'] -%}{%- endif -%}
+          {%- if d.date -%}{%- set parts = parts + [as_timestamp(d.date) | timestamp_custom('%d.%m', true, d.date)] -%}{%- endif -%}
+          {%- if parts %}
+        {{ parts | join(' · ') }}{% endif -%}
+          {%- if d.comments %}
+        Komentarz: {{ d.comments | join('; ') }}{% endif -%}
+        {%- endif -%}
   - !input notify_action
 
 mode: queued

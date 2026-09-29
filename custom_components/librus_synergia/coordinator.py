@@ -36,6 +36,7 @@ from librus_synergia.models import (
     AttendanceTypeData,
     ClassData,
     FreeDayData,
+    GradeCategoryData,
     GradeData,
     HomeworkEventData,
     LessonData,
@@ -243,6 +244,36 @@ _ACHIEVEMENT_TITLES: dict[str, str] = {
     "behaviour_streak_30": "Miesiąc bez uwagi",
     "behaviour_streak_90": "3 miesiące bez uwagi",
 }
+
+
+def _grade_event_details(
+    grade: GradeData, categories: dict[int, GradeCategoryData]
+) -> dict[str, Any]:
+    """Extra `librus_synergia_new_grade` fields (issue #12) - all from data
+    already fetched this cycle, no extra Librus request. `kind` says whether
+    this is an ordinary grade or a semester/final one (or its proposition),
+    so a notification can say "Propozycja oceny semestralnej" instead of
+    presenting it like any other grade."""
+    category = categories.get(grade.category_id) if grade.category_id is not None else None
+    if grade.is_final:
+        kind = "final"
+    elif grade.is_final_proposition:
+        kind = "final_proposition"
+    elif grade.is_semester:
+        kind = "semester"
+    elif grade.is_semester_proposition:
+        kind = "semester_proposition"
+    else:
+        kind = "normal"
+    return {
+        "category": category.name if category else None,
+        "weight": category.weight if category else None,
+        "counts_to_average": category.count_to_average if category else None,
+        "comments": list(grade.comments),
+        "date": grade.add_date,
+        "semester": grade.semester,
+        "kind": kind,
+    }
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
@@ -728,8 +759,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendances = parse_attendances(attendances_payload)
         attendance_types = parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
+        grade_categories = parse_grade_categories(categories_payload)
         self._async_fire_new_item_events(
-            grades, school_notices, notes, messages, homeworks, me.display_name
+            grades, grade_categories, school_notices, notes, messages, homeworks, me.display_name
         )
         self._fire_timetable_change_events(timetable, today, me.display_name)
         self._fire_new_absence_events(attendances, attendance_types, me.display_name)
@@ -738,7 +770,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return LibrusData(
             me=me,
             grades=grades,
-            grade_categories=parse_grade_categories(categories_payload),
+            grade_categories=grade_categories,
             notes=notes,
             attendances=attendances,
             attendance_types=attendance_types,
@@ -1403,6 +1435,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     def _async_fire_new_item_events(
         self,
         grades: list[GradeData],
+        grade_categories: dict[int, GradeCategoryData],
         notices: list[SchoolNoticeData],
         notes: list[NoteData],
         messages: list[MessageData],
@@ -1429,6 +1462,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     if g.subject_id is not None
                     else None,
                     "value": g.value,
+                    **_grade_event_details(g, grade_categories),
                 }
                 for g in grades
             },

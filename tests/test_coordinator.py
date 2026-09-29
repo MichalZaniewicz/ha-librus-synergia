@@ -105,6 +105,52 @@ async def test_second_refresh_fires_new_grade_event(hass) -> None:
     assert events[0].data["student"] == "Kacper Zaniewicz"
 
 
+async def test_new_grade_event_carries_details(hass) -> None:
+    """Issue #12: the event carries category/weight/comments/date/kind so a
+    notification can show the grade's details, from data already fetched
+    this cycle (no extra request)."""
+    events = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(
+        async_get_grade_categories={
+            "Categories": [{"Id": 10, "Name": "Sprawdzian", "Weight": 3, "CountToTheAverage": True}]
+        },
+        async_get_grade_comments={"Comments": [{"Id": 501, "Text": "Świetna praca"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    client.async_get_grades.return_value = {
+        "Grades": [
+            {**GRADE_PAYLOAD["Grades"][0], "Comments": [{"Id": 501}]},
+            {
+                "Id": 2,
+                "Grade": "4",
+                "Category": {"Id": 99},
+                "Subject": {"Id": 100},
+                "Semester": 1,
+                "AddDate": "2026-09-02",
+                "IsSemesterProposition": True,
+            },
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    by_id = {e.data["id"]: e.data for e in events}
+    assert by_id[1]["category"] == "Sprawdzian"
+    assert by_id[1]["weight"] == 3
+    assert by_id[1]["counts_to_average"] is True
+    assert by_id[1]["comments"] == ["Świetna praca"]
+    assert by_id[1]["date"] == "2026-09-01"
+    assert by_id[1]["semester"] == 1
+    assert by_id[1]["kind"] == "normal"
+    # Unknown category id: fields stay None rather than guessing.
+    assert by_id[2]["category"] is None
+    assert by_id[2]["weight"] is None
+    assert by_id[2]["comments"] == []
+    assert by_id[2]["kind"] == "semester_proposition"
+
+
 async def test_grade_seen_twice_is_not_re_announced(hass) -> None:
     """Union, not replace: a grade dropping out of a later fetch and then
     reappearing must not fire a second event for the same id."""

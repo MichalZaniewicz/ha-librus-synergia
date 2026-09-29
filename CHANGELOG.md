@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Grade details in the new-grade event and blueprint** ([#12](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/12)).
+  `librus_synergia_new_grade` now also carries `category`, `weight`,
+  `counts_to_average`, `comments`, `date`, `semester` and `kind` (normal
+  grade, or a semester/final grade or its proposition). All of it comes
+  from data the integration already fetches, with no extra Librus requests.
+  The **New Grade Notification** blueprint has a new *Include details*
+  option (on by default) that adds a second line, e.g.
+  "Sprawdzian · waga 3 · 28.09" plus the teacher's comment, and names
+  semester/final grades and their propositions as such. Re-import the
+  blueprint to get the new option.
+
 ## 0.8.0
 
 Promoted from the `0.7.9-beta.1` and `0.8.0-beta.1` testing line.
