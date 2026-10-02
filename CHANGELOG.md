@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
+
+Includes everything from the `0.8.1-beta.1` testing release.
 
 ### Added
 - **Lowest subject attendance sensor.** Attendance percentage of the
@@ -20,17 +22,6 @@
   always available as attributes (`average_weighted`,
   `average_arithmetic`); the per-semester attributes follow the selected
   mode.
-
-### Changed
-- New-item detection (the `librus_synergia_new_*` and
-  `librus_synergia_timetable_changed` events) now uses the `ChangeTracker`
-  from the `librus-synergia` library (now `0.2.0`) instead of the
-  integration's own copy of that logic. Events and their fields are
-  unchanged.
-
-## 0.8.1-beta.1
-
-### Added
 - **Grade details in the new-grade event and blueprint** ([#12](https://github.com/MichalZaniewicz/ha-librus-synergia/issues/12)).
   `librus_synergia_new_grade` now also carries `category`, `weight`,
   `counts_to_average`, `comments`, `date`, `semester` and `kind` (normal
@@ -41,6 +32,13 @@
   "Sprawdzian · waga 3 · 28.09" plus the teacher's comment, and names
   semester/final grades and their propositions as such. Re-import the
   blueprint to get the new option.
+
+### Changed
+- New-item detection (the `librus_synergia_new_*` and
+  `librus_synergia_timetable_changed` events) now uses the `ChangeTracker`
+  from the `librus-synergia` library (now `0.2.0`) instead of the
+  integration's own copy of that logic. Events and their fields are
+  unchanged.
 
 ## 0.8.0
 
