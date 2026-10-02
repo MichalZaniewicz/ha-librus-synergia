@@ -1,0 +1,69 @@
+blueprint:
+  name: "Librus: Low Subject Attendance"
+  description: >
+    Runs your action when the Lowest subject attendance sensor falls below
+    a percentage you set - a heads-up before any subject gets near the 50%
+    mark, below which a student can be left unclassified
+    ("nieklasyfikowany"). Fires once on the downward crossing, and again
+    only after it has recovered above the threshold and dropped back.
+
+
+    Use `{{ attendance_summary }}` in your action, or the raw fields:
+    `{{ trigger.to_state.state }}` (the percentage),
+    `{{ trigger.to_state.attributes.subject }}` (the subject it belongs
+    to), `{{ trigger.to_state.attributes.subjects }}` (every subject).
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/low_subject_attendance_notification.yaml
+  input:
+    subject_attendance_entity:
+      name: Lowest subject attendance sensor
+      description: The Librus "Lowest subject attendance" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    threshold:
+      name: Alert when attendance drops below (%)
+      description: A crossing from at-or-above this value to below it runs the action.
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+    notify_action:
+      name: Notification action
+      description: The action to run when a subject's attendance drops below the threshold.
+      selector:
+        action: {}
+
+variables:
+  threshold: !input threshold
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input subject_attendance_entity
+    below: !input threshold
+
+conditions:
+  # numeric_state also fires when the sensor first gets a value (from
+  # "unknown"/"unavailable"); only act on a real downward crossing.
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.from_state.state not in ('unknown', 'unavailable', 'none')
+         and (trigger.from_state.state | float(0)) >= (threshold | float(60)) }}
+
+actions:
+  - variables:
+      subject_name: "{{ trigger.to_state.attributes.subject | default('', true) }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(trigger.entity_id, 'name') or '') | replace('E-dziennik ', '') }}
+      attendance_summary: >-
+        {{ (student_name ~ ': ') if student_name else '' }}Frekwencja{{ (' z przedmiotu ' ~ subject_name) if subject_name else '' }} spadła do {{ trigger.to_state.state }}%.
+  - !input notify_action
+
+mode: single

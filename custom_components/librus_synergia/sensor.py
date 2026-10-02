@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -31,11 +31,15 @@ from librus_synergia.models import (
 from . import LibrusConfigEntry, librus_device_info
 from .const import (
     ATTR_SUBJECT_ID,
+    AVERAGE_MODE_ARITHMETIC,
+    AVERAGE_MODE_WEIGHTED,
     CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_STUDENT_NUMBER,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
 )
@@ -268,6 +272,7 @@ async def async_setup_entry(
             LibrusOverallAverageSensor(coordinator, entry),
             LibrusAttendanceSensor(coordinator, entry),
             LibrusUnexcusedAbsencesSensor(coordinator, entry),
+            LibrusSubjectAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
             LibrusNextExamSensor(coordinator, entry),
@@ -323,10 +328,20 @@ class LibrusSensorBase(CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEnt
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = librus_device_info(entry)
+        self._entry = entry
+
+    @property
+    def _weighted(self) -> bool:
+        """Whether average sensors report the weighted average as their
+        state (the default) or the plain arithmetic one - the options
+        flow's average mode."""
+        mode = self._entry.options.get(CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE)
+        return mode != AVERAGE_MODE_ARITHMETIC
 
 
 class LibrusOverallAverageSensor(LibrusSensorBase):
-    """Weighted average across every subject."""
+    """Average across every subject - weighted unless the options flow's
+    average mode says arithmetic."""
 
     _attr_translation_key = "overall_average"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -339,7 +354,11 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        return _calculate_average(self.coordinator.data.grades, self.coordinator.data.grade_categories)
+        return _calculate_average(
+            self.coordinator.data.grades,
+            self.coordinator.data.grade_categories,
+            weighted=self._weighted,
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -347,17 +366,21 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
             return None
         grades = self.coordinator.data.grades
         cats = self.coordinator.data.grade_categories
+        weighted = self._weighted
         return {
-            # The state is the weighted average - these are the same figure
-            # under different rules, for anyone who wants them.
+            # Both figures regardless of which one the state shows; the
+            # per-semester ones follow the selected mode, like the state.
+            "average_mode": AVERAGE_MODE_WEIGHTED if weighted else AVERAGE_MODE_ARITHMETIC,
+            "average_weighted": _calculate_average(grades, cats),
             "average_arithmetic": _calculate_average(grades, cats, weighted=False),
-            "average_semester_1": _calculate_average(grades, cats, semester=1),
-            "average_semester_2": _calculate_average(grades, cats, semester=2),
+            "average_semester_1": _calculate_average(grades, cats, semester=1, weighted=weighted),
+            "average_semester_2": _calculate_average(grades, cats, semester=2, weighted=weighted),
         }
 
 
 class LibrusSubjectAverageSensor(LibrusSensorBase):
-    """Weighted average for a single subject, discovered dynamically."""
+    """Average for a single subject (same mode as the overall one),
+    discovered dynamically."""
 
     _attr_translation_key = "subject_average"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -387,6 +410,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             self.coordinator.data.grades,
             self.coordinator.data.grade_categories,
             subject_id=self._subject_id,
+            weighted=self._weighted,
         )
 
     @property
@@ -441,14 +465,25 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "grades": grade_log,
             "proposed_semester_grade": proposed.value if proposed else None,
             "final_grade": final.value if final else None,
+            "average_weighted": _calculate_average(
+                grades, categories, subject_id=self._subject_id
+            ),
             "average_arithmetic": _calculate_average(
                 grades, categories, subject_id=self._subject_id, weighted=False
             ),
             "average_semester_1": _calculate_average(
-                grades, categories, subject_id=self._subject_id, semester=1
+                grades,
+                categories,
+                subject_id=self._subject_id,
+                semester=1,
+                weighted=self._weighted,
             ),
             "average_semester_2": _calculate_average(
-                grades, categories, subject_id=self._subject_id, semester=2
+                grades,
+                categories,
+                subject_id=self._subject_id,
+                semester=2,
+                weighted=self._weighted,
             ),
         }
 
@@ -749,6 +784,74 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
         return {"excused_count": excused, "recent_dates": recent_dates}
 
 
+# Below this share of attended lessons a student can be left unclassified
+# ("nieklasyfikowany") in a subject - absences over half of the lessons.
+_SUBJECT_ATTENDANCE_RISK_PERCENTAGE = 50.0
+
+
+def _subject_attendance(data: LibrusData) -> dict[str, dict[str, Any]]:
+    """subject name -> {total, present, absent, percentage}, lowest
+    percentage first. Same lesson_id -> Lessons -> Subjects resolution as
+    the Attendance sensor's `by_subject` (unresolvable records skipped), but
+    counting EVERY record, presence marks included, so there's a
+    denominator. Excused and unexcused absences both count as absent."""
+    by_subject: dict[str, dict[str, Any]] = {}
+    for a in data.attendances:
+        t = _attendance_type(data, a.type_id)
+        if t is None or a.lesson_id is None:
+            continue
+        subject_id = data.lesson_subjects.get(a.lesson_id)
+        subject_name = data.subjects.get(subject_id) if subject_id is not None else None
+        if not subject_name:
+            continue
+        bucket = by_subject.setdefault(subject_name, {"total": 0, "present": 0})
+        bucket["total"] += 1
+        if t.is_presence_kind:
+            bucket["present"] += 1
+    for bucket in by_subject.values():
+        bucket["absent"] = bucket["total"] - bucket["present"]
+        bucket["percentage"] = round(100 * bucket["present"] / bucket["total"], 1)
+    return dict(sorted(by_subject.items(), key=lambda kv: (kv[1]["percentage"], kv[0])))
+
+
+class LibrusSubjectAttendanceSensor(LibrusSensorBase):
+    """Attendance percentage of the subject with the LOWEST one - the
+    figure that matters for the 50% "nieklasyfikowany" rule. `subjects` in
+    attributes has every subject's own percentage, `at_risk` the ones
+    already under 50%."""
+
+    _attr_translation_key = "subject_attendance"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:account-check-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "subject_attendance")
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        subjects = _subject_attendance(self.coordinator.data)
+        return next(iter(subjects.values()))["percentage"] if subjects else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        subjects = _subject_attendance(self.coordinator.data)
+        return {
+            "subject": next(iter(subjects), None),
+            "subjects": subjects,
+            "at_risk": [
+                name
+                for name, bucket in subjects.items()
+                if bucket["percentage"] < _SUBJECT_ATTENDANCE_RISK_PERCENTAGE
+            ],
+        }
+
+
 # ----------------------------------------------------------------------
 # Gamification - "passy" (streaks) and a cosmetic rank derived from data
 # already fetched every cycle. Deliberately NOT an invented points/scoring
@@ -847,7 +950,7 @@ def _rank_for_average(average: float | None) -> tuple[str, str] | None:
 
 class LibrusRankSensor(LibrusSensorBase):
     """A cosmetic Bronze/Silver/Gold/Diamond tier derived from the Overall
-    average sensor's own weighted average - turns a raw number into
+    average sensor's own state - turns a raw number into
     something a bit more game-like on a dashboard. No extra API calls."""
 
     _attr_translation_key = "rank"
@@ -860,7 +963,11 @@ class LibrusRankSensor(LibrusSensorBase):
     def _average(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        return _calculate_average(self.coordinator.data.grades, self.coordinator.data.grade_categories)
+        return _calculate_average(
+            self.coordinator.data.grades,
+            self.coordinator.data.grade_categories,
+            weighted=self._weighted,
+        )
 
     @property
     def icon(self) -> str | None:

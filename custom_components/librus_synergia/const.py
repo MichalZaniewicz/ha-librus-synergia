@@ -57,6 +57,16 @@ DEFAULT_DESCRIPTIVE_GRADES_ENABLED = True
 CONF_FREE_DAYS_ENABLED = "free_days_enabled"
 DEFAULT_FREE_DAYS_ENABLED = True
 
+# Which average the Overall/Subject average sensors (and Rank) report as
+# their STATE. Weighted (by grade-category weight) is what Librus itself
+# shows and stays the default; some schools don't use weights at all and
+# want the plain arithmetic mean instead. Both figures stay available as
+# attributes (`average_weighted`/`average_arithmetic`) either way.
+CONF_AVERAGE_MODE = "average_mode"
+AVERAGE_MODE_WEIGHTED = "weighted"
+AVERAGE_MODE_ARITHMETIC = "arithmetic"
+DEFAULT_AVERAGE_MODE = AVERAGE_MODE_WEIGHTED
+
 # The student's own number in the class register ("numer w dzienniku") -
 # CONFIRMED (via szkolny-android's reference source) that Librus's API does
 # not expose this anywhere at all; even that reference app just asks the

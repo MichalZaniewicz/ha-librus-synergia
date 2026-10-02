@@ -1,0 +1,91 @@
+blueprint:
+  name: "Librus: Absences To Justify Reminder"
+  description: >
+    At a set time on the days you pick, checks the Unexcused absences
+    sensor and runs your action - typically "Send a notification" - only
+    while there is still something to justify. Silent once everything is
+    excused. Unlike the Unexcused Absence Notification blueprint (one
+    message when a new absence appears), this one keeps reminding until
+    it's dealt with.
+
+
+    Use `{{ reminder_text }}` in your action for a ready-made message, or
+    `{{ unexcused_count }}`, `{{ absence_dates }}` (e.g. "05.09, 02.09")
+    and `{{ student_name }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/absence_justification_reminder.yaml
+  input:
+    unexcused_absences_entity:
+      name: Unexcused absences sensor
+      description: The Librus "Unexcused absences" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    check_time:
+      name: Time
+      description: When to check.
+      default: "18:00:00"
+      selector:
+        time: {}
+    weekdays:
+      name: Days
+      description: Which days to check on.
+      default: ["1", "2", "3", "4", "5"]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Monday
+              value: "1"
+            - label: Tuesday
+              value: "2"
+            - label: Wednesday
+              value: "3"
+            - label: Thursday
+              value: "4"
+            - label: Friday
+              value: "5"
+            - label: Saturday
+              value: "6"
+            - label: Sunday
+              value: "7"
+    notify_action:
+      name: Notification action
+      description: The action to run while there are absences left to justify.
+      selector:
+        action: {}
+
+variables:
+  unexcused_absences_entity: !input unexcused_absences_entity
+  weekdays: !input weekdays
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (now().isoweekday() | string) in weekdays
+         and (states(unexcused_absences_entity) | int(0)) > 0 }}
+
+actions:
+  - variables:
+      unexcused_count: "{{ states(unexcused_absences_entity) | int(0) }}"
+      # `recent_dates` are the distinct days (newest first, at most 10)
+      # that still have an unexcused record - "YYYY-MM-DD" strings.
+      absence_dates: >-
+        {%- set ns = namespace(dates=[]) -%}
+        {%- for d in (state_attr(unexcused_absences_entity, 'recent_dates') or []) -%}
+          {%- set ns.dates = ns.dates + [d[8:10] ~ '.' ~ d[5:7]] -%}
+        {%- endfor -%}
+        {{ ns.dates | join(', ') }}
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(unexcused_absences_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      reminder_text: >-
+        {{ (student_name ~ ': ') if student_name else '' }}Nieobecności do usprawiedliwienia: {{ unexcused_count }}{{ (' (dni: ' ~ absence_dates ~ ')') if absence_dates else '' }}.
+  - !input notify_action
+
+mode: single

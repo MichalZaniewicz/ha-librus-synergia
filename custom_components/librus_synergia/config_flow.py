@@ -32,6 +32,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -48,7 +51,10 @@ from librus_synergia import (
 )
 
 from .const import (
+    AVERAGE_MODE_ARITHMETIC,
+    AVERAGE_MODE_WEIGHTED,
     CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
@@ -60,6 +66,7 @@ from .const import (
     CONF_SESSION_LOGGED_IN_AT,
     CONF_STUDENT_NUMBER,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
@@ -342,6 +349,16 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_FREE_DAYS_ENABLED,
                     default=options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED),
                 ): BooleanSelector(),
+                vol.Required(
+                    CONF_AVERAGE_MODE,
+                    default=options.get(CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[AVERAGE_MODE_WEIGHTED, AVERAGE_MODE_ARITHMETIC],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key=CONF_AVERAGE_MODE,
+                    )
+                ),
                 # Genuinely optional, no default - Librus's API doesn't expose
                 # this anywhere (CONFIRMED via szkolny-android's own reference
                 # source), so it's a fact the user types in once, not fetched

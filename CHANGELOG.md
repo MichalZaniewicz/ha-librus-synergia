@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Lowest subject attendance sensor.** Attendance percentage of the
+  subject where it is lowest, with every subject's own figure in the
+  `subjects` attribute and the ones already under 50% in `at_risk` - the
+  mark below which a student can be left unclassified. Computed from
+  attendance data the integration already fetches, with no extra Librus
+  requests.
+- **Low Subject Attendance** blueprint: runs your action when that sensor
+  drops below a percentage you set (default 60%).
+- **Absences To Justify Reminder** blueprint: at a set time on the days
+  you pick, reminds you (count + dates) for as long as there are unexcused
+  absences left.
+- **Average mode option.** Under **Configure** you can now choose whether
+  the Overall/Subject average sensors (and Rank) report the weighted
+  average (default, unchanged) or the plain arithmetic one. Both are
+  always available as attributes (`average_weighted`,
+  `average_arithmetic`); the per-semester attributes follow the selected
+  mode.
+
+### Changed
+- New-item detection (the `librus_synergia_new_*` and
+  `librus_synergia_timetable_changed` events) now uses the `ChangeTracker`
+  from the `librus-synergia` library (now `0.2.0`) instead of the
+  integration's own copy of that logic. Events and their fields are
+  unchanged.
+
 ## 0.8.1-beta.1
 
 ### Added

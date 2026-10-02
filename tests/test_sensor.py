@@ -297,6 +297,65 @@ async def test_attendance_by_subject_resolves_via_lessons_lookup(hass) -> None:
     }
 
 
+async def test_subject_attendance_sensor_reports_lowest_subject(hass) -> None:
+    """State is the attendance percentage of the subject with the lowest
+    one; every record counts toward the total (presence marks included),
+    excused and unexcused absences both count as absent, and a record whose
+    lesson doesn't resolve to a subject is skipped."""
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": "2026-09-07", "Type": {"Id": 100}, "Lesson": {"Id": 100}},
+                {"Id": 2, "Date": "2026-09-08", "Type": {"Id": 1}, "Lesson": {"Id": 100}},
+                {"Id": 3, "Date": "2026-09-09", "Type": {"Id": 3}, "Lesson": {"Id": 100}},
+                {"Id": 4, "Date": "2026-09-09", "Type": {"Id": 2}, "Lesson": {"Id": 200}},  # late
+                {"Id": 5, "Date": "2026-09-10", "Type": {"Id": 100}, "Lesson": {"Id": 200}},
+                {"Id": 6, "Date": "2026-09-10", "Type": {"Id": 1}, "Lesson": {"Id": 999}},
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 2, "Name": "Spóźnienie", "IsPresenceKind": True},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+        async_get_lessons={
+            "Lessons": [
+                {"Id": 100, "Subject": {"Id": 41998}, "Teacher": {"Id": 1}},
+                {"Id": 200, "Subject": {"Id": 41997}, "Teacher": {"Id": 2}},
+            ]
+        },
+        async_get_subjects={
+            "Subjects": [
+                {"Id": 41998, "Name": "Matematyka"},
+                {"Id": 41997, "Name": "Fizyka"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "subject_attendance"))
+    assert float(state.state) == 33.3
+    assert state.attributes["subject"] == "Matematyka"
+    assert state.attributes["subjects"] == {
+        "Matematyka": {"total": 3, "present": 1, "absent": 2, "percentage": 33.3},
+        "Fizyka": {"total": 2, "present": 2, "absent": 0, "percentage": 100.0},
+    }
+    assert state.attributes["at_risk"] == ["Matematyka"]
+
+
+async def test_subject_attendance_sensor_unknown_without_resolvable_records(hass) -> None:
+    client = build_mock_client()
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "subject_attendance"))
+    assert state.state == "unknown"
+    assert state.attributes["subjects"] == {}
+    assert state.attributes["at_risk"] == []
+
+
 async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     client = build_mock_client(
         async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
@@ -831,6 +890,41 @@ async def test_averages_expose_arithmetic_and_per_semester(hass) -> None:
     subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
     assert subject.attributes["average_semester_1"] == 3.5
     assert subject.attributes["average_semester_2"] == 4.0
+
+
+async def test_average_mode_arithmetic_changes_state_not_attributes(hass) -> None:
+    """With the options flow's average mode set to arithmetic, the Overall
+    and Subject average sensors (and their per-semester attributes) report
+    the plain mean; both figures stay available as attributes."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "3", "Category": {"Id": 20}, "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-05"},
+                {"Id": 3, "Grade": "4", "Category": {"Id": 10}, "Subject": {"Id": 100}, "Semester": 2, "AddDate": "2027-02-01"},
+            ]
+        },
+        async_get_grade_categories={
+            "Categories": [
+                {"Id": 10, "Name": "odpowiedź", "CountToTheAverage": True, "Weight": 1},
+                {"Id": 20, "Name": "sprawdzian", "CountToTheAverage": True, "Weight": 3},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client, options={"average_mode": "arithmetic"})
+
+    overall = hass.states.get(_entity_id(hass, entry, "overall_average"))
+    assert float(overall.state) == 4.0  # (5 + 3 + 4) / 3
+    assert overall.attributes["average_mode"] == "arithmetic"
+    assert overall.attributes["average_weighted"] == 3.6
+    assert overall.attributes["average_arithmetic"] == 4.0
+    assert overall.attributes["average_semester_1"] == 4.0  # (5 + 3) / 2
+
+    subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
+    assert float(subject.state) == 4.0
+    assert subject.attributes["average_weighted"] == 3.6
+    assert subject.attributes["average_semester_1"] == 4.0
 
 
 async def test_actual_semester_and_final_grades_excluded_from_average(hass) -> None:

@@ -31,6 +31,7 @@ from librus_synergia import (
     LibrusError,
     LibrusSessionExpiredError,
 )
+from librus_synergia.changes import Changes, ChangeTracker
 from librus_synergia.models import (
     AttendanceData,
     AttendanceTypeData,
@@ -38,14 +39,11 @@ from librus_synergia.models import (
     FreeDayData,
     GradeCategoryData,
     GradeData,
-    HomeworkEventData,
-    LessonData,
     LibrusData,
     LuckyNumberData,
     MessageData,
     NoteData,
     SchoolData,
-    SchoolNoticeData,
 )
 
 # Parsers live in the `librus-synergia` library. `merge_timetables`,
@@ -335,30 +333,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._messages_bootstrapped = False
         self._messages_available = False
 
-        # New-item bus events. In-memory only, None = never populated (the
-        # next cycle just seeds it instead of replaying history as "new" on
-        # first install). A HA restart re-seeds quietly instead of persisting
-        # across restarts - same tradeoff ha-suunto makes for its
-        # EVENT_NEW_WORKOUT tracking, and for the same reason: a few hundred
-        # small ids a year is cheap to hold, not worth a Store-backed file.
-        self._known_grade_ids: set[int] | None = None
-        # SchoolNotices ids are strings (e.g. "LID-NBOARD-NOTICE-..."),
-        # confirmed live - unlike every other endpoint's plain int ids.
-        self._known_notice_ids: set[str] | None = None
-        self._known_note_ids: set[int] | None = None
-        self._known_message_ids: set[str] | None = None
-        self._known_homework_ids: set[int] | None = None
-        # Attendances ids are usually int-able but not always (a "t"-prefixed
-        # id like "t41685" has been observed live) - see AttendanceData.id.
-        self._known_absence_ids: set[int | str] | None = None
-        # Synthetic "date|period|kind|subject" signatures for cancelled /
-        # substitution lessons - not a real id from the API, just enough to
-        # not re-fire EVENT_TIMETABLE_CHANGED for a disruption already seen.
-        self._known_timetable_disruptions: set[str] | None = None
+        # New-item bus events: the library's ChangeTracker remembers what
+        # has been seen and reports what's new. In-memory only - the first
+        # cycle just seeds it instead of replaying history as "new" on
+        # install, and a HA restart re-seeds quietly (same tradeoff
+        # ha-suunto makes for its EVENT_NEW_WORKOUT tracking).
+        self._change_tracker = ChangeTracker()
         # Achievement keys already unlocked (e.g. "good_grade_streak_10") -
-        # same seed-silently-then-union pattern as every set above, applied
-        # to a small fixed vocabulary of milestones instead of growing API
-        # ids. See _check_achievements.
+        # same seed-silently-then-union pattern as the tracker above, for
+        # a small fixed vocabulary of milestones (the library knows nothing
+        # about achievements). See _check_achievements.
         self._known_achievements: set[str] | None = None
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
@@ -760,14 +744,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendance_types = parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
         grade_categories = parse_grade_categories(categories_payload)
-        self._async_fire_new_item_events(
-            grades, grade_categories, school_notices, notes, messages, homeworks, me.display_name
-        )
-        self._fire_timetable_change_events(timetable, today, me.display_name)
-        self._fire_new_absence_events(attendances, attendance_types, me.display_name)
-        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
-
-        return LibrusData(
+        data = LibrusData(
             me=me,
             grades=grades,
             grade_categories=grade_categories,
@@ -804,6 +781,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 parent_teacher_conferences_payload
             ),
         )
+        self._fire_change_events(self._change_tracker.update(data, today=today), data)
+        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
+        return data
 
     def _feature_enabled(self, key: str, default: bool) -> bool:
         """Read one of the options-flow feature toggles (see config_flow.py)
@@ -1432,163 +1412,106 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             justification_messages,
         )
 
-    def _async_fire_new_item_events(
-        self,
-        grades: list[GradeData],
-        grade_categories: dict[int, GradeCategoryData],
-        notices: list[SchoolNoticeData],
-        notes: list[NoteData],
-        messages: list[MessageData],
-        homeworks: list[HomeworkEventData],
-        student: str,
-    ) -> None:
-        entry_id = self.config_entry.entry_id if self.config_entry else None
-        # Resolved names are included alongside the raw ids so an automation
-        # (e.g. a notification blueprint) can use {{ trigger.event.data.
-        # subject }} directly, without its own lookup against the sensor
-        # attributes just to say which subject/teacher a grade or note was
-        # about. `student` (the resolved child's name, not the login/parent's -
-        # see MeData) is included the same way for a multi-child household's
-        # blueprint to say WHOSE grade/note/etc. this is, since one blueprint
-        # instance's action runs for every config entry that fires the event.
-        self._known_grade_ids = self._fire_for_new_ids(
-            EVENT_NEW_GRADE,
-            entry_id,
-            self._known_grade_ids,
-            {
-                g.id: {
-                    "subject_id": g.subject_id,
-                    "subject": self._cached_subjects.get(g.subject_id, str(g.subject_id))
-                    if g.subject_id is not None
-                    else None,
-                    "value": g.value,
-                    **_grade_event_details(g, grade_categories),
-                }
-                for g in grades
-            },
-            student=student,
-        )
-        self._known_notice_ids = self._fire_for_new_ids(
-            EVENT_NEW_ANNOUNCEMENT,
-            entry_id,
-            self._known_notice_ids,
-            {n.id: {"subject": n.subject} for n in notices},
-            student=student,
-        )
-        self._known_note_ids = self._fire_for_new_ids(
-            EVENT_NEW_NOTE,
-            entry_id,
-            self._known_note_ids,
-            {
-                n.id: {
-                    "positive": n.positive,
-                    "sentiment": n.sentiment,
-                    "teacher": self._cached_teachers.get(n.teacher_id, str(n.teacher_id))
-                    if n.teacher_id is not None
-                    else None,
-                    "text": n.text,
-                }
-                for n in notes
-            },
-            student=student,
-        )
-        self._known_message_ids = self._fire_for_new_ids(
-            EVENT_NEW_MESSAGE,
-            entry_id,
-            self._known_message_ids,
-            {m.id: {"sender": m.sender_name, "topic": m.topic} for m in messages},
-            student=student,
-        )
-        self._known_homework_ids = self._fire_for_new_ids(
-            EVENT_NEW_HOMEWORK,
-            entry_id,
-            self._known_homework_ids,
-            {
-                h.id: {
-                    "subject_id": h.subject_id,
-                    "subject": self._cached_subjects.get(h.subject_id, str(h.subject_id))
-                    if h.subject_id is not None
-                    else None,
-                    "category": self._cached_homework_categories.get(h.category_id)
-                    if h.category_id is not None
-                    else None,
-                    "date": h.date,
-                    "content": (h.content or "")[:200],
-                }
-                for h in homeworks
-            },
-            student=student,
-        )
+    def _fire_change_events(self, changes: Changes, data: LibrusData) -> None:
+        """Fire one bus event per new item the tracker reported.
 
-    def _fire_timetable_change_events(
-        self, timetable: dict[date, list[LessonData]], today: date, student: str
-    ) -> None:
-        """Fire EVENT_TIMETABLE_CHANGED for any cancelled/substitution
-        lesson on today or a later date that wasn't already known. Reuses
-        the exact seed-silently-then-diff machinery of the *_new_* events -
-        the "id" here is a synthetic date+period+kind+subject signature, so
-        a disruption that scrolls out of the fetch window and back doesn't
-        re-announce (union, not replace)."""
-        entry_id = self.config_entry.entry_id if self.config_entry else None
-        items: dict[str, dict[str, Any]] = {}
-        for day, lessons in timetable.items():
-            if day < today:
-                continue
-            for lesson in lessons:
-                if not (lesson.is_canceled or lesson.is_substitution):
-                    continue
-                kind = "canceled" if lesson.is_canceled else "substitution"
-                signature = f"{day.isoformat()}|{lesson.lesson_no}|{kind}|{lesson.subject_id}"
-                subject = (
-                    self._cached_subjects.get(lesson.subject_id, str(lesson.subject_id))
-                    if lesson.subject_id is not None
-                    else None
-                )
-                items[signature] = {
-                    "date": day.isoformat(),
-                    "lesson_no": lesson.lesson_no,
-                    "kind": kind,
-                    "subject_id": lesson.subject_id,
-                    "subject": subject,
-                    "hour_from": lesson.hour_from,
-                }
-        self._known_timetable_disruptions = self._fire_for_new_ids(
-            EVENT_TIMETABLE_CHANGED,
-            entry_id,
-            self._known_timetable_disruptions,
-            items,
-            student=student,
-        )
+        Resolved names are included alongside the raw ids so an automation
+        (e.g. a notification blueprint) can use {{ trigger.event.data.
+        subject }} directly, without its own lookup. `student` (the child's
+        name, not the login/parent's - see MeData) is on every event so a
+        multi-child household's blueprint can say WHOSE grade/note/etc. this
+        is, since one blueprint instance's action runs for every config
+        entry that fires the event."""
+        base = {
+            "entry_id": self.config_entry.entry_id if self.config_entry else None,
+            "student": data.me.display_name,
+        }
 
-    def _fire_new_absence_events(
-        self,
-        attendances: list[AttendanceData],
-        attendance_types: dict[int, AttendanceTypeData],
-        student: str,
-    ) -> None:
-        """Fire EVENT_NEW_ABSENCE for a newly-seen real absence record
-        (any non-presence type - excused or not, `excused` in the payload
-        says which). Seeded silently on the first sync like the other
-        events."""
-        entry_id = self.config_entry.entry_id if self.config_entry else None
-        items: dict[int | str, dict[str, Any]] = {}
-        for attendance in attendances:
-            attendance_type = (
-                attendance_types.get(attendance.type_id)
-                if attendance.type_id is not None
-                else None
+        def fire(event: str, item_id: Any, payload: dict[str, Any]) -> None:
+            self.hass.bus.async_fire(event, {**base, "id": item_id, **payload})
+
+        def subject_name(subject_id: int | str | None) -> str | None:
+            if subject_id is None:
+                return None
+            return data.subjects.get(subject_id, str(subject_id))
+
+        for grade in changes.grades:
+            fire(
+                EVENT_NEW_GRADE,
+                grade.id,
+                {
+                    "subject_id": grade.subject_id,
+                    "subject": subject_name(grade.subject_id),
+                    "value": grade.value,
+                    **_grade_event_details(grade, data.grade_categories),
+                },
             )
-            if attendance_type is None or attendance_type.is_presence_kind:
-                continue
-            items[attendance.id] = {
-                "date": attendance.date,
-                "type": attendance_type.name,
-                "excused": attendance_type.is_excused_absence,
-                "lesson_no": attendance.lesson_no,
-            }
-        self._known_absence_ids = self._fire_for_new_ids(
-            EVENT_NEW_ABSENCE, entry_id, self._known_absence_ids, items, student=student
-        )
+        for notice in changes.announcements:
+            fire(EVENT_NEW_ANNOUNCEMENT, notice.id, {"subject": notice.subject})
+        for note in changes.notes:
+            fire(
+                EVENT_NEW_NOTE,
+                note.id,
+                {
+                    "positive": note.positive,
+                    "sentiment": note.sentiment,
+                    "teacher": data.teachers.get(note.teacher_id, str(note.teacher_id))
+                    if note.teacher_id is not None
+                    else None,
+                    "text": note.text,
+                },
+            )
+        for message in changes.messages:
+            fire(
+                EVENT_NEW_MESSAGE,
+                message.id,
+                {"sender": message.sender_name, "topic": message.topic},
+            )
+        for homework in changes.agenda:
+            fire(
+                EVENT_NEW_HOMEWORK,
+                homework.id,
+                {
+                    "subject_id": homework.subject_id,
+                    "subject": subject_name(homework.subject_id),
+                    "category": data.homework_categories.get(homework.category_id)
+                    if homework.category_id is not None
+                    else None,
+                    "date": homework.date,
+                    "content": (homework.content or "")[:200],
+                },
+            )
+        # Real absences only (any non-presence type); `excused` says which.
+        for absence in changes.absences:
+            absence_type = data.attendance_types[absence.type_id]
+            fire(
+                EVENT_NEW_ABSENCE,
+                absence.id,
+                {
+                    "date": absence.date,
+                    "type": absence_type.name,
+                    "excused": absence_type.is_excused_absence,
+                    "lesson_no": absence.lesson_no,
+                },
+            )
+        # A lesson on today or a later date that newly turned up cancelled
+        # or as a substitution. The id is the tracker's synthetic
+        # date|period|kind|subject signature.
+        for change in changes.timetable_changes:
+            lesson = change.lesson
+            day = change.date.isoformat()
+            fire(
+                EVENT_TIMETABLE_CHANGED,
+                f"{day}|{lesson.lesson_no}|{change.kind}|{lesson.subject_id}",
+                {
+                    "date": day,
+                    "lesson_no": lesson.lesson_no,
+                    "kind": change.kind,
+                    "subject_id": lesson.subject_id,
+                    "subject": subject_name(lesson.subject_id),
+                    "hour_from": lesson.hour_from,
+                },
+            )
 
     def _check_achievements(
         self,
@@ -1604,9 +1527,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         invented points/scoring system, which would have no basis in
         anything Librus actually reports and would feel arbitrary/made up.
 
-        Reuses `_fire_for_new_ids` exactly like every other event above -
-        each achievement KEY (e.g. "good_grade_streak_10") is treated as
-        an "item id" that's either currently unlocked or not, seeded
+        Each achievement KEY (e.g. "good_grade_streak_10") is treated as
+        an "item id" (see `_fire_for_new_ids`) that's either currently
+        unlocked or not, seeded
         silently on the first sync, and unioned (not replaced) so nothing
         re-fires once achieved even if the underlying streak later
         resets (a bad grade breaking a 10-grade streak must not "revoke"

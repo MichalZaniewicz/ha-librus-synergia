@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
     CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
@@ -286,6 +287,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
         CONF_BEHAVIOUR_GRADES_ENABLED: True,
         CONF_DESCRIPTIVE_GRADES_ENABLED: True,
         CONF_FREE_DAYS_ENABLED: True,
+        CONF_AVERAGE_MODE: "weighted",
         CONF_QUIET_HOURS_ENABLED: False,
         CONF_QUIET_HOURS_START: "23:00:00",
         CONF_QUIET_HOURS_END: "06:00:00",
@@ -308,6 +310,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
             CONF_BEHAVIOUR_GRADES_ENABLED: False,
             CONF_DESCRIPTIVE_GRADES_ENABLED: False,
             CONF_FREE_DAYS_ENABLED: False,
+            CONF_AVERAGE_MODE: "arithmetic",
             CONF_QUIET_HOURS_ENABLED: True,
             CONF_QUIET_HOURS_START: "22:30:00",
             CONF_QUIET_HOURS_END: "07:15:00",
@@ -321,6 +324,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         CONF_BEHAVIOUR_GRADES_ENABLED: False,
         CONF_DESCRIPTIVE_GRADES_ENABLED: False,
         CONF_FREE_DAYS_ENABLED: False,
+        CONF_AVERAGE_MODE: "arithmetic",
         CONF_QUIET_HOURS_ENABLED: True,
         CONF_QUIET_HOURS_START: "22:30:00",
         CONF_QUIET_HOURS_END: "07:15:00",
