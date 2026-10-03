@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.2
 
 ### Added
 - **Notification for new homework assignments.** A new
