@@ -174,6 +174,25 @@ def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData)
     )
 
 
+def _pt_conferences_not_in_agenda(data: LibrusData) -> list[ParentTeacherConferenceData]:
+    """Parent-teacher conferences that `HomeWorks` doesn't already list.
+
+    CONFIRMED live (2026-10-03): the same meeting comes through BOTH
+    endpoints - same date and same time ("17:00:00" as `HomeWorks.TimeFrom`
+    and as `ParentTeacherConferences.Time`), different wording - so merging
+    both showed it twice in the Agenda. A conference is skipped when an
+    Agenda entry has the same date and time; one without a time can't be
+    matched safely and is kept."""
+    agenda_slots = {
+        (item.date[:10], item.time_from) for item in data.homeworks if item.date and item.time_from
+    }
+    return [
+        item
+        for item in data.parent_teacher_conferences
+        if not (item.date and item.time and (item.date[:10], item.time) in agenda_slots)
+    ]
+
+
 def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
     try:
         start = date.fromisoformat(item.date_from[:10])
@@ -295,9 +314,9 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
 
 class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
     """General agenda/events feed (tests, trips, homework) from `HomeWorks`,
-    plus a defensive merge of `ParentTeacherConferences` (see
-    `ParentTeacherConferenceData`'s docstring - live-verified redundant
-    with `HomeWorks` for this account, kept as a belt-and-suspenders extra).
+    plus `ParentTeacherConferences` that `HomeWorks` doesn't already list
+    (the same meeting usually comes through both - see
+    `_pt_conferences_not_in_agenda`).
 
     Unlike the timetable, `HomeWorks` isn't confirmed to accept a date-range
     query (see the project's empirical-gaps notes), so this only serves
@@ -325,7 +344,7 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
             and event.end >= today
         ] + [
             event
-            for item in self.coordinator.data.parent_teacher_conferences
+            for item in _pt_conferences_not_in_agenda(self.coordinator.data)
             if (event := _pt_conference_to_event(item, self.coordinator.data)) is not None
             and event.end >= today
         ]
@@ -353,7 +372,7 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
             # range bugs) has bitten this project multiple times already.
             if event is not None and _event_overlaps(event, start, end):
                 events.append(event)
-        for item in self.coordinator.data.parent_teacher_conferences:
+        for item in _pt_conferences_not_in_agenda(self.coordinator.data):
             event = _pt_conference_to_event(item, self.coordinator.data)
             if event is not None and _event_overlaps(event, start, end):
                 events.append(event)

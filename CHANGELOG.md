@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.1
+
+### Fixed
+- **Parent meetings no longer show up twice in the Agenda calendar.** The
+  same meeting comes from both the agenda feed and the parent-teacher
+  conferences endpoint (same date and time, different wording); the
+  second copy is now skipped. Seen for the first time on live data.
+- **Lowest subject attendance ignores subjects with almost no records.**
+  Some teachers don't take attendance in Librus at all, so a subject could
+  have just 2 records (both absences) after a month and pin the sensor at
+  0%. A subject now needs at least 5 records to count toward the state,
+  `subject` and `at_risk`; it still appears in `subjects`. New
+  `min_records` attribute.
+- **Longer homework text.** The Homework assignments sensor's `recent`
+  attribute kept only the first 200 characters of each assignment, which
+  cut longer instructions mid-sentence. It now keeps up to 1000.
+
 ## 0.9.0
 
 Includes everything from the `0.8.1-beta.1` testing release.

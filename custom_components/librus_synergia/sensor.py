@@ -788,6 +788,13 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
 # ("nieklasyfikowany") in a subject - absences over half of the lessons.
 _SUBJECT_ATTENDANCE_RISK_PERCENTAGE = 50.0
 
+# A subject needs at least this many attendance records to count toward the
+# state/`subject`/`at_risk`. CONFIRMED live (2026-10-03): some teachers
+# don't take attendance in Librus at all - a subject taught twice a week
+# had 2 records after a month, both absences, which made it "0%" and
+# pinned the sensor there. Still listed in `subjects` either way.
+_SUBJECT_ATTENDANCE_MIN_RECORDS = 5
+
 
 def _subject_attendance(data: LibrusData) -> dict[str, dict[str, Any]]:
     """subject name -> {total, present, absent, percentage}, lowest
@@ -818,7 +825,9 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     """Attendance percentage of the subject with the LOWEST one - the
     figure that matters for the 50% "nieklasyfikowany" rule. `subjects` in
     attributes has every subject's own percentage, `at_risk` the ones
-    already under 50%."""
+    already under 50%. Only subjects with at least
+    `_SUBJECT_ATTENDANCE_MIN_RECORDS` records count for the state,
+    `subject` and `at_risk`."""
 
     _attr_translation_key = "subject_attendance"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -829,26 +838,36 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "subject_attendance")
 
+    @staticmethod
+    def _counted(subjects: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {
+            name: bucket
+            for name, bucket in subjects.items()
+            if bucket["total"] >= _SUBJECT_ATTENDANCE_MIN_RECORDS
+        }
+
     @property
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        subjects = _subject_attendance(self.coordinator.data)
-        return next(iter(subjects.values()))["percentage"] if subjects else None
+        counted = self._counted(_subject_attendance(self.coordinator.data))
+        return next(iter(counted.values()))["percentage"] if counted else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
         subjects = _subject_attendance(self.coordinator.data)
+        counted = self._counted(subjects)
         return {
-            "subject": next(iter(subjects), None),
+            "subject": next(iter(counted), None),
             "subjects": subjects,
             "at_risk": [
                 name
-                for name, bucket in subjects.items()
+                for name, bucket in counted.items()
                 if bucket["percentage"] < _SUBJECT_ATTENDANCE_RISK_PERCENTAGE
             ],
+            "min_records": _SUBJECT_ATTENDANCE_MIN_RECORDS,
         }
 
 
@@ -1175,7 +1194,9 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
                 {
                     "id": a.id,
                     "topic": a.topic,
-                    "text": a.text[:200],
+                    # Long instructions (projects, lapbooks) are common -
+                    # 200 chars cut real ones mid-sentence.
+                    "text": a.text[:1000],
                     "due_date": a.due_date,
                     "date": a.date,
                     "teacher": teachers.get(a.teacher_id) if a.teacher_id else None,

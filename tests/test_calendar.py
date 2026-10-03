@@ -437,3 +437,56 @@ async def test_parent_teacher_conference_merged_into_agenda(hass) -> None:
     assert state.state == "off"
     assert "[Zebranie z Rodzicami]" in state.attributes["message"]
     assert "Organizacja roku szkolnego" in state.attributes["message"]
+
+
+async def test_parent_teacher_conference_already_in_homeworks_not_duplicated(hass) -> None:
+    """CONFIRMED live (2026-10-03): the same meeting comes through HomeWorks
+    AND ParentTeacherConferences (same date + time, different wording) -
+    the Agenda must show it once."""
+    client = build_mock_client(
+        async_get_homeworks={
+            "HomeWorks": [
+                {
+                    "Id": 8349804,
+                    "Date": _TOMORROW,
+                    "TimeFrom": "17:00:00",
+                    "Content": "Zebranie z rodzicami. Organizacja roku szkolnego.",
+                    "Category": {"Id": 14958},
+                }
+            ]
+        },
+        async_get_parent_teacher_conferences={
+            "ParentTeacherConferences": [
+                {
+                    "Id": 3359,
+                    "Topic": "Omówienie roku szkolnego",
+                    "Teacher": {"Id": 200},
+                    "Date": _TOMORROW,
+                    "Time": "17:00:00",
+                },
+                {
+                    "Id": 3360,
+                    "Topic": "Konsultacje",
+                    "Teacher": {"Id": 200},
+                    "Date": _TOMORROW,
+                    "Time": "18:30:00",
+                },
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "agenda")
+
+    day = date.fromisoformat(_TOMORROW)
+    start = dt_util.start_of_local_day(day)
+    response = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {"entity_id": entity_id, "start_date_time": start, "end_date_time": start + timedelta(days=1)},
+        blocking=True,
+        return_response=True,
+    )
+    summaries = sorted(e["summary"] for e in response[entity_id]["events"])
+    assert len(summaries) == 2
+    assert not any("Omówienie" in s for s in summaries)
+    assert any("Konsultacje" in s for s in summaries)

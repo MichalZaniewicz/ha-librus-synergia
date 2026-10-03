@@ -301,15 +301,18 @@ async def test_subject_attendance_sensor_reports_lowest_subject(hass) -> None:
     """State is the attendance percentage of the subject with the lowest
     one; every record counts toward the total (presence marks included),
     excused and unexcused absences both count as absent, and a record whose
-    lesson doesn't resolve to a subject is skipped."""
+    lesson doesn't resolve to a subject is skipped. A subject with fewer
+    than 5 records (Fizyka here) is listed but doesn't drive the state."""
     client = build_mock_client(
         async_get_attendances={
             "Attendances": [
                 {"Id": 1, "Date": "2026-09-07", "Type": {"Id": 100}, "Lesson": {"Id": 100}},
                 {"Id": 2, "Date": "2026-09-08", "Type": {"Id": 1}, "Lesson": {"Id": 100}},
                 {"Id": 3, "Date": "2026-09-09", "Type": {"Id": 3}, "Lesson": {"Id": 100}},
+                {"Id": 7, "Date": "2026-09-11", "Type": {"Id": 1}, "Lesson": {"Id": 100}},
+                {"Id": 8, "Date": "2026-09-14", "Type": {"Id": 100}, "Lesson": {"Id": 100}},
                 {"Id": 4, "Date": "2026-09-09", "Type": {"Id": 2}, "Lesson": {"Id": 200}},  # late
-                {"Id": 5, "Date": "2026-09-10", "Type": {"Id": 100}, "Lesson": {"Id": 200}},
+                {"Id": 5, "Date": "2026-09-10", "Type": {"Id": 1}, "Lesson": {"Id": 200}},
                 {"Id": 6, "Date": "2026-09-10", "Type": {"Id": 1}, "Lesson": {"Id": 999}},
             ]
         },
@@ -337,13 +340,51 @@ async def test_subject_attendance_sensor_reports_lowest_subject(hass) -> None:
     entry = await setup_integration(hass, client)
 
     state = hass.states.get(_entity_id(hass, entry, "subject_attendance"))
-    assert float(state.state) == 33.3
+    assert float(state.state) == 40.0
     assert state.attributes["subject"] == "Matematyka"
     assert state.attributes["subjects"] == {
-        "Matematyka": {"total": 3, "present": 1, "absent": 2, "percentage": 33.3},
-        "Fizyka": {"total": 2, "present": 2, "absent": 0, "percentage": 100.0},
+        "Matematyka": {"total": 5, "present": 2, "absent": 3, "percentage": 40.0},
+        "Fizyka": {"total": 2, "present": 1, "absent": 1, "percentage": 50.0},
     }
     assert state.attributes["at_risk"] == ["Matematyka"]
+    assert state.attributes["min_records"] == 5
+
+
+async def test_subject_attendance_ignores_subjects_with_few_records(hass) -> None:
+    """CONFIRMED live: a subject with only 2 records, both absences (no
+    attendance taken in Librus for it), must not pin the sensor at 0%."""
+    client = build_mock_client(
+        async_get_attendances={
+            "Attendances": [
+                {"Id": i, "Date": "2026-09-07", "Type": {"Id": 100}, "Lesson": {"Id": 100}}
+                for i in range(1, 7)
+            ]
+            + [
+                {"Id": 20, "Date": "2026-09-08", "Type": {"Id": 3}, "Lesson": {"Id": 200}},
+                {"Id": 21, "Date": "2026-09-15", "Type": {"Id": 3}, "Lesson": {"Id": 200}},
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 3, "Name": "Nieobecność uspr.", "IsPresenceKind": False},
+            ]
+        },
+        async_get_lessons={
+            "Lessons": [
+                {"Id": 100, "Subject": {"Id": 1}},
+                {"Id": 200, "Subject": {"Id": 2}},
+            ]
+        },
+        async_get_subjects={"Subjects": [{"Id": 1, "Name": "Matematyka"}, {"Id": 2, "Name": "Religia"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "subject_attendance"))
+    assert float(state.state) == 100.0
+    assert state.attributes["subject"] == "Matematyka"
+    assert state.attributes["at_risk"] == []
+    assert state.attributes["subjects"]["Religia"]["percentage"] == 0.0
 
 
 async def test_subject_attendance_sensor_unknown_without_resolvable_records(hass) -> None:
