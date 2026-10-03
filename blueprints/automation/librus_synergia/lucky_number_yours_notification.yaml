@@ -1,0 +1,65 @@
+blueprint:
+  name: "Librus: Your Lucky Number"
+  description: >
+    Runs your action when the published lucky number ("szczęśliwy
+    numerek") is your child's own class-register number, so they know
+    they're safe from being asked to answer that day.
+
+
+    Librus doesn't expose the student's number anywhere, so this only works
+    once it's set under the integration's **Configure** -> "Student's number
+    in the class register". Librus sometimes publishes the next school
+    day's number a day early; the message says "dziś" or names the day.
+
+
+    Use `{{ lucky_summary }}` in your action, or `{{ trigger.to_state.state }}`
+    (the number) and `{{ trigger.to_state.attributes.day }}` (the day it's for).
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/lucky_number_yours_notification.yaml
+  input:
+    lucky_number_entity:
+      name: Lucky number sensor
+      description: The Librus "Lucky number" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    notify_action:
+      name: Notification action
+      description: The action to run when the lucky number is your child's.
+      selector:
+        action: {}
+
+triggers:
+  # A new number, or the same number published for a new day.
+  - trigger: state
+    entity_id: !input lucky_number_entity
+  - trigger: state
+    entity_id: !input lucky_number_entity
+    attribute: day
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.attributes.is_yours is true
+         and (trigger.from_state is none
+              or trigger.from_state.state != trigger.to_state.state
+              or trigger.from_state.attributes.day != trigger.to_state.attributes.day) }}
+
+actions:
+  - variables:
+      lucky_day: "{{ trigger.to_state.attributes.day | default('', true) }}"
+      when_text: >-
+        {%- if trigger.to_state.attributes.is_today -%}dziś
+        {%- elif lucky_day == ((now().date() + timedelta(days=1)) | string) -%}jutro
+        {%- elif lucky_day -%}{{ lucky_day[8:10] ~ '.' ~ lucky_day[5:7] }}
+        {%- endif -%}
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(trigger.entity_id, 'name') or '') | replace('E-dziennik ', '') }}
+      lucky_summary: >-
+        Szczęśliwy numerek {{ trigger.to_state.state }}{{ (' (' ~ when_text ~ ')') if when_text else '' }} to numer {{ student_name if student_name else 'Twojego dziecka' }}!
+  - !input notify_action
+
+mode: single

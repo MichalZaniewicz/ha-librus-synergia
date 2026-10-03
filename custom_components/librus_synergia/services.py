@@ -184,6 +184,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 "date": grade.add_date,
                 "semester": grade.semester,
                 "comments": list(grade.comments),
+                "teacher": data.teachers.get(grade.teacher_id) if grade.teacher_id is not None else None,
             }
             for grade in data.grades
             if subject_id is None or grade.subject_id == subject_id

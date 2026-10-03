@@ -48,7 +48,9 @@ from .coordinator import (
     days_since_last_absence,
     days_since_last_negative_note,
     good_grade_streak,
+    infer_subject_id,
     parse_grade_value,
+    teacher_subject_ids,
 )
 
 
@@ -448,6 +450,11 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                 "category": categories[g.category_id].name if g.category_id in categories else None,
                 "date": g.add_date,
                 "comments": g.comments,
+                "teacher": (
+                    self.coordinator.data.teachers.get(g.teacher_id)
+                    if g.teacher_id is not None
+                    else None
+                ),
             }
             for g in sorted(subject_grades, key=lambda g: g.add_date or "", reverse=True)
         ]
@@ -1184,15 +1191,22 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        teachers = self.coordinator.data.teachers
+        data = self.coordinator.data
+        teachers = data.teachers
+        by_teacher = teacher_subject_ids(data.timetable)
         recent = sorted(
-            (a for a in self.coordinator.data.homework_assignments if a.due_date),
+            (a for a in data.homework_assignments if a.due_date),
             key=lambda a: a.due_date,
         )[:10]
         return {
             "recent": [
                 {
                     "id": a.id,
+                    "subject": (
+                        data.subjects.get(subject_id)
+                        if (subject_id := infer_subject_id(a.teacher_id, by_teacher)) is not None
+                        else None
+                    ),
                     "topic": a.topic,
                     # Long instructions (projects, lapbooks) are common -
                     # 200 chars cut real ones mid-sentence.

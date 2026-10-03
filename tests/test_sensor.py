@@ -1281,3 +1281,67 @@ async def test_rank_sensor_unknown_without_any_grades(hass) -> None:
 
     state = hass.states.get(_entity_id(hass, entry, "rank"))
     assert state.state == "unknown"
+
+
+async def test_homework_assignment_subject_inferred_from_teacher(hass) -> None:
+    """HomeWorkAssignments has no Subject field - the subject comes from the
+    teacher's lessons in the timetable, only when that teacher teaches one
+    subject (teacher 300 below teaches two, so no guess)."""
+
+    def lesson(no: str, subject: str, teacher: str) -> list[dict]:
+        return [
+            {
+                "LessonNo": no,
+                "HourFrom": "08:00",
+                "HourTo": "08:45",
+                "Subject": {"Id": subject},
+                "Teacher": {"Id": teacher},
+                "IsCanceled": False,
+                "IsSubstitutionClass": False,
+            }
+        ]
+
+    client = build_mock_client(
+        async_get_timetable={
+            "Timetable": {
+                "2026-09-28": [
+                    lesson("1", "41994", "200"),
+                    lesson("2", "42001", "300"),
+                    lesson("3", "42013", "300"),
+                ]
+            }
+        },
+        async_get_subjects={
+            "Subjects": [
+                {"Id": 41994, "Name": "Chemia"},
+                {"Id": 42001, "Name": "Informatyka"},
+                {"Id": 42013, "Name": "Wychowanie fizyczne"},
+            ]
+        },
+        async_get_homework_assignments={
+            "HomeWorkAssignments": [
+                {"Id": 1, "Topic": "Lapbook", "Text": "x", "Teacher": {"Id": 200}, "Date": "2026-09-30", "DueDate": "2026-10-14"},
+                {"Id": 2, "Topic": "Prezentacja", "Text": "y", "Teacher": {"Id": 300}, "Date": "2026-09-30", "DueDate": "2026-10-15"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    recent = hass.states.get(_entity_id(hass, entry, "homework_assignments")).attributes["recent"]
+    assert [(r["topic"], r["subject"]) for r in recent] == [("Lapbook", "Chemia"), ("Prezentacja", None)]
+
+
+async def test_subject_average_grade_log_carries_teacher(hass) -> None:
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Jan", "LastName": "Kowalski"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Subject": {"Id": 100}, "AddedBy": {"Id": 200}, "Semester": 1, "AddDate": "2026-09-01"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
+    assert subject.attributes["grades"][0]["teacher"] == "Jan Kowalski"

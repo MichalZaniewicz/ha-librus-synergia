@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Notification for new homework assignments.** A new
+  `librus_synergia_new_homework_assignment` event fires for each new real
+  homework assignment ("zadanie domowe", the Homework assignments feed)
+  with its topic, text, due date, teacher and subject. Until now only the
+  Agenda (tests, trips) had an event. New **New Homework Assignment
+  Notification** blueprint.
+- **Subject for homework assignments.** Librus doesn't say which subject an
+  assignment belongs to, so it's now worked out from the teacher's lessons
+  in the timetable - in the Homework assignments sensor's `recent`
+  attribute and in the new event. Left empty when the teacher teaches more
+  than one subject.
+- **Teacher in grades.** The new-grade event, the subject sensors' `grades`
+  attribute and the `get_grades` service now include the teacher who added
+  the grade. The **New Grade Notification** blueprint shows it in its
+  details line (re-import the blueprint to get it).
+- **Test Tomorrow Reminder** blueprint: an evening reminder when a test or
+  quiz is on the Agenda for the next day.
+- **Your Lucky Number** blueprint: a notification when the published lucky
+  number is your child's own number (set under **Configure**).
+
+### Changed
+- Requires `librus-synergia` 0.3.0 (Home Assistant installs it on its own).
+
 ## 0.9.1
 
 ### Fixed

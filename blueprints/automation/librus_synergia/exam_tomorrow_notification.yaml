@@ -1,0 +1,67 @@
+blueprint:
+  name: "Librus: Test Tomorrow Reminder"
+  description: >
+    At a set time each day, checks the Next exam sensor and runs your
+    action - typically "Send a notification" - only when there is a test,
+    quiz ("kartkówka") or other graded assessment on the Agenda for the
+    next day. Silent otherwise.
+
+
+    Use `{{ exam_summary }}` in your action for a ready-made message, or
+    `{{ exam_lines }}` / `{{ exam_count }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/exam_tomorrow_notification.yaml
+  input:
+    next_exam_entity:
+      name: Next exam sensor
+      description: The Librus "Next exam" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    check_time:
+      name: Time
+      description: When to check each day (e.g. the evening before).
+      default: "19:00:00"
+      selector:
+        time: {}
+    notify_action:
+      name: Notification action
+      description: The action to run when something is due tomorrow.
+      selector:
+        action: {}
+
+variables:
+  next_exam_entity: !input next_exam_entity
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {%- set tomorrow = (now().date() + timedelta(days=1)) | string -%}
+      {{ (state_attr(next_exam_entity, 'upcoming') or [])
+         | selectattr('date', 'eq', tomorrow) | list | count > 0 }}
+
+actions:
+  - variables:
+      # `upcoming` items are {date, subject, category, content}.
+      exam_lines: >-
+        {%- set tomorrow = (now().date() + timedelta(days=1)) | string -%}
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for e in (state_attr(next_exam_entity, 'upcoming') or []) if e.date == tomorrow -%}
+          {%- set ns.lines = ns.lines + ['- ' ~ (e.category ~ ' · ' if e.category else '') ~ (e.subject or 'lekcja') ~ (': ' ~ e.content if e.content else '')] -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      exam_count: >-
+        {%- set tomorrow = (now().date() + timedelta(days=1)) | string -%}
+        {{ (state_attr(next_exam_entity, 'upcoming') or []) | selectattr('date', 'eq', tomorrow) | list | count }}
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(next_exam_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      exam_summary: "{{ (student_name ~ ': ') if student_name else '' }}Jutro:\n{{ exam_lines }}"
+  - !input notify_action
+
+mode: single

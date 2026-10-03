@@ -19,6 +19,7 @@ from custom_components.librus_synergia.const import (
     EVENT_NEW_ABSENCE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
+    EVENT_NEW_HOMEWORK_ASSIGNMENT,
     EVENT_TIMETABLE_CHANGED,
 )
 from custom_components.librus_synergia.coordinator import (
@@ -1777,3 +1778,66 @@ async def test_achievement_attendance_and_behaviour_streaks_fire_at_day_mileston
     titles = {e.data["title"] for e in events}
     assert "Tydzień bez nieobecności" in titles
     assert "Tydzień bez uwagi" in titles
+
+
+async def test_new_grade_event_carries_teacher(hass) -> None:
+    events = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Jan", "LastName": "Kowalski"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    client.async_get_grades.return_value = {
+        "Grades": [{**GRADE_PAYLOAD["Grades"][0], "AddedBy": {"Id": 200}}]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["teacher"] == "Jan Kowalski"
+
+
+async def test_new_homework_assignment_event_seeds_silently_then_fires(hass) -> None:
+    events = async_capture_events(hass, EVENT_NEW_HOMEWORK_ASSIGNMENT)
+    old = {"Id": 1, "Topic": "Stare", "Text": "a", "Teacher": {"Id": 200}, "Date": "2026-09-01", "DueDate": "2026-09-03"}
+    client = build_mock_client(
+        async_get_homework_assignments={"HomeWorkAssignments": [old]},
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Kamila", "LastName": "Hanke"}]},
+        async_get_subjects={"Subjects": [{"Id": 41994, "Name": "Chemia"}]},
+        async_get_timetable={
+            "Timetable": {
+                "2026-09-28": [
+                    [
+                        {
+                            "LessonNo": "1",
+                            "HourFrom": "08:00",
+                            "HourTo": "08:45",
+                            "Subject": {"Id": "41994"},
+                            "Teacher": {"Id": "200"},
+                            "IsCanceled": False,
+                            "IsSubstitutionClass": False,
+                        }
+                    ]
+                ]
+            }
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    await hass.async_block_till_done()
+    assert events == []
+
+    new = {"Id": 2, "Topic": "Lapbook", "Text": "Metale", "Teacher": {"Id": 200}, "Date": "2026-09-30", "DueDate": "2026-10-14"}
+    client.async_get_homework_assignments.return_value = {"HomeWorkAssignments": [old, new]}
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    data = events[0].data
+    assert data["id"] == 2
+    assert data["topic"] == "Lapbook"
+    assert data["due_date"] == "2026-10-14"
+    assert data["teacher"] == "Kamila Hanke"
+    assert data["subject"] == "Chemia"
+    assert data["student"] == "Kacper Zaniewicz"

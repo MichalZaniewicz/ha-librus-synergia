@@ -9,12 +9,13 @@ blueprint:
     Inside your chosen action, use `{{ grade_summary }}` for the ready-made
     summary, or reference the individual fields directly, e.g.
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.value }}`,
+    `{{ trigger.event.data.teacher }}`,
     `{{ trigger.event.data.category }}`, `{{ trigger.event.data.weight }}`,
     `{{ trigger.event.data.comments }}` (a list), `{{ trigger.event.data.date }}`
     or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
     semester / final_proposition / final).
     With "Include details" on, `grade_summary` gets a second line with the
-    category, weight, date and the teacher's comment. If you use this
+    category, weight, date, teacher and the teacher's comment. If you use this
     blueprint for more than one child, `grade_summary` is already prefixed
     with `{{ trigger.event.data.student }}` (the child's name) so one shared
     notification still says whose grade it is.
@@ -24,8 +25,8 @@ blueprint:
     include_details:
       name: Include details
       description: >
-        Add a second line with the grade's category, weight, date and
-        comment (whatever Librus provides for that grade).
+        Add a second line with the grade's category, weight, date, teacher
+        and comment (whatever Librus provides for that grade).
       default: true
       selector:
         boolean: {}
@@ -59,6 +60,7 @@ actions:
           {%- if d.weight is not none and d.counts_to_average is not false -%}{%- set parts = parts + ['waga ' ~ d.weight] -%}{%- endif -%}
           {%- if d.counts_to_average is false -%}{%- set parts = parts + ['nie liczy się do średniej'] -%}{%- endif -%}
           {%- if d.date -%}{%- set parts = parts + [as_timestamp(d.date) | timestamp_custom('%d.%m', true, d.date)] -%}{%- endif -%}
+          {%- if d.teacher -%}{%- set parts = parts + [d.teacher] -%}{%- endif -%}
           {%- if parts %}
         {{ parts | join(' · ') }}{% endif -%}
           {%- if d.comments %}

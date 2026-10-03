@@ -204,6 +204,12 @@ EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
 # events. Carries the resolved subject + category name so an automation
 # can filter e.g. category == "Sprawdzian" without its own lookup.
 EVENT_NEW_HOMEWORK = f"{DOMAIN}_new_homework"
+# Fires for a new real homework assignment ("zadanie domowe", the
+# `HomeWorkAssignments` endpoint) - distinct from EVENT_NEW_HOMEWORK, which
+# despite its name covers the Agenda feed. Carries topic/text/due date, the
+# teacher, and the subject inferred from the teacher (see coordinator.py::
+# infer_subject_id). Seeded silently on the first sync.
+EVENT_NEW_HOMEWORK_ASSIGNMENT = f"{DOMAIN}_new_homework_assignment"
 # Fires for a newly-seen real absence record (excused or not - `excused`
 # in the payload says which). Seeded silently on the first sync.
 EVENT_NEW_ABSENCE = f"{DOMAIN}_new_absence"

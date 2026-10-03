@@ -39,6 +39,7 @@ from librus_synergia.models import (
     FreeDayData,
     GradeCategoryData,
     GradeData,
+    LessonData,
     LibrusData,
     LuckyNumberData,
     MessageData,
@@ -107,6 +108,7 @@ from .const import (
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
+    EVENT_NEW_HOMEWORK_ASSIGNMENT,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
@@ -244,6 +246,33 @@ _ACHIEVEMENT_TITLES: dict[str, str] = {
 }
 
 
+def teacher_subject_ids(timetable: dict[date, list[LessonData]]) -> dict[Any, set[Any]]:
+    """teacher id -> every subject id that teacher has in the cached
+    (current + next week) timetable, counting every teacher of a split
+    lesson."""
+    result: dict[Any, set[Any]] = {}
+    for lessons in timetable.values():
+        for lesson in lessons:
+            if lesson.subject_id is None:
+                continue
+            teacher_ids = lesson.teacher_ids or (
+                (lesson.teacher_id,) if lesson.teacher_id is not None else ()
+            )
+            for teacher_id in teacher_ids:
+                result.setdefault(teacher_id, set()).add(lesson.subject_id)
+    return result
+
+
+def infer_subject_id(teacher_id: Any, by_teacher: dict[Any, set[Any]]) -> Any:
+    """The subject a homework assignment belongs to, inferred from its
+    teacher - `HomeWorkAssignments` has NO Subject field (CONFIRMED live,
+    2026-10-03). Only when that teacher teaches exactly one subject in the
+    timetable; a teacher with two subjects (e.g. Informatyka + WF) gives
+    `None` rather than a guess."""
+    subjects = by_teacher.get(teacher_id) if teacher_id is not None else None
+    return next(iter(subjects)) if subjects and len(subjects) == 1 else None
+
+
 def _grade_event_details(
     grade: GradeData, categories: dict[int, GradeCategoryData]
 ) -> dict[str, Any]:
@@ -272,6 +301,10 @@ def _grade_event_details(
         "semester": grade.semester,
         "kind": kind,
     }
+
+
+def _teacher_name(data: LibrusData, teacher_id: Any) -> str | None:
+    return data.teachers.get(teacher_id) if teacher_id is not None else None
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
@@ -344,6 +377,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # a small fixed vocabulary of milestones (the library knows nothing
         # about achievements). See _check_achievements.
         self._known_achievements: set[str] | None = None
+        # Real homework assignments - the library's ChangeTracker doesn't
+        # cover HomeWorkAssignments, so same seed-then-union set as above.
+        self._known_homework_assignment_ids: set[Any] | None = None
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
         # to raise a repair issue only once a supplementary endpoint has
@@ -782,6 +818,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
         )
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
+        self._fire_new_homework_assignment_events(data)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
         return data
 
@@ -1443,6 +1480,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "subject_id": grade.subject_id,
                     "subject": subject_name(grade.subject_id),
                     "value": grade.value,
+                    "teacher": _teacher_name(data, grade.teacher_id),
                     **_grade_event_details(grade, data.grade_categories),
                 },
             )
@@ -1512,6 +1550,30 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "hour_from": lesson.hour_from,
                 },
             )
+
+    def _fire_new_homework_assignment_events(self, data: LibrusData) -> None:
+        """EVENT_NEW_HOMEWORK_ASSIGNMENT for each newly-seen real homework
+        assignment, seeded silently on the first sync."""
+        by_teacher = teacher_subject_ids(data.timetable)
+        items: dict[Any, dict[str, Any]] = {}
+        for assignment in data.homework_assignments:
+            subject_id = infer_subject_id(assignment.teacher_id, by_teacher)
+            items[assignment.id] = {
+                "topic": assignment.topic,
+                "text": (assignment.text or "")[:500],
+                "date": assignment.date,
+                "due_date": assignment.due_date,
+                "teacher": _teacher_name(data, assignment.teacher_id),
+                "subject_id": subject_id,
+                "subject": data.subjects.get(subject_id) if subject_id is not None else None,
+            }
+        self._known_homework_assignment_ids = self._fire_for_new_ids(
+            EVENT_NEW_HOMEWORK_ASSIGNMENT,
+            self.config_entry.entry_id if self.config_entry else None,
+            self._known_homework_assignment_ids,
+            items,
+            student=data.me.display_name,
+        )
 
     def _check_achievements(
         self,

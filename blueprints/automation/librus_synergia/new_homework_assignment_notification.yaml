@@ -1,0 +1,55 @@
+blueprint:
+  name: "Librus: New Homework Assignment Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone -
+    whenever a new real homework assignment ("zadanie domowe") appears via
+    the `librus_synergia_new_homework_assignment` event. This is the
+    Homework assignments feed, not the Agenda (tests, trips), which has its
+    own New Agenda Entry blueprint.
+
+
+    Inside your chosen action, use `{{ homework_summary }}` for a ready-made
+    message, or the individual fields: `{{ trigger.event.data.topic }}`,
+    `{{ trigger.event.data.text }}`, `{{ trigger.event.data.due_date }}`,
+    `{{ trigger.event.data.teacher }}`, `{{ trigger.event.data.subject }}`.
+    Librus doesn't say which subject an assignment is for, so `subject` is
+    worked out from the teacher and is empty when that teacher teaches more
+    than one subject. If you use this blueprint for more than one child,
+    `homework_summary` is already prefixed with the child's name.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_homework_assignment_notification.yaml
+  input:
+    include_text:
+      name: Include the assignment text
+      description: Add the teacher's instructions (up to 500 characters) below the title.
+      default: true
+      selector:
+        boolean: {}
+    notify_action:
+      name: Notification action
+      description: The action to run for each new homework assignment.
+      selector:
+        action: {}
+
+variables:
+  include_text: !input include_text
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_homework_assignment
+
+actions:
+  - variables:
+      homework_summary: |-
+        {%- set d = trigger.event.data -%}
+        {{ (d.student ~ ': ') if d.student else '' }}Nowe zadanie domowe{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}: {{ d.topic }}
+        {%- if d.due_date %}
+        Termin: {{ d.due_date[8:10] ~ '.' ~ d.due_date[5:7] }}{{ (' · ' ~ d.teacher) if d.teacher else '' }}
+        {%- endif -%}
+        {%- if include_text and d.text %}
+        {{ d.text | trim }}
+        {%- endif -%}
+  - !input notify_action
+
+mode: queued
+max: 10
