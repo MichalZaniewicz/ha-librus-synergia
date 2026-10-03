@@ -428,7 +428,13 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
     assert state.attributes["latest_grade_comments"] == ["Świetna praca"]
     assert state.attributes["subject"] == "Matematyka"
     assert state.attributes["grades"] == [
-        {"value": "4+", "category": "sprawdzian", "date": "2026-09-01", "comments": ["Świetna praca"]}
+        {
+            "value": "4+",
+            "category": "sprawdzian",
+            "date": "2026-09-01",
+            "comments": ["Świetna praca"],
+            "teacher": None,
+        }
     ]
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
 
