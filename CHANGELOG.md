@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0-beta.2
+
+### Fixed
+- **Weekly AI summary: wrong weekdays.** Found on the first live run: the
+  model worked weekdays out from bare dates and got them wrong ("Monday
+  6.10" for a Tuesday). Every date sent to the AI now carries its weekday,
+  and the prompt tells the model to use it as given.
+
 ## 0.10.0-beta.1
 
 ### Added

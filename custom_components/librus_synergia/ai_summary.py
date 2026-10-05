@@ -183,6 +183,8 @@ Rules:
 - If school_days_this_week and school_days_next_week are 0 (holidays), keep every
   section to one or two sentences.
 - Use plain hyphens; never long dashes. Write dates as day.month (e.g. 14.10).
+- Every date in the data carries its weekday (e.g. "2026-10-06 Tue"). When you name
+  a weekday, use exactly that one; never work a weekday out yourself.
 - Write numbers the way {language} does (decimal comma where that is the norm).
 - No diagnoses, no judging the student's character, no comparisons with other
   students. A single weak grade is not a trend.
@@ -258,6 +260,18 @@ def _day(value: str | None) -> date | None:
         return None
 
 
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _dated(value: str | date | None) -> str | None:
+    """"2026-10-06 Tue": the weekday spelled out next to every date.
+
+    Found live: given bare dates, the model worked weekdays out by itself
+    and got them wrong ("na poniedziałek 6.10" for a Tuesday)."""
+    day = value if isinstance(value, date) else _day(value)
+    return f"{day.isoformat()} {_WEEKDAYS[day.weekday()]}" if day else None
+
+
 def _cut(text: str | None, limit: int = TEXT_LIMIT) -> str | None:
     text = " ".join((text or "").split())
     if not text:
@@ -311,7 +325,7 @@ def build_context(
         grades.append(
             _compact(
                 {
-                    "date": (grade.add_date or "")[:10] or None,
+                    "date": _dated(grade.add_date),
                     "subject": subject(grade.subject_id),
                     "value": grade.value,
                     "category": category.name if category else None,
@@ -366,7 +380,7 @@ def build_context(
         absences.append(
             _compact(
                 {
-                    "date": day.isoformat() if day else None,
+                    "date": _dated(day),
                     "lesson_no": record.lesson_no,
                     "subject": subject(subject_id),
                     "type": kind.name,
@@ -377,7 +391,7 @@ def build_context(
     notes = [
         _compact(
             {
-                "date": (note.date or "")[:10] or None,
+                "date": _dated(note.date),
                 "sentiment": note.sentiment,
                 "category": data.note_categories.get(note.category_id)
                 if note.category_id is not None
@@ -399,7 +413,7 @@ def build_context(
     agenda = [
         _compact(
             {
-                "date": item.date[:10] if item.date else None,
+                "date": _dated(item.date),
                 "time": item.time_from,
                 "subject": subject(item.subject_id),
                 "category": data.homework_categories.get(item.category_id)
@@ -414,7 +428,7 @@ def build_context(
     homework_due = [
         _compact(
             {
-                "due": item.due_date[:10] if item.due_date else None,
+                "due": _dated(item.due_date),
                 "subject": subject(infer_subject_id(item.teacher_id, by_teacher)),
                 "teacher": teacher(item.teacher_id),
                 "topic": _cut(item.topic, 120),
@@ -439,7 +453,7 @@ def build_context(
                 timetable_changes.append(
                     _compact(
                         {
-                            "date": day.isoformat(),
+                            "date": _dated(day),
                             "lesson_no": lesson.lesson_no,
                             "subject": subject(lesson.subject_id),
                             "change": "cancelled" if lesson.is_canceled else "substitution",
@@ -462,7 +476,7 @@ def build_context(
         "class": f"{school_class.number or ''}{school_class.symbol}".strip()
         if school_class
         else None,
-        "today": today.isoformat(),
+        "today": _dated(today),
         "this_week": {"from": week_from.isoformat(), "to": today.isoformat()},
         "school_days_this_week": school_days_this_week,
         "average_mode": "weighted" if weighted else "arithmetic",
@@ -511,7 +525,7 @@ def build_context(
         news = [
             _compact(
                 {
-                    "date": (message.send_date or "")[:10] or None,
+                    "date": _dated(message.send_date),
                     "kind": "message",
                     "from": message.sender_name,
                     "topic": _cut(message.topic, 120),
@@ -523,7 +537,7 @@ def build_context(
         ] + [
             _compact(
                 {
-                    "date": (notice.start_date or notice.creation_date or "")[:10] or None,
+                    "date": _dated(notice.start_date or notice.creation_date),
                     "kind": "announcement",
                     "topic": _cut(notice.subject, 120),
                     "text": _cut(notice.content, 500),

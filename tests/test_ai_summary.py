@@ -144,6 +144,8 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
 
     assert context["this_week"] == {"from": "2026-09-28", "to": "2026-10-04"}
     assert [g["value"] for g in context["grades"]] == ["6"]
+    assert context["grades"][0]["date"] == "2026-10-01 Thu"
+    assert context["today"] == "2026-10-04 Sun"
     assert context["grades"][0]["subject"] == "Geografia"
     assert context["grades"][0]["category"] == "Sprawdzian"
     assert context["averages"] == [{"subject": "Geografia", "now": 5.0, "week_ago": 4.0}]
@@ -153,6 +155,7 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
     assert attendance["open_unexcused"] == 1
     assert [item["content"] for item in context["next_week"]["agenda"]] == ["Działy 1-2"]
     assert context["next_week"]["agenda"][0]["subject"] == "Matematyka"
+    assert context["next_week"]["agenda"][0]["date"] == "2026-10-06 Tue"
     assert "school_news" not in context
     assert not is_empty_week(context)
 
