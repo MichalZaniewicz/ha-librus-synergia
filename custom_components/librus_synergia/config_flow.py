@@ -29,6 +29,8 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -51,8 +53,17 @@ from librus_synergia import (
 )
 
 from .const import (
+    AI_AUDIENCE_PARENT,
+    AI_AUDIENCE_STUDENT,
+    AI_OPTION_KEYS,
     AVERAGE_MODE_ARITHMETIC,
     AVERAGE_MODE_WEIGHTED,
+    CONF_AI_AUDIENCE,
+    CONF_AI_CONTEXT,
+    CONF_AI_INCLUDE_MESSAGES,
+    CONF_AI_TASK_ENTITY,
+    CONF_AI_TIME,
+    CONF_AI_WEEKDAY,
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
@@ -65,6 +76,10 @@ from .const import (
     CONF_QUIET_HOURS_START,
     CONF_SESSION_LOGGED_IN_AT,
     CONF_STUDENT_NUMBER,
+    DEFAULT_AI_AUDIENCE,
+    DEFAULT_AI_INCLUDE_MESSAGES,
+    DEFAULT_AI_TIME,
+    DEFAULT_AI_WEEKDAY,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
@@ -301,14 +316,29 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class LibrusSynergiaOptionsFlow(OptionsFlow):
-    """Poll interval + which optional feature groups to fetch."""
+    """Options menu: general settings, and the weekly AI summary."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
+        """Show the options menu."""
+        return self.async_show_menu(step_id="init", menu_options=["settings", "ai_summary"])
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Poll interval + which optional feature groups to fetch.
+
+        Saving replaces every general setting (a cleared optional field like
+        the student number must disappear) but keeps the AI summary's own
+        options, which live on the other menu step."""
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            ai_options = {
+                key: value
+                for key, value in self.config_entry.options.items()
+                if key in AI_OPTION_KEYS
+            }
+            return self.async_create_entry(data={**ai_options, **user_input})
 
         options = self.config_entry.options
         schema = vol.Schema(
@@ -388,4 +418,73 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 ): TimeSelector(),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="settings", data_schema=schema)
+
+    async def async_step_ai_summary(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick the ai_task entity for the weekly AI summary (empty = off),
+        who it is written to, when it runs and what goes into it."""
+        if "ai_task" not in self.hass.config.components:
+            return self.async_abort(reason="no_ai_task")
+        options = self.config_entry.options
+        if user_input is not None:
+            general = {
+                key: value for key, value in options.items() if key not in AI_OPTION_KEYS
+            }
+            # Spelled out: a cleared optional field is simply missing from
+            # user_input and must not keep its old value.
+            ai_options = {
+                CONF_AI_TASK_ENTITY: user_input.get(CONF_AI_TASK_ENTITY),
+                CONF_AI_AUDIENCE: user_input.get(CONF_AI_AUDIENCE, DEFAULT_AI_AUDIENCE),
+                CONF_AI_WEEKDAY: user_input.get(CONF_AI_WEEKDAY, DEFAULT_AI_WEEKDAY),
+                CONF_AI_TIME: user_input.get(CONF_AI_TIME, DEFAULT_AI_TIME),
+                CONF_AI_CONTEXT: (user_input.get(CONF_AI_CONTEXT) or "").strip(),
+                CONF_AI_INCLUDE_MESSAGES: user_input.get(
+                    CONF_AI_INCLUDE_MESSAGES, DEFAULT_AI_INCLUDE_MESSAGES
+                ),
+            }
+            return self.async_create_entry(
+                data={**general, **{k: v for k, v in ai_options.items() if v not in (None, "")}}
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_AI_TASK_ENTITY,
+                    description={"suggested_value": options.get(CONF_AI_TASK_ENTITY)},
+                ): EntitySelector(EntitySelectorConfig(domain="ai_task")),
+                vol.Required(
+                    CONF_AI_AUDIENCE,
+                    default=options.get(CONF_AI_AUDIENCE, DEFAULT_AI_AUDIENCE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[AI_AUDIENCE_PARENT, AI_AUDIENCE_STUDENT],
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_AI_AUDIENCE,
+                    )
+                ),
+                vol.Required(
+                    CONF_AI_WEEKDAY,
+                    default=options.get(CONF_AI_WEEKDAY, DEFAULT_AI_WEEKDAY),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[str(day) for day in range(1, 8)],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key=CONF_AI_WEEKDAY,
+                    )
+                ),
+                vol.Required(
+                    CONF_AI_TIME, default=options.get(CONF_AI_TIME, DEFAULT_AI_TIME)
+                ): TimeSelector(),
+                vol.Required(
+                    CONF_AI_INCLUDE_MESSAGES,
+                    default=options.get(CONF_AI_INCLUDE_MESSAGES, DEFAULT_AI_INCLUDE_MESSAGES),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_AI_CONTEXT,
+                    description={"suggested_value": options.get(CONF_AI_CONTEXT)},
+                ): TextSelector(TextSelectorConfig(multiline=True)),
+            }
+        )
+        return self.async_show_form(step_id="ai_summary", data_schema=schema)

@@ -43,6 +43,33 @@
     "step": {
       "init": {
         "title": "Librus Synergia options",
+        "menu_options": {
+          "settings": "Settings",
+          "ai_summary": "Weekly AI summary"
+        }
+      },
+      "ai_summary": {
+        "title": "Weekly AI summary",
+        "description": "Once a week, an AI model of your choice writes a summary of the school week: grades, attendance, behaviour and the week ahead. It uses Home Assistant's AI Task - set up any AI provider (Google Gemini, OpenAI, Anthropic, a local Ollama...) first. Only data this integration already has is sent, to the provider you pick.",
+        "data": {
+          "ai_task_entity": "AI model",
+          "ai_audience": "Written to",
+          "ai_weekday": "Day",
+          "ai_time": "Time",
+          "ai_include_messages": "Include messages and announcements",
+          "ai_extra_context": "Your notes for the AI"
+        },
+        "data_description": {
+          "ai_task_entity": "The AI Task entity to use. Leave empty to turn the feature off.",
+          "ai_audience": "The parent (third person, what you can do) or the student (written to them directly, encouraging).",
+          "ai_weekday": "The summary covers the 7 days up to this day and previews the 7 days after it.",
+          "ai_time": "Local time of the automatic run. A run missed because Home Assistant was off is made up within 2 days.",
+          "ai_include_messages": "Off by default: private messages and school announcements are then never sent to the AI provider. On adds a \"From the school\" section.",
+          "ai_extra_context": "Optional, e.g. \"Eighth-grade exam this year, chemistry is the weaker subject\"."
+        }
+      },
+      "settings": {
+        "title": "Librus Synergia options",
         "data": {
           "scan_interval": "Poll interval (minutes)",
           "messages_enabled": "Fetch private messages (Wiadomości)",
@@ -70,9 +97,29 @@
           "quiet_hours_end": "Only used while quiet hours are enabled above. Can be earlier than the start time (e.g. 23:00 -> 06:00) to span midnight."
         }
       }
+    },
+    "abort": {
+      "no_ai_task": "The AI Task integration is not available. Set up an AI provider (Google Gemini, OpenAI, Anthropic, Ollama...) in Home Assistant 2025.8 or newer first."
     }
   },
   "selector": {
+    "ai_audience": {
+      "options": {
+        "parent": "Parent",
+        "student": "Student"
+      }
+    },
+    "ai_weekday": {
+      "options": {
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday",
+        "7": "Sunday"
+      }
+    },
     "average_mode": {
       "options": {
         "weighted": "Weighted",
@@ -99,6 +146,7 @@
   },
   "entity": {
     "sensor": {
+      "weekly_summary": { "name": "Weekly summary" },
       "overall_average": { "name": "Overall grade average" },
       "subject_average": { "name": "{subject} average" },
       "attendance": { "name": "Absences" },
@@ -128,6 +176,12 @@
           "diamond": "Diamond"
         }
       }
+    },
+    "button": {
+      "weekly_summary_generate": { "name": "Generate weekly summary" }
+    },
+    "switch": {
+      "weekly_summary_enabled": { "name": "Automatic weekly summary" }
     },
     "calendar": {
       "timetable": { "name": "Timetable" },

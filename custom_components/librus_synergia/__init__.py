@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import time, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
@@ -13,10 +13,21 @@ from homeassistant.helpers.device_registry import DeviceInfo
 
 from librus_synergia import LibrusApiClient, LibrusSessionData
 
+from .ai_summary import LibrusWeeklySummary
 from .const import (
+    CONF_AI_AUDIENCE,
+    CONF_AI_CONTEXT,
+    CONF_AI_INCLUDE_MESSAGES,
+    CONF_AI_TASK_ENTITY,
+    CONF_AI_TIME,
+    CONF_AI_WEEKDAY,
     CONF_COOKIES,
     CONF_SESSION_LOGGED_IN_AT,
     CORE_ENDPOINT_LABELS,
+    DEFAULT_AI_AUDIENCE,
+    DEFAULT_AI_INCLUDE_MESSAGES,
+    DEFAULT_AI_TIME,
+    DEFAULT_AI_WEEKDAY,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MISC_DEGRADABLE_ENDPOINT_LABELS,
@@ -91,6 +102,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+
+    # The weekly AI summary exists only while an ai_task entity is picked in
+    # the options (see ai_summary.py) - its sensor/button/switch follow it.
+    if ai_task_entity := entry.options.get(CONF_AI_TASK_ENTITY):
+        try:
+            at = time.fromisoformat(entry.options.get(CONF_AI_TIME, DEFAULT_AI_TIME))
+        except ValueError:
+            at = time.fromisoformat(DEFAULT_AI_TIME)
+        summary = LibrusWeeklySummary(
+            hass,
+            entry,
+            coordinator,
+            ai_task_entity=ai_task_entity,
+            audience=entry.options.get(CONF_AI_AUDIENCE, DEFAULT_AI_AUDIENCE),
+            weekday=int(entry.options.get(CONF_AI_WEEKDAY, DEFAULT_AI_WEEKDAY)),
+            at=at,
+            extra_context=entry.options.get(CONF_AI_CONTEXT),
+            include_news=entry.options.get(
+                CONF_AI_INCLUDE_MESSAGES, DEFAULT_AI_INCLUDE_MESSAGES
+            ),
+        )
+        coordinator.weekly_summary = summary
+        await summary.async_start()
+        entry.async_on_unload(summary.async_stop)
 
     options_at_setup = dict(entry.options)
 

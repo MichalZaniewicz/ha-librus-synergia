@@ -91,13 +91,42 @@ Home Assistant theme and language (English, Polish).
 | `sensor` | Good behaviour streak | Days since the last negative behaviour note, same fallback as Attendance streak |
 | `sensor` | Good grades streak | Consecutive most-recent numeric grades of 4 or better - a non-numeric mark (`bz`/`np`/...) doesn't break it, only an actual low grade does |
 | `sensor` | Rank | A cosmetic Bronze/Silver/Gold/Diamond tier derived from your overall average (`device_class: enum`) - `points_to_next_tier` in attributes shows how much more average you need for the next one up |
+| `sensor` | Weekly summary | Only with the [weekly AI summary](#weekly-ai-summary) set up. The AI's headline for the week; `status`, `sections` (grades/attendance/behaviour/next_week, plus school_news if enabled - each `{status, text}`), `advice`, `warning`, `week_from`/`week_to`, `next_run` and `error` in attributes. Comes with a **Generate weekly summary** button and an **Automatic weekly summary** switch |
 | `calendar` | Timetable | Lesson plan, including known cancellations/substitutions |
 | `calendar` | Agenda | Tests, trips, parent meetings and other school events, prefixed with their category (e.g. "[Sprawdzian] ...") when known |
 | `calendar` | Free days | The whole school year's holidays/breaks |
 
 New grades, announcements, behaviour notices, messages, Agenda entries, homework assignments and absences fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`, `librus_synergia_new_homework` (Agenda), `librus_synergia_new_homework_assignment` (real homework: topic, text, due date, teacher, subject), `librus_synergia_new_absence`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. `librus_synergia_achievement_unlocked` fires for a handful of objective, data-derived gamification milestones (first six, good-grade streaks of 5/10/20, and 7/30/90-day streaks without an absence or a negative note) - deliberately not an invented points system, every one of these is a plain, honest fact anyone could verify by hand. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/homework/timetable events include the resolved subject/teacher/category name alongside the raw id, so an automation doesn't need its own lookup. `librus_synergia_new_grade` also carries the grade's details: `teacher`, `category`, `weight`, `counts_to_average`, `comments` (list), `date`, `semester` and `kind` (`normal` / `semester_proposition` / `semester` / `final_proposition` / `final`). Ready-made [blueprints](#automation-blueprints) wrap these for you.
 
-The integration's **Configure** option sets the poll interval (default 20 minutes), whether the average sensors show the weighted or the arithmetic average, and whether to fetch private messages at all - turn *Fetch private messages* off if your school doesn't use Wiadomości or you don't want those extra requests (the Unread messages sensor then reports `unavailable`).
+The integration's **Configure** menu has two parts. *Settings* sets the poll interval (default 20 minutes), whether the average sensors show the weighted or the arithmetic average, and whether to fetch private messages at all - turn *Fetch private messages* off if your school doesn't use Wiadomości or you don't want those extra requests (the Unread messages sensor then reports `unavailable`). *Weekly AI summary* sets up the [weekly AI summary](#weekly-ai-summary).
+
+### Weekly AI summary
+
+Once a week, an AI model writes a summary of the school week, split into
+sections: **grades** (what came in, how the averages moved), **attendance**,
+**behaviour**, **next week** (tests, homework due, cancelled lessons and
+substitutions, free days) and, if you allow it, **from the school** (the
+important bits of messages and announcements). It ends with 2-4 concrete
+to-dos and a warning only when something genuinely needs attention.
+
+- No API key in this integration: it uses Home Assistant's
+  [AI Task](https://www.home-assistant.io/integrations/ai_task/) (2025.8+).
+  Set up any AI provider first (Google Gemini, OpenAI, Anthropic, a local
+  Ollama...), then pick it under **Configure -> Weekly AI summary**.
+- Pick who it is written to: the **parent** (third person, what you can do)
+  or the **student** (written to them directly, encouraging).
+- Day and time are yours to set (default Sunday 18:00). The summary covers
+  the 7 days up to that day and looks 7 days ahead. A run missed because
+  Home Assistant was off is made up within 2 days; a week with no lessons and
+  nothing coming up is skipped. The **Generate weekly summary** button writes
+  one right away; the **Automatic weekly summary** switch pauses the
+  schedule.
+- Only data the integration already has is sent, and only to the provider
+  you picked - no extra Librus requests. Messages and announcements are
+  **not** sent unless you turn that on. Optional notes ("eighth-grade exam
+  this year") are added to the prompt.
+- The [Weekly AI Summary Report](#automation-blueprints) blueprint sends it
+  to your phone.
 
 ### Automation blueprints
 
@@ -107,7 +136,7 @@ the events above so you don't have to write the YAML yourself - each just asks f
 *action* (e.g. "Send a notification"):
 
 <details>
-<summary><b>Show all 19 blueprints</b></summary>
+<summary><b>Show all 20 blueprints</b></summary>
 
 | Blueprint | What it does | |
 | --- | --- | --- |
@@ -126,6 +155,7 @@ the events above so you don't have to write the YAML yourself - each just asks f
 | [Morning Briefing](blueprints/automation/librus_synergia/morning_briefing_notification.yaml) | At a set time on school days, builds a `{{ briefing_text }}` (first lesson + room, today's lucky number, any test within 3 days) and runs your action - speak it, or notify. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fmorning_briefing_notification.yaml) |
 | [Low Grade Alert](blueprints/automation/librus_synergia/low_grade_notification.yaml) | Runs your action only for a new grade at or below a threshold you set (default 2) - non-numeric marks are ignored. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Flow_grade_notification.yaml) |
 | [Subject Average Dropped](blueprints/automation/librus_synergia/subject_average_drop_notification.yaml) | Runs your action when a subject-average sensor crosses below a value you set (default 3.5) - once on the way down, again only after it recovers. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fsubject_average_drop_notification.yaml) |
+| [Weekly AI Summary Report](blueprints/automation/librus_synergia/weekly_ai_summary_notification.yaml) | Sends the weekly AI summary when it is written (`librus_synergia_weekly_summary`) - short (headline, section statuses, to-dos) or full text, pick the sections, optionally only for weeks that need attention. Needs the weekly AI summary set up under **Configure**. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fweekly_ai_summary_notification.yaml) |
 | [Weekly Digest](blueprints/automation/librus_synergia/weekly_digest_notification.yaml) | Every Sunday at a set time, builds a `{{ digest_text }}` (tests due in the next 7 days, optionally homework due and any unexcused absence count) and runs your action. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fweekly_digest_notification.yaml) |
 | [Homework Due Tomorrow](blueprints/automation/librus_synergia/homework_due_tomorrow_notification.yaml) | At a set time each day, runs your action with a `{{ homework_summary }}` only when a real Homework assignment ("zadanie domowe") is due the next day - silent otherwise. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Fhomework_due_tomorrow_notification.yaml) |
 | [Time to Leave](blueprints/automation/librus_synergia/time_to_leave_notification.yaml) | Runs your action once, right when it's time to leave for the next lesson (its start time minus your travel time), checked every minute for accuracy regardless of your poll interval. | [![Import](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FMichalZaniewicz%2Fha-librus-synergia%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Flibrus_synergia%2Ftime_to_leave_notification.yaml) |

@@ -11,6 +11,12 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
+    CONF_AI_AUDIENCE,
+    CONF_AI_CONTEXT,
+    CONF_AI_INCLUDE_MESSAGES,
+    CONF_AI_TASK_ENTITY,
+    CONF_AI_TIME,
+    CONF_AI_WEEKDAY,
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
@@ -265,6 +271,15 @@ async def test_reconfigure_flow_error_mapping(hass) -> None:
     assert result["errors"] == {"base": "invalid_auth"}
 
 
+async def _open_settings(hass, entry):
+    """Options open on a menu; general settings are its first entry."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
+
+
 async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> None:
     """The other 4 feature toggles aren't touched here, so voluptuous fills
     them in from their own (all-True) defaults - options ends up with every
@@ -272,7 +287,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
     entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_settings(hass, entry)
     assert result["type"] is FlowResultType.FORM
 
     result = await hass.config_entries.options.async_configure(
@@ -298,7 +313,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
     entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_settings(hass, entry)
     assert result["type"] is FlowResultType.FORM
 
     result = await hass.config_entries.options.async_configure(
@@ -339,7 +354,7 @@ async def test_options_flow_student_number_is_optional_and_round_trips(hass) -> 
     entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_settings(hass, entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {CONF_SCAN_INTERVAL: 20, CONF_MESSAGES_ENABLED: True, CONF_STUDENT_NUMBER: 7},
@@ -349,10 +364,83 @@ async def test_options_flow_student_number_is_optional_and_round_trips(hass) -> 
 
     # Submitted again without it (e.g. the user cleared the field) - options
     # is fully replaced, so it should genuinely disappear, not linger.
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_settings(hass, entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {CONF_SCAN_INTERVAL: 20, CONF_MESSAGES_ENABLED: True},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert CONF_STUDENT_NUMBER not in entry.options
+
+
+async def test_options_ai_summary_aborts_without_ai_task(hass) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "ai_summary"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_ai_task"
+
+
+async def test_options_ai_summary_and_settings_keep_each_other(hass) -> None:
+    """Each menu step only replaces its own keys."""
+    hass.config.components.add("ai_task")
+    entry = MockConfigEntry(
+        domain=DOMAIN, data=USER_INPUT, options={CONF_SCAN_INTERVAL: 30, CONF_STUDENT_NUMBER: 4}
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "ai_summary"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_AI_TASK_ENTITY: "ai_task.google",
+            CONF_AI_AUDIENCE: "student",
+            CONF_AI_WEEKDAY: "5",
+            CONF_AI_TIME: "16:30:00",
+            CONF_AI_INCLUDE_MESSAGES: True,
+            CONF_AI_CONTEXT: "  egzamin w tym roku  ",
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {
+        CONF_SCAN_INTERVAL: 30,
+        CONF_STUDENT_NUMBER: 4,
+        CONF_AI_TASK_ENTITY: "ai_task.google",
+        CONF_AI_AUDIENCE: "student",
+        CONF_AI_WEEKDAY: "5",
+        CONF_AI_TIME: "16:30:00",
+        CONF_AI_INCLUDE_MESSAGES: True,
+        CONF_AI_CONTEXT: "egzamin w tym roku",
+    }
+
+    # Saving the general settings keeps the AI summary options.
+    result = await _open_settings(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_SCAN_INTERVAL: 45, CONF_MESSAGES_ENABLED: True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == 45
+    assert CONF_STUDENT_NUMBER not in entry.options
+    assert entry.options[CONF_AI_TASK_ENTITY] == "ai_task.google"
+    assert entry.options[CONF_AI_AUDIENCE] == "student"
+
+    # Clearing the AI model turns the feature off.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "ai_summary"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_AI_AUDIENCE: "parent", CONF_AI_WEEKDAY: "7", CONF_AI_TIME: "18:00:00"},
+    )
+    assert CONF_AI_TASK_ENTITY not in entry.options
+    assert CONF_AI_CONTEXT not in entry.options
+    assert entry.options[CONF_SCAN_INTERVAL] == 45

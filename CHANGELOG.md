@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.10.0-beta.1
+
+### Added
+- **Weekly AI summary.** Once a week (day and time of your choice, default
+  Sunday 18:00) an AI model writes a summary of the school week: grades and
+  how the averages moved, attendance, behaviour, and what is coming next
+  week (tests, homework due, timetable changes, free days), plus 2-4 to-dos
+  and a warning only when something needs attention. It runs through Home
+  Assistant's AI Task, so there is no API key here - set up any AI provider
+  (Google Gemini, OpenAI, Anthropic, a local Ollama...) and pick it under
+  **Configure -> Weekly AI summary**. Choose who it is written to: the
+  parent or the student. Private messages and announcements are only sent
+  to the AI if you turn that on (off by default). Only data the
+  integration already has is used - no extra Librus requests. A week with
+  no lessons and nothing coming up is skipped, so holidays cost nothing.
+  - New entities, only while the feature is set up: **Weekly summary**
+    sensor (headline as the state, sections/advice/warning in attributes),
+    **Generate weekly summary** button and **Automatic weekly summary**
+    switch.
+  - New `librus_synergia_weekly_summary` event and **Weekly AI Summary
+    Report** blueprint (short or full report, choose sections, only for
+    weeks that need attention if you like).
+
+### Changed
+- **Configure** now opens a menu: *Settings* (everything that was there
+  before) and *Weekly AI summary*.
+
 ## 0.9.2
 
 ### Added

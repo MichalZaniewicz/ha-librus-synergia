@@ -1,0 +1,165 @@
+blueprint:
+  name: "Librus: Weekly AI Summary Report"
+  description: >
+    Sends the weekly AI summary as soon as it is written (the
+    `librus_synergia_weekly_summary` event): on the day and time set under
+    the integration's Configure -> Weekly AI summary, or when you press
+    "Generate weekly summary". Needs the weekly AI summary turned on there.
+
+
+    Inside your action, use `{{ title }}` (e.g. "Kacper - Weekly summary: Good")
+    and `{{ message }}` (the report in the format you pick below), or
+    `{{ message_short }}` / `{{ message_full }}` for a fixed format. Section
+    names and statuses are in your Home Assistant language. With more than
+    one child, the title already says whose summary it is.
+
+
+    "Short" is the headline, one status line per section, the warning and the
+    to-dos for the coming week, which fits a phone notification. "Full" adds
+    every section's text; use it with a persistent notification, an e-mail or
+    a messenger that shows long text.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/weekly_ai_summary_notification.yaml
+  input:
+    report_action:
+      name: Action
+      description: >
+        What to do with the report, e.g. "Send a notification" with
+        `{{ title }}` as the title and `{{ message }}` as the message.
+      default: []
+      selector:
+        action: {}
+    detail:
+      name: Report format
+      description: What `{{ message }}` contains.
+      default: short
+      selector:
+        select:
+          options:
+            - label: Short (headline, section statuses, warning, to-dos)
+              value: short
+            - label: Full (adds the text of every section)
+              value: full
+    sections:
+      name: Sections
+      description: >
+        Which sections the report includes. "From the school" only exists
+        when messages and announcements are included in the summary.
+      default: [grades, attendance, behaviour, next_week, school_news]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Grades
+              value: grades
+            - label: Attendance
+              value: attendance
+            - label: Behaviour
+              value: behaviour
+            - label: Next week
+              value: next_week
+            - label: From the school
+              value: school_news
+    include_advice:
+      name: Include the to-dos
+      default: true
+      selector:
+        boolean: {}
+    statuses:
+      name: Send only for these weeks
+      description: >
+        The AI's overall call for the week. Leave all three to get a report
+        every week, or keep only "Needs attention" to hear from it only when
+        something is up.
+      default: [good, ok, caution]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Good
+              value: good
+            - label: OK
+              value: ok
+            - label: Needs attention
+              value: caution
+    include_manual:
+      name: Also send when generated from the button
+      description: Off to send only the scheduled weekly report.
+      default: true
+      selector:
+        boolean: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_weekly_summary
+
+variables:
+  wanted_sections: !input sections
+  wanted_statuses: !input statuses
+  include_advice: !input include_advice
+  include_manual: !input include_manual
+  detail: !input detail
+  section_order: [grades, attendance, behaviour, next_week, school_news]
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (include_manual or not trigger.event.data.manual)
+         and (trigger.event.data.status is none
+              or trigger.event.data.status in wanted_statuses) }}
+
+actions:
+  - variables:
+      title: >-
+        {%- set d = trigger.event.data -%}
+        {{ (d.student.split(' ')[0] ~ ' - ') if d.student else '' }}{{ d.labels.title }}{% if d.status %}: {{ d.labels.statuses[d.status] }}{% endif %}
+      message_short: >-
+        {%- set d = trigger.event.data -%}
+        {%- set dots = {'good': '🟢', 'ok': '🔵', 'caution': '🟡'} -%}
+        {%- set ns = namespace(lines=[d.headline or '']) -%}
+        {%- set secs = d.sections or {} -%}
+        {%- set shown = namespace(any=false) -%}
+        {%- for key in section_order -%}
+          {%- if key in wanted_sections and key in secs -%}
+            {%- if not shown.any -%}{%- set ns.lines = ns.lines + [''] -%}{%- set shown.any = true -%}{%- endif -%}
+            {%- set s = secs[key] -%}
+            {%- set ns.lines = ns.lines + [dots.get(s.status, '⚪') ~ ' ' ~ d.labels.sections[key]
+                ~ (': ' ~ d.labels.statuses[s.status] if s.status else '')] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if d.warning -%}
+          {%- set ns.lines = ns.lines + ['', '⚠️ ' ~ d.warning] -%}
+        {%- endif -%}
+        {%- if include_advice and d.advice -%}
+          {%- set ns.lines = ns.lines + ['', d.labels.advice ~ ':'] -%}
+          {%- for a in d.advice -%}{%- set ns.lines = ns.lines + ['- ' ~ a] -%}{%- endfor -%}
+        {%- endif -%}
+        {{ ns.lines | join('\n') }}
+      message_full: >-
+        {%- set d = trigger.event.data -%}
+        {%- set dots = {'good': '🟢', 'ok': '🔵', 'caution': '🟡'} -%}
+        {%- set ns = namespace(lines=[d.headline or '']) -%}
+        {%- set secs = d.sections or {} -%}
+        {%- if d.warning -%}
+          {%- set ns.lines = ns.lines + ['', '⚠️ ' ~ d.warning] -%}
+        {%- endif -%}
+        {%- for key in section_order -%}
+          {%- if key in wanted_sections and key in secs -%}
+            {%- set s = secs[key] -%}
+            {%- set ns.lines = ns.lines + ['', dots.get(s.status, '⚪') ~ ' ' ~ d.labels.sections[key]
+                ~ (' (' ~ d.labels.statuses[s.status] ~ ')' if s.status else ''), s.text] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if not secs and d.summary -%}
+          {%- set ns.lines = ns.lines + ['', d.summary] -%}
+        {%- endif -%}
+        {%- if include_advice and d.advice -%}
+          {%- set ns.lines = ns.lines + ['', d.labels.advice ~ ':'] -%}
+          {%- for a in d.advice -%}{%- set ns.lines = ns.lines + ['- ' ~ a] -%}{%- endfor -%}
+        {%- endif -%}
+        {{ ns.lines | join('\n') }}
+      message: "{{ message_full if detail == 'full' else message_short }}"
+  - sequence: !input report_action
+
+mode: queued
+max: 5

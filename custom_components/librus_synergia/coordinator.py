@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD
@@ -118,6 +118,9 @@ from .const import (
     OPTIONAL_ENDPOINT_LABELS,
     REFERENCE_DATA_ENDPOINT_LABELS,
 )
+
+if TYPE_CHECKING:
+    from .ai_summary import LibrusWeeklySummary
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -303,12 +306,58 @@ def _grade_event_details(
     }
 
 
+def calculate_average(
+    grades: list[GradeData],
+    categories: dict[int, GradeCategoryData],
+    *,
+    subject_id: int | None = None,
+    semester: int | None = None,
+    weighted: bool = True,
+) -> float | None:
+    """Grade average, excluding semester/final entries (proposed OR
+    actual - see GradeData.is_semester/is_final's own docstring for why
+    the actual ones matter too, not just the propositions) and
+    categories marked as not counting toward the average. Weighted by the
+    grade category's weight unless `weighted=False` (plain arithmetic
+    mean of the same counted grades). `semester` restricts to grades from
+    that semester when given."""
+    running = 0.0
+    weight_total = 0.0
+    for grade in grades:
+        if (
+            grade.is_semester_proposition
+            or grade.is_final_proposition
+            or grade.is_semester
+            or grade.is_final
+        ):
+            continue
+        if subject_id is not None and grade.subject_id != subject_id:
+            continue
+        if semester is not None and grade.semester != semester:
+            continue
+        category = categories.get(grade.category_id) if grade.category_id is not None else None
+        if category is not None and not category.count_to_average:
+            continue
+        numeric = parse_grade_value(grade.value)
+        if numeric is None:
+            continue
+        weight = (category.weight if category is not None else 1) if weighted else 1
+        running += numeric * weight
+        weight_total += weight
+    if weight_total <= 0:
+        return None
+    return round(running / weight_total, 2)
+
+
 def _teacher_name(data: LibrusData, teacher_id: Any) -> str | None:
     return data.teachers.get(teacher_id) if teacher_id is not None else None
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     """Fetches everything Librus Synergia exposes for one student."""
+
+    # Set by async_setup_entry while the weekly AI summary is configured.
+    weekly_summary: LibrusWeeklySummary | None = None
 
     def __init__(
         self,

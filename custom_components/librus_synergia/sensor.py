@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import PERCENTAGE, UnitOfTime
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -29,8 +30,10 @@ from librus_synergia.models import (
 )
 
 from . import LibrusConfigEntry, librus_device_info
+from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
 from .const import (
     ATTR_SUBJECT_ID,
+    DOMAIN,
     AVERAGE_MODE_ARITHMETIC,
     AVERAGE_MODE_WEIGHTED,
     CONF_ANNOUNCEMENTS_ENABLED,
@@ -46,55 +49,13 @@ from .const import (
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     days_since_last_absence,
+    calculate_average as _calculate_average,
     days_since_last_negative_note,
     good_grade_streak,
     infer_subject_id,
     parse_grade_value,
     teacher_subject_ids,
 )
-
-
-def _calculate_average(
-    grades: list[GradeData],
-    categories: dict[int, GradeCategoryData],
-    *,
-    subject_id: int | None = None,
-    semester: int | None = None,
-    weighted: bool = True,
-) -> float | None:
-    """Grade average, excluding semester/final entries (proposed OR
-    actual - see GradeData.is_semester/is_final's own docstring for why
-    the actual ones matter too, not just the propositions) and
-    categories marked as not counting toward the average. Weighted by the
-    grade category's weight unless `weighted=False` (plain arithmetic
-    mean of the same counted grades). `semester` restricts to grades from
-    that semester when given."""
-    running = 0.0
-    weight_total = 0.0
-    for grade in grades:
-        if (
-            grade.is_semester_proposition
-            or grade.is_final_proposition
-            or grade.is_semester
-            or grade.is_final
-        ):
-            continue
-        if subject_id is not None and grade.subject_id != subject_id:
-            continue
-        if semester is not None and grade.semester != semester:
-            continue
-        category = categories.get(grade.category_id) if grade.category_id is not None else None
-        if category is not None and not category.count_to_average:
-            continue
-        numeric = parse_grade_value(grade.value)
-        if numeric is None:
-            continue
-        weight = (category.weight if category is not None else 1) if weighted else 1
-        running += numeric * weight
-        weight_total += weight
-    if weight_total <= 0:
-        return None
-    return round(running / weight_total, 2)
 
 
 def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> GradeData | None:
@@ -293,6 +254,15 @@ async def async_setup_entry(
             LibrusRankSensor(coordinator, entry),
         ]
     )
+
+    # The weekly AI summary exists only while an ai_task entity is picked in
+    # the options.
+    if coordinator.weekly_summary is not None:
+        async_add_entities([LibrusWeeklySummarySensor(coordinator.weekly_summary, entry)])
+    elif entity_id := er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_weekly_summary"
+    ):
+        er.async_get(hass).async_remove(entity_id)
 
     # Subjects are only known from live account data - discover new ones as
     # the coordinator sees them and add an average sensor per subject.
@@ -1649,4 +1619,55 @@ class LibrusNextExamSensor(LibrusSensorBase):
                 }
                 for d, it in upcoming[:10]
             ],
+        }
+
+
+class LibrusWeeklySummarySensor(SensorEntity):
+    """The weekly AI summary: headline as the state, the rest as attributes."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "weekly_summary"
+    _attr_icon = "mdi:creation"
+    _attr_should_poll = False
+    # Long text is only useful live on a card, never worth keeping in history.
+    _unrecorded_attributes = frozenset({"sections", "summary", "advice", "warning", "error"})
+
+    def __init__(self, summary: LibrusWeeklySummary, entry: LibrusConfigEntry) -> None:
+        self._summary = summary
+        self._attr_unique_id = f"{entry.entry_id}_weekly_summary"
+        self._attr_device_info = librus_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the summary's updates."""
+        self.async_on_remove(self._summary.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> str | None:
+        result = self._summary.result or {}
+        headline = result.get("headline") or result.get("summary")
+        return headline[:MAX_STATE_LENGTH] if headline else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        result = self._summary.result or {}
+        return {
+            "status": result.get("status"),
+            # {"grades" | "attendance" | "behaviour" | "next_week" |
+            # "school_news": {"status", "text"}}, in display order; a section
+            # with no text is left out.
+            "sections": result.get("sections") or {},
+            # Only on a plain-text answer (no structured output support).
+            "summary": result.get("summary"),
+            "advice": result.get("advice") or [],
+            "warning": result.get("warning"),
+            "week_from": result.get("week_from"),
+            "week_to": result.get("week_to"),
+            "audience": result.get("audience") or self._summary.audience,
+            "generated_at": result.get("generated_at"),
+            "next_run": self._summary.next_run.isoformat(),
+            "ai_task_entity": self._summary.ai_task_entity,
+            "generating": self._summary.running,
+            # The "Automatic weekly summary" switch is off: no scheduled runs.
+            "paused": not self._summary.enabled,
+            "error": self._summary.last_error,
         }

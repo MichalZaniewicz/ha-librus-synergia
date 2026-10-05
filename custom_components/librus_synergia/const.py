@@ -6,7 +6,12 @@ from homeassistant.const import Platform
 
 DOMAIN = "librus_synergia"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.CALENDAR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.CALENDAR,
+    Platform.BUTTON,
+    Platform.SWITCH,
+]
 
 # The session (see librus_synergia.LibrusSessionData) is cookie-based with a
 # ~24h lifetime and no separate refresh grant - unlike a bearer-token API,
@@ -76,6 +81,38 @@ DEFAULT_AVERAGE_MODE = AVERAGE_MODE_WEIGHTED
 # sensor's `is_yours` attribute can stay `None` ("unknown, not configured")
 # rather than falsely reporting `False` for a family that never set this.
 CONF_STUDENT_NUMBER = "student_number"
+
+# Weekly AI summary through Home Assistant's AI Task (see ai_summary.py) -
+# same model as ha-suunto's daily AI insight: no API key here, the user
+# picks an `ai_task` entity from any AI provider set up in HA. Unset = the
+# feature is off and its sensor/button/switch are not created.
+CONF_AI_TASK_ENTITY = "ai_task_entity"
+# Who the summary is written to: the parent (third person, parent's to-dos)
+# or the student (second person, encouraging).
+CONF_AI_AUDIENCE = "ai_audience"
+AI_AUDIENCE_PARENT = "parent"
+AI_AUDIENCE_STUDENT = "student"
+DEFAULT_AI_AUDIENCE = AI_AUDIENCE_PARENT
+# ISO weekday as a string ("1" = Monday .. "7" = Sunday) - a SelectSelector
+# value - plus the local time of the automatic run.
+CONF_AI_WEEKDAY = "ai_weekday"
+DEFAULT_AI_WEEKDAY = "7"
+CONF_AI_TIME = "ai_time"
+DEFAULT_AI_TIME = "18:00:00"
+# Free-text notes added to the prompt ("egzamin ósmoklasisty w tym roku").
+CONF_AI_CONTEXT = "ai_extra_context"
+# Private messages and announcements are school/child data sent to an
+# external provider - opt-in, off by default.
+CONF_AI_INCLUDE_MESSAGES = "ai_include_messages"
+DEFAULT_AI_INCLUDE_MESSAGES = False
+AI_OPTION_KEYS = (
+    CONF_AI_TASK_ENTITY,
+    CONF_AI_AUDIENCE,
+    CONF_AI_WEEKDAY,
+    CONF_AI_TIME,
+    CONF_AI_CONTEXT,
+    CONF_AI_INCLUDE_MESSAGES,
+)
 
 # Labels for the SUPPLEMENTARY (tier 2, `return_exceptions=True`) endpoints
 # fetched by `coordinator.py::_async_fetch_core_payloads`, in the exact
@@ -225,5 +262,9 @@ EVENT_TIMETABLE_CHANGED = f"{DOMAIN}_timetable_changed"
 # Librus actually reports. Each achievement key fires at most once (seeded
 # silently on the first sync, same as every other *_new_*/_changed event).
 EVENT_ACHIEVEMENT_UNLOCKED = f"{DOMAIN}_achievement_unlocked"
+
+# Fired after every successful weekly AI summary (see ai_summary.py),
+# carrying the whole result plus labels in the HA language for a report.
+EVENT_WEEKLY_SUMMARY = f"{DOMAIN}_weekly_summary"
 
 ATTR_SUBJECT_ID = "subject_id"
