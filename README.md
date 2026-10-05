@@ -59,7 +59,7 @@ Each child/student is a separate login and a separate integration entry.
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**
-is a companion HACS repo with 55 purpose-built cards: grades and trends, attendance,
+is a companion HACS repo with 56 purpose-built cards: grades and trends, attendance,
 timetable, agenda, messages, announcements, a "Today" overview, and a few playful ones.
 Each card finds your child's device on its own (no YAML for one student), follows your
 Home Assistant theme and language (English, Polish).
@@ -234,7 +234,7 @@ For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes
 
 ## Related projects
 
-- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 55 Lovelace cards for this integration.
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 56 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
