@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1B1740"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="120" fill="url(#bg)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.055" stroke-width="1">
+    <line x1="0" y1="24" x2="1200" y2="24"/>
+    <line x1="0" y1="52" x2="1200" y2="52"/>
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="108" x2="1200" y2="108"/>
+  </g>
+
+  <text x="48" y="44" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2.5" fill="#F5B93D">LOVELACE CARDS</text>
+  <text x="48" y="84" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="700" fill="#FFFFFF">56 purpose-built cards</text>
+  <text x="48" y="106" font-family="Consolas, Menlo, monospace" font-size="13" fill="#B7B0EE">grades&#160;&#183;&#160;attendance&#160;&#183;&#160;timetable&#160;&#183;&#160;messages&#160;&#183;&#160;English and Polish</text>
+
+  <g transform="translate(905,30)">
+    <g transform="translate(0,0)">
+      <rect width="60" height="60" rx="16" fill="#818CF8"/>
+      <rect x="18" y="18" width="11" height="11" rx="2" fill="#FFFFFF"/><rect x="18" y="31" width="11" height="11" rx="2" fill="#FFFFFF"/><rect x="31" y="18" width="11" height="11" rx="2" fill="#FFFFFF"/><rect x="31" y="31" width="11" height="11" rx="2" fill="#FFFFFF"/>
+    </g>
+    <g transform="translate(78,0)">
+      <rect width="60" height="60" rx="16" fill="#2A2568"/>
+      <rect x="17" y="32" width="7" height="13" rx="2" fill="#D8D4FA"/><rect x="27" y="24" width="7" height="21" rx="2" fill="#D8D4FA"/><rect x="37" y="16" width="7" height="29" rx="2" fill="#D8D4FA"/>
+    </g>
+    <g transform="translate(156,0)">
+      <rect width="60" height="60" rx="16" fill="#F59E0B"/>
+      <path d="M30 15a15 15 0 1 0 0 30c3 0 4-2 3-4s0-5 3-5h4a5 5 0 0 0 5-5c0-9-7-16-15-16z" fill="#FFFFFF"/><circle cx="23" cy="25" r="2.6" fill="#F59E0B"/><circle cx="31" cy="21" r="2.6" fill="#F59E0B"/><circle cx="22" cy="34" r="2.6" fill="#F59E0B"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1B1740"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="120" fill="url(#bg)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.055" stroke-width="1">
+    <line x1="0" y1="24" x2="1200" y2="24"/>
+    <line x1="0" y1="52" x2="1200" y2="52"/>
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="108" x2="1200" y2="108"/>
+  </g>
+
+  <text x="48" y="44" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2.5" fill="#F5B93D">INSTALLATION</text>
+  <text x="48" y="84" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="700" fill="#FFFFFF">Up and running in four steps</text>
+  <text x="48" y="106" font-family="Consolas, Menlo, monospace" font-size="13" fill="#B7B0EE">HACS&#160;&#183;&#160;restart&#160;&#183;&#160;add integration&#160;&#183;&#160;log in</text>
+
+  <g transform="translate(905,30)">
+    <g transform="translate(0,0)">
+      <rect width="60" height="60" rx="16" fill="#818CF8"/>
+      <path d="M30 14v20M20 26l10 10 10-10M18 45h24" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(78,0)">
+      <rect width="60" height="60" rx="16" fill="#2A2568"/>
+      <path d="M42 32a12 12 0 1 1-3-10M40 13v9h-9" stroke="#D8D4FA" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(156,0)">
+      <rect width="60" height="60" rx="16" fill="#F59E0B"/>
+      <path d="M17 31l9 9 17-18" stroke="#FFFFFF" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+    </g>
+  </g>
+</svg>

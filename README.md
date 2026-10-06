@@ -38,6 +38,10 @@ The Librus client itself lives in a separate library, [**librus-synergia**](http
 
 **This is an unofficial integration using a private API and may violate Librus's Terms of Service. Use your own account at your own risk.**
 
+<p align="center">
+  <img src="docs/credentials-banner.svg" alt="Credential model">
+</p>
+
 ## Credential model (read this before installing)
 
 Unlike some cloud-polling integrations, **your Librus password is stored** in Home Assistant's config storage, alongside the session. This is a deliberate tradeoff, not an oversight: the session cookie this flow obtains is only valid for about a day and there is no separate refresh grant, so silent, unattended daily renewal isn't possible without it. Your password never leaves your Home Assistant instance.
@@ -45,6 +49,10 @@ Unlike some cloud-polling integrations, **your Librus password is stored** in Ho
 A long-lived device-recognition cookie is also persisted and re-sent on every login - this is believed to be why a normal login skips any captcha/2FA challenge, so treat it as load-bearing, not just a convenience.
 
 If you change your Librus password or mistype the login, use the integration's **Reconfigure** option (⋮ menu on the entry, in Settings → Devices & services) rather than deleting and re-adding it - that keeps your entity ids, dashboards and automations intact. Reconfigure refuses to repoint an entry at a genuinely different Librus account; add a new integration entry instead if you want to add another student.
+
+<p align="center">
+  <img src="docs/installation-banner.svg" alt="Installation">
+</p>
 
 ## Installation
 
@@ -54,6 +62,10 @@ If you change your Librus password or mistype the login, use the integration's *
 4. Enter your Librus **login** (e.g. `1234567u` - a direct student/account login, not a Librus Portal e-mail) and password.
 
 Each child/student is a separate login and a separate integration entry.
+
+<p align="center">
+  <img src="docs/ai-summary-banner.svg" alt="Weekly AI summary">
+</p>
 
 ## Weekly AI summary
 
@@ -149,6 +161,10 @@ own summary, and the blueprint's title says whose it is.
   gets, but it can still make mistakes, so check anything important in
   Librus itself.
 
+<p align="center">
+  <img src="docs/cards-banner.svg" alt="Custom Lovelace cards">
+</p>
+
 ## Custom Lovelace cards
 
 Want a dashboard without wiring these sensors into generic entity cards by hand?
@@ -159,6 +175,10 @@ Each card finds your child's device on its own (no YAML for one student), follow
 Home Assistant theme and language (English, Polish).
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
+
+<p align="center">
+  <img src="docs/entities-banner.svg" alt="Entities">
+</p>
 
 ## Entities
 
@@ -235,6 +255,10 @@ the events above so you don't have to write the YAML yourself - each just asks f
 
 Or import manually: Settings -> Automations & Scenes -> Blueprints -> Import
 Blueprint, and paste a blueprint's GitHub URL.
+
+<p align="center">
+  <img src="docs/services-banner.svg" alt="Services">
+</p>
 
 ## Services
 
