@@ -194,6 +194,10 @@ New grades, announcements, behaviour notices, messages, Agenda entries, homework
 
 The integration's **Configure** menu has two parts. *Settings* sets the poll interval (default 20 minutes), whether the average sensors show the weighted or the arithmetic average, and whether to fetch private messages at all - turn *Fetch private messages* off if your school doesn't use Wiadomości or you don't want those extra requests (the Unread messages sensor then reports `unavailable`). *Weekly AI summary* sets up the [weekly AI summary](#weekly-ai-summary).
 
+<p align="center">
+  <img src="docs/blueprints-banner.svg" alt="Automation blueprints">
+</p>
+
 ### Automation blueprints
 
 Ready-to-import blueprints under
