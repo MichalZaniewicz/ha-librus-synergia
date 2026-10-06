@@ -26,7 +26,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." src="https://my.home-assistant.io/badges/hacs_repository.svg"></a>
 </p>
 
-**Contents:** [Why this exists](#why-this-exists) · [Credential model](#credential-model-read-this-before-installing) · [Installation](#installation) · [Cards](#custom-lovelace-cards) · [Entities](#entities) · [Blueprints](#automation-blueprints) · [Services](#services) · [Known limitations](#known-limitations--unverified-details) · [Related projects](#related-projects)
+**Contents:** [Why this exists](#why-this-exists) · [Credential model](#credential-model-read-this-before-installing) · [Installation](#installation) · [Weekly AI summary](#weekly-ai-summary) · [Cards](#custom-lovelace-cards) · [Entities](#entities) · [Blueprints](#automation-blueprints) · [Services](#services) · [Known limitations](#known-limitations--unverified-details) · [Related projects](#related-projects)
 
 ## Why this exists
 
@@ -54,6 +54,100 @@ If you change your Librus password or mistype the login, use the integration's *
 4. Enter your Librus **login** (e.g. `1234567u` - a direct student/account login, not a Librus Portal e-mail) and password.
 
 Each child/student is a separate login and a separate integration entry.
+
+## Weekly AI summary
+
+Once a week, an AI model of your choice writes a summary of the school week,
+split into sections:
+
+| Section | What it covers |
+|---|---|
+| **Grades** | Every grade from the week (subject, category, weight, teacher's comment), what went well and what didn't, and how the averages moved compared with a week earlier |
+| **Attendance** | Absences and lates, which subjects were missed, what still needs to be excused |
+| **Behaviour** | Notes from the week, the behaviour grade, streaks |
+| **Next week** | Tests and other agenda entries, homework due, cancelled lessons and substitutions, free days |
+| **From the school** (optional) | The important points of the week's messages and announcements: meetings, trips, payments, deadlines |
+
+On top: a one-line headline and an overall status (*good* / *OK* / *needs
+attention*). At the bottom: 2-4 concrete to-dos for the coming week, and a
+warning only when something really needs attention. Each section has its own
+status too, so a dashboard card or a notification can show at a glance what
+to look at.
+
+![Weekly AI summary card](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-ai-summary-card-dark.png)
+
+*Shown in the [Weekly AI summary card](https://github.com/MichalZaniewicz/ha-librus-synergia-cards) (example text).*
+
+### How to set it up
+
+You need Home Assistant **2025.8 or newer** (it uses the built-in
+[AI Task](https://www.home-assistant.io/integrations/ai_task/) feature).
+There is no API key in this integration: the summary goes through whatever AI
+provider you already use in Home Assistant.
+
+1. **Add an AI provider to Home Assistant**, if you don't have one yet:
+   *Settings → Devices & services → Add integration*, then pick e.g.
+   **Google Generative AI** (Gemini), **OpenAI**, **Anthropic** or
+   **Ollama** (runs locally, nothing leaves your network). Follow its own
+   setup (usually an API key from the provider). It creates an **AI Task**
+   entity such as `ai_task.google_ai_task`.
+2. **Turn the summary on:** *Settings → Devices & services → Librus Synergia →
+   Configure → Weekly AI summary*, and fill in:
+
+   | Field | What to choose |
+   |---|---|
+   | **AI model** | The AI Task entity from step 1. Leave it empty to turn the feature off |
+   | **Written to** | **Parent**: third person, with what you can do. **Student**: written to your child directly, encouraging |
+   | **Day** and **Time** | When the weekly summary is written (default Sunday 18:00). It covers the 7 days up to that day and previews the 7 days after |
+   | **Include messages and announcements** | Off by default. On adds the *From the school* section, but then private messages and school announcements are sent to the AI provider |
+   | **Your notes for the AI** | Optional context, e.g. *"Eighth-grade exam this year, chemistry is the weaker subject"* |
+
+   Save. Three new entities appear on the student's device:
+   - **Weekly summary** sensor: the headline is its state; sections, to-dos and warning are attributes.
+   - **Generate weekly summary** button.
+   - **Automatic weekly summary** switch.
+3. **Write the first one now:** press **Generate weekly summary**. It takes
+   a few seconds; then the **Weekly summary** sensor shows the headline.
+4. **Show it on a dashboard** with the **Weekly AI summary** card from
+   [Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)
+   (`type: custom:librus-ai-summary-card`, no other configuration needed). It
+   has tabs for the sections and its own **Generate now** button.
+5. **Get it on your phone** with the
+   [Weekly AI Summary Report](#automation-blueprints) blueprint. It sends a
+   short report (headline, section statuses, to-dos) or the full text. You
+   choose the sections, and can limit it to weeks that need attention.
+
+With more than one child, set it up on each child's entry. Each one gets its
+own summary, and the blueprint's title says whose it is.
+
+### What gets sent, and when
+
+- Only data the integration already has: no extra Librus requests. The AI
+  provider receives the student's name and class, the week's grades, the
+  averages, the week's attendance and behaviour notes, how many absences
+  are still unexcused, and the coming week's agenda, homework due and
+  timetable changes. Messages and announcements are included only if you
+  turned that on. Use a local model (Ollama) if nothing should leave your
+  network.
+- **One request a week**, plus any time you press the button. A run missed
+  because Home Assistant was off is made up within 2 days. A week with no
+  lessons and nothing coming up (holidays) is skipped, so it costs nothing.
+- The **Automatic weekly summary** switch pauses the schedule; the button
+  still works.
+- The result is stored, so a restart does not pay for the same summary twice.
+  A new summary fires the `librus_synergia_weekly_summary` event.
+
+### If something doesn't work
+
+- **"The AI Task integration is not available"** when opening *Weekly AI
+  summary*: update Home Assistant to 2025.8+ and add an AI provider first
+  (step 1).
+- **The sensor stays empty after pressing the button:** look at its `error`
+  attribute. It holds the provider's message, e.g. an exhausted quota or a
+  wrong API key.
+- The text is written by an AI model. It is told to stick to the data it
+  gets, but it can still make mistakes, so check anything important in
+  Librus itself.
 
 ## Custom Lovelace cards
 
@@ -99,34 +193,6 @@ Home Assistant theme and language (English, Polish).
 New grades, announcements, behaviour notices, messages, Agenda entries, homework assignments and absences fire Home Assistant bus events (`librus_synergia_new_grade`, `librus_synergia_new_announcement`, `librus_synergia_new_note`, `librus_synergia_new_message`, `librus_synergia_new_homework` (Agenda), `librus_synergia_new_homework_assignment` (real homework: topic, text, due date, teacher, subject), `librus_synergia_new_absence`), and a cancelled/substitution lesson fires `librus_synergia_timetable_changed` - all for building notification automations. `librus_synergia_achievement_unlocked` fires for a handful of objective, data-derived gamification milestones (first six, good-grade streaks of 5/10/20, and 7/30/90-day streaks without an absence or a negative note) - deliberately not an invented points system, every one of these is a plain, honest fact anyone could verify by hand. Nothing fires on the very first sync after setup (that run only establishes the baseline). Grade/note/homework/timetable events include the resolved subject/teacher/category name alongside the raw id, so an automation doesn't need its own lookup. `librus_synergia_new_grade` also carries the grade's details: `teacher`, `category`, `weight`, `counts_to_average`, `comments` (list), `date`, `semester` and `kind` (`normal` / `semester_proposition` / `semester` / `final_proposition` / `final`). Ready-made [blueprints](#automation-blueprints) wrap these for you.
 
 The integration's **Configure** menu has two parts. *Settings* sets the poll interval (default 20 minutes), whether the average sensors show the weighted or the arithmetic average, and whether to fetch private messages at all - turn *Fetch private messages* off if your school doesn't use Wiadomości or you don't want those extra requests (the Unread messages sensor then reports `unavailable`). *Weekly AI summary* sets up the [weekly AI summary](#weekly-ai-summary).
-
-### Weekly AI summary
-
-Once a week, an AI model writes a summary of the school week, split into
-sections: **grades** (what came in, how the averages moved), **attendance**,
-**behaviour**, **next week** (tests, homework due, cancelled lessons and
-substitutions, free days) and, if you allow it, **from the school** (the
-important bits of messages and announcements). It ends with 2-4 concrete
-to-dos and a warning only when something genuinely needs attention.
-
-- No API key in this integration: it uses Home Assistant's
-  [AI Task](https://www.home-assistant.io/integrations/ai_task/) (2025.8+).
-  Set up any AI provider first (Google Gemini, OpenAI, Anthropic, a local
-  Ollama...), then pick it under **Configure -> Weekly AI summary**.
-- Pick who it is written to: the **parent** (third person, what you can do)
-  or the **student** (written to them directly, encouraging).
-- Day and time are yours to set (default Sunday 18:00). The summary covers
-  the 7 days up to that day and looks 7 days ahead. A run missed because
-  Home Assistant was off is made up within 2 days; a week with no lessons and
-  nothing coming up is skipped. The **Generate weekly summary** button writes
-  one right away; the **Automatic weekly summary** switch pauses the
-  schedule.
-- Only data the integration already has is sent, and only to the provider
-  you picked - no extra Librus requests. Messages and announcements are
-  **not** sent unless you turn that on. Optional notes ("eighth-grade exam
-  this year") are added to the prompt.
-- The [Weekly AI Summary Report](#automation-blueprints) blueprint sends it
-  to your phone.
 
 ### Automation blueprints
 
