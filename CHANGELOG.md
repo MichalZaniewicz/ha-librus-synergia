@@ -3,6 +3,14 @@
 ## 0.10.0-beta.2
 
 ### Fixed
+- **Behaviour grade was blank for schools using the classic scale.** A real
+  monthly "bdb" showed up as an empty Behaviour grade sensor: Librus sends
+  that grade only as an id (1 wz ... 6 ng), which wasn't read. The sensor
+  now shows "bdb" (or the points, for a points-based school), with the full
+  name ("bardzo dobre") and the teacher's comment ("Ocena zachowania
+  miesiąc za IX/26") in the `name`/`comment` attributes; every `recent`
+  entry gets `grade` and `name`. The weekly AI summary sees it too.
+  Requires `librus-synergia` 0.3.1 (installed automatically).
 - **Weekly AI summary: wrong weekdays.** Found on the first live run: the
   model worked weekdays out from bare dates and got them wrong ("Monday
   6.10" for a Tuesday). Every date sent to the AI now carries its weekday,

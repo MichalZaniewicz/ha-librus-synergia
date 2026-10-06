@@ -717,6 +717,36 @@ async def test_behaviour_grade_sensor(hass) -> None:
     assert state.attributes["recent"][0]["category"] == "zachowanie"
 
 
+async def test_behaviour_grade_sensor_classic_scale(hass) -> None:
+    """Live shape (2026-10-05): the monthly "bdb" only as BehaviourGrade.Id,
+    ShortName/Text empty, the period in a comment."""
+    client = build_mock_client(
+        async_get_behaviour_grade_points={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "ShortName": "",
+                    "Text": "",
+                    "BehaviourGrade": {"Id": 2},
+                    "Category": {"Id": 21823},
+                    "AddDate": "2026-10-05 08:20:25",
+                    "Comments": [{"Id": 7}],
+                }
+            ]
+        },
+        async_get_behaviour_grade_point_comments={
+            "Comments": [{"Id": 7, "Text": "  Ocena zachowania miesiąc za IX/26.  "}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "behaviour_grade"))
+    assert state.state == "bdb"
+    assert state.attributes["name"] == "bardzo dobre"
+    assert state.attributes["comment"] == "Ocena zachowania miesiąc za IX/26."
+    assert state.attributes["recent"][0]["grade"] == "bdb"
+
+
 async def test_descriptive_grades_sensor(hass) -> None:
     client = build_mock_client(
         async_get_descriptive_grades={

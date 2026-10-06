@@ -406,7 +406,14 @@ def build_context(
     behaviour_grade = None
     if data.behaviour_grades:
         latest = max(data.behaviour_grades, key=lambda b: b.add_date or "")
-        behaviour_grade = latest.short_name or latest.text or None
+        behaviour_grade = _compact(
+            {
+                "grade": latest.display or None,
+                "name": latest.name,
+                "date": _dated(latest.add_date),
+                "comment": _cut("; ".join(c.strip() for c in latest.comments)),
+            }
+        )
 
     # The coming week.
     by_teacher = teacher_subject_ids(data.timetable)

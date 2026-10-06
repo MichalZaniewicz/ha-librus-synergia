@@ -1193,9 +1193,11 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
 class LibrusBehaviourGradeSensor(LibrusSensorBase):
     """A formal "ocena zachowania" (behaviour grade) - distinct from the
     Behaviour notices sensor above ("uwagi", free-text remarks). State is
-    the most recent grade's short name (e.g. "wz" for "wzorowe") if any
-    exist. Fields CONFIRMED via szkolny-android's reference parser
-    (2026-09-06), but never seen populated."""
+    the most recent grade in short form - "bdb" on the classic scale, or the
+    points - with the full name ("bardzo dobre") in the `name` attribute.
+    Found live (2026-10-05): a monthly "bdb" left this sensor blank, since
+    the classic-scale grade only lives in `BehaviourGrade.Id`
+    (`BehaviourGradeData.display`/`name`, librus-synergia 0.3.1)."""
 
     _attr_translation_key = "behaviour_grade"
     _attr_icon = "mdi:medal-outline"
@@ -1223,7 +1225,7 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
     @property
     def native_value(self) -> str | None:
         latest = self._latest()
-        return latest.short_name if latest else None
+        return (latest.display or None) if latest else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -1235,9 +1237,14 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
             key=lambda g: g.add_date,
             reverse=True,
         )[:5]
+        latest = recent[0] if recent else None
         return {
+            "name": latest.name if latest else None,
+            "comment": latest.comments[0].strip() if latest and latest.comments else None,
             "recent": [
                 {
+                    "grade": g.display,
+                    "name": g.name,
                     "short_name": g.short_name,
                     "value": g.value,
                     "category": categories.get(g.category_id) if g.category_id else None,
