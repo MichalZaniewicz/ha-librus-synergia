@@ -116,8 +116,13 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
 
     # First line the teacher (as before), then what a substitution changes.
     lines = [teacher_name or ""]
-    if change["kind"] == "substitution" and (change["original_subject"] or change["original_teacher"]):
-        replaced = ", ".join(n for n in (change["original_subject"], change["original_teacher"]) if n)
+    # The original subject only when it differs ("Zastępstwo za: Jan Kowal"
+    # for the same subject with another teacher).
+    original_subject = change["original_subject"]
+    if original_subject == subject_name:
+        original_subject = None
+    if change["kind"] == "substitution" and (original_subject or change["original_teacher"]):
+        replaced = ", ".join(n for n in (original_subject, change["original_teacher"]) if n)
         lines.append(f"Zastępstwo za: {replaced}")
     if change["room_changed"]:
         lines.append(f"Zmiana sali: {change['original_classroom'] or '?'} → {classroom_name or '?'}")

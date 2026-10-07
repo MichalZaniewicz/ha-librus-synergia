@@ -104,6 +104,10 @@ def test_calendar_event_labels_the_change() -> None:
     assert event.summary == "Matematyka (zastępstwo)"
     assert event.description.splitlines()[1] == "Zastępstwo za: Chemia, Jan Kowal"
 
+    # Same subject, another teacher: only the teacher is named.
+    event = _lesson_to_event(DAY, _lesson(original=_original(teacher_id=20, classroom_id=21)), _data())
+    assert event.description.splitlines()[1] == "Zastępstwo za: Jan Kowal"
+
     # An ordinary lesson keeps the teacher-only description.
     event = _lesson_to_event(DAY, _lesson(is_substitution=False), _data())
     assert (event.summary, event.description) == ("Matematyka", "Anna Nowak")
