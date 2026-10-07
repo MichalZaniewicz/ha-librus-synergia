@@ -164,13 +164,13 @@ own summary, and the blueprint's title says whose it is.
 ## Ask Assist about school
 
 Turn Librus on as a tool set for your Assist conversation agent (Gemini,
-OpenAI, Claude, Ollama...) and ask about school in plain words, by voice or
+OpenAI, Claude, Ollama...) and ask about school in plain words (in any language your agent speaks), by voice or
 in the Assist chat:
 
-- "Co Ola ma jutro i o której zaczyna?"
-- "Jakie oceny dostał w tym tygodniu?"
-- "Kiedy najbliższy sprawdzian z matematyki?"
-- "Ile ma nieusprawiedliwionych nieobecności?"
+- "What does Ola have tomorrow, and when does school start?"
+- "What grades did she get this week?"
+- "When is the next maths test?"
+- "How many absences still need an excuse?"
 
 **Setup:** Settings → Devices & services → your AI integration (e.g. Google
 Generative AI) → the conversation agent's **Configure** → under *Control
