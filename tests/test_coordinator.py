@@ -145,6 +145,7 @@ async def test_new_grade_event_carries_details(hass) -> None:
     assert by_id[1]["date"] == "2026-09-01"
     assert by_id[1]["semester"] == 1
     assert by_id[1]["kind"] == "normal"
+    assert by_id[1]["improves"] is None
     # Unknown category id: fields stay None rather than guessing.
     assert by_id[2]["category"] is None
     assert by_id[2]["weight"] is None

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Grade corrections ("poprawy").** A correction now says which grade it
+  improves: subject average sensors' `grades` attribute and the
+  `get_grades` service gained `improves` (the earlier grade's value, e.g.
+  "1") and `improved` (true on the earlier grade), and the
+  `librus_synergia_new_grade` event carries `improves`. Averages are
+  unchanged - both grades count the way Librus reports them. Requires
+  librus-synergia 0.3.2.
+
 ## 0.10.0
 
 ### Added

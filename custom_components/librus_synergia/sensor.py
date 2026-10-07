@@ -50,6 +50,7 @@ from .coordinator import (
     LibrusDataUpdateCoordinator,
     days_since_last_absence,
     calculate_average as _calculate_average,
+    grade_improvements,
     days_since_last_negative_note,
     good_grade_streak,
     infer_subject_id,
@@ -410,6 +411,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         ]
         count = len(subject_grades)
         categories = self.coordinator.data.grade_categories
+        improves, improved = grade_improvements(grades)
         # Full per-grade list for this one subject - lets a dashboard card
         # show the actual grade log, not just the computed average. Sorted
         # newest-first; date is a plain "YYYY-MM-DD"-prefixed string from
@@ -425,6 +427,10 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                     if g.teacher_id is not None
                     else None
                 ),
+                # Corrections: `improves` is the earlier grade's value on a
+                # correction, `improved` marks the earlier grade itself.
+                "improves": improves.get(g.id),
+                "improved": g.id in improved,
             }
             for g in sorted(subject_grades, key=lambda g: g.add_date or "", reverse=True)
         ]

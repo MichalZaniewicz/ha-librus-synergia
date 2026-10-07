@@ -434,9 +434,40 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
             "date": "2026-09-01",
             "comments": ["Świetna praca"],
             "teacher": None,
+            "improves": None,
+            "improved": False,
         }
     ]
     assert float(state.state) == 4.5  # "4+" == 4 + 0.5, per _parse_grade_value
+
+
+async def test_subject_grades_mark_corrections(hass) -> None:
+    """A correction ("poprawa") carries `Improvement.Id` pointing at the
+    earlier grade: the correction shows what it improves, the earlier grade
+    is marked as improved."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "1", "Subject": {"Id": 42005}, "AddDate": "2026-09-01"},
+                {
+                    "Id": 2,
+                    "Grade": "4",
+                    "Subject": {"Id": 42005},
+                    "AddDate": "2026-09-08",
+                    "Improvement": {"Id": 1},
+                },
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "subject_42005_average"))
+    by_value = {g["value"]: g for g in state.attributes["grades"]}
+    assert by_value["4"]["improves"] == "1"
+    assert by_value["4"]["improved"] is False
+    assert by_value["1"]["improves"] is None
+    assert by_value["1"]["improved"] is True
 
 
 async def test_behaviour_notices_sensor_resolves_category_name(hass) -> None:

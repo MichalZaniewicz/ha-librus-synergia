@@ -276,8 +276,30 @@ def infer_subject_id(teacher_id: Any, by_teacher: dict[Any, set[Any]]) -> Any:
     return next(iter(subjects)) if subjects and len(subjects) == 1 else None
 
 
+def grade_improvements(grades: list[GradeData]) -> tuple[dict[int, str], set[int]]:
+    """Corrections ("poprawy"): `{grade_id: value of the grade it improves}`
+    for every correction, and the ids of grades that were improved later.
+    The link is `Grades[].Improvement.Id` (`GradeData.improves_id`); the
+    earlier grade stays in the list and keeps counting the way Librus
+    reports it - this only labels the pair."""
+    by_id = {g.id: g for g in grades}
+    improves: dict[int, str] = {}
+    improved: set[int] = set()
+    for grade in grades:
+        old_id = grade.improves_id
+        if old_id is None:
+            continue
+        improved.add(old_id)
+        old = by_id.get(old_id)
+        if old is not None:
+            improves[grade.id] = old.value
+    return improves, improved
+
+
 def _grade_event_details(
-    grade: GradeData, categories: dict[int, GradeCategoryData]
+    grade: GradeData,
+    categories: dict[int, GradeCategoryData],
+    improves: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     """Extra `librus_synergia_new_grade` fields (issue #12) - all from data
     already fetched this cycle, no extra Librus request. `kind` says whether
@@ -303,6 +325,8 @@ def _grade_event_details(
         "date": grade.add_date,
         "semester": grade.semester,
         "kind": kind,
+        # The value of the earlier grade this one corrects, None otherwise.
+        "improves": (improves or {}).get(grade.id),
     }
 
 
@@ -1521,6 +1545,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 return None
             return data.subjects.get(subject_id, str(subject_id))
 
+        improves, _ = grade_improvements(data.grades)
         for grade in changes.grades:
             fire(
                 EVENT_NEW_GRADE,
@@ -1530,7 +1555,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "subject": subject_name(grade.subject_id),
                     "value": grade.value,
                     "teacher": _teacher_name(data, grade.teacher_id),
-                    **_grade_event_details(grade, data.grade_categories),
+                    **_grade_event_details(grade, data.grade_categories, improves),
                 },
             )
         for notice in changes.announcements:

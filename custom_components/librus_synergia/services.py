@@ -24,7 +24,12 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from librus_synergia import LibrusError
 
 from .const import DOMAIN
-from .coordinator import LibrusDataUpdateCoordinator, decode_message_content, resolve_sender_name
+from .coordinator import (
+    LibrusDataUpdateCoordinator,
+    decode_message_content,
+    grade_improvements,
+    resolve_sender_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -171,6 +176,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
         subject_id = call.data.get("subject_id")
         data = coordinator.data
+        improves, improved = grade_improvements(data.grades)
         grades = [
             {
                 "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
@@ -185,6 +191,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 "semester": grade.semester,
                 "comments": list(grade.comments),
                 "teacher": data.teachers.get(grade.teacher_id) if grade.teacher_id is not None else None,
+                "improves": improves.get(grade.id),
+                "improved": grade.id in improved,
             }
             for grade in data.grades
             if subject_id is None or grade.subject_id == subject_id
