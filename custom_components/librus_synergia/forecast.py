@@ -120,6 +120,9 @@ class SubjectForecast:
     subject_id: int
     subject: str
     average: float
+    # Sum of the counted grades' weights on this basis (the count in the
+    # arithmetic mode) - lets a card add a grade to the exact average.
+    weight_total: float
     predicted: int
     # The average needed for the next grade up (None at 6).
     next_grade_at: float | None
@@ -219,6 +222,7 @@ def subject_forecasts(
                 subject_id=subject_id,
                 subject=data.subjects.get(subject_id, str(subject_id)),
                 average=round(average, 2),
+                weight_total=weight,
                 predicted=predicted,
                 next_grade_at=next_at,
                 sixes_to_next=_sixes_to_next(total, weight, next_at)

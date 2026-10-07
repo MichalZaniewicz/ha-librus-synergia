@@ -78,6 +78,8 @@ async def test_forecast_sensor_and_risk(hass, freezer) -> None:
 
     math = hass.states.get(_entity_id(hass, entry, "sensor", "subject_100_average"))
     assert math.attributes["predicted_grade"] == 5
+    assert math.attributes["forecast_average"] == 5.0
+    assert math.attributes["forecast_weight"] == 2
     assert math.attributes["next_grade_at"] == 5.5
     # (10 + 6n) / (2 + n) >= 5.5 -> n >= 2.
     assert math.attributes["sixes_to_next_grade"] == 2

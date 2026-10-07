@@ -514,6 +514,10 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         if forecast is None:
             return {"predicted_grade": None}
         return {
+            # The average and weight total the forecast is computed on
+            # (this semester, or the whole year in semester 2).
+            "forecast_average": forecast.average,
+            "forecast_weight": forecast.weight_total,
             "predicted_grade": forecast.predicted,
             "next_grade_at": forecast.next_grade_at,
             "sixes_to_next_grade": forecast.sixes_to_next,
