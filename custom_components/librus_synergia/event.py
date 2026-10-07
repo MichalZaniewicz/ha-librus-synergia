@@ -23,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import LibrusConfigEntry, librus_device_info
 from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
+    EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
@@ -80,6 +81,13 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
     ),
     LibrusEventDescription(
         "agenda", EVENT_NEW_HOMEWORK, ("new_entry",), "mdi:calendar-plus", lambda d: "new_entry"
+    ),
+    LibrusEventDescription(
+        "agenda_change",
+        EVENT_AGENDA_CHANGED,
+        ("changed", "removed"),
+        "mdi:calendar-edit",
+        lambda d: "removed" if d.get("kind") == "removed" else "changed",
     ),
     LibrusEventDescription(
         "announcement",

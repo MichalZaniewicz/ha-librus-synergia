@@ -158,6 +158,7 @@
       "timetable_change_event": { "name": "Zmiana w planie", "state_attributes": { "event_type": { "state": { "canceled": "Lekcja odwołana", "substitution": "Zastępstwo" } } } },
       "homework_event": { "name": "Nowe zadanie domowe", "state_attributes": { "event_type": { "state": { "new_homework": "Nowe zadanie domowe" } } } },
       "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
+      "agenda_change_event": { "name": "Zmiana w terminarzu", "state_attributes": { "event_type": { "state": { "changed": "Zmieniony", "removed": "Usunięty" } } } },
       "announcement_event": { "name": "Nowe ogłoszenie", "state_attributes": { "event_type": { "state": { "new_announcement": "Nowe ogłoszenie" } } } },
       "message_event": { "name": "Nowa wiadomość", "state_attributes": { "event_type": { "state": { "new_message": "Nowa wiadomość" } } } },
       "forecast_event": { "name": "Zmiana prognozy oceny", "state_attributes": { "event_type": { "state": { "up": "W górę", "down": "W dół" } } } },

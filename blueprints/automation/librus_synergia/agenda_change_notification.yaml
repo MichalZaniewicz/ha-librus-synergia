@@ -1,0 +1,94 @@
+blueprint:
+  name: "Librus: Agenda Entry Changed or Removed"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - when an
+    upcoming Agenda entry changes (a test moved to another day, a new time,
+    a corrected description) or disappears from Librus (a cancelled trip or
+    test), via the `librus_synergia_agenda_changed` event. New entries have
+    their own blueprint (New Agenda Entry Notification).
+
+
+    Optionally limit it to some categories (e.g. `Sprawdzian, Kartkówka`)
+    and to changes, removals or both.
+
+
+    Inside your chosen action, use `{{ agenda_change_summary }}` for a
+    ready-made message such as "Kacper: [Sprawdzian] Matematyka - termin
+    12.10 → 14.10", or the individual fields:
+    `{{ trigger.event.data.kind }}` (`changed` / `removed`),
+    `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.category }}`,
+    `{{ trigger.event.data.date }}`, `{{ trigger.event.data.content }}`,
+    `{{ trigger.event.data.changed_fields }}` and
+    `{{ trigger.event.data.previous }}` (the old values of the changed
+    fields). The summary starts with the child's name, so one automation
+    works for several children.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/agenda_change_notification.yaml
+  input:
+    category_filter:
+      name: Categories (optional)
+      description: >
+        Comma-separated Agenda categories to watch, matched as a
+        case-insensitive substring (e.g. "sprawdzian, kartkówka"). Leave
+        blank for every category.
+      default: ""
+      selector:
+        text: {}
+    kinds:
+      name: Notify about
+      default:
+        - changed
+        - removed
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Changed entries (date, time, description, subject or category)
+              value: changed
+            - label: Removed entries
+              value: removed
+    notify_action:
+      name: Notification action
+      description: The action to run for each matching change.
+      selector:
+        action: {}
+
+variables:
+  cat_filter: !input category_filter
+  wanted_kinds: !input kinds
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_agenda_changed
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.kind in wanted_kinds }}"
+  - condition: template
+    value_template: >-
+      {% set words = (cat_filter | string).split(',') | map('trim') | map('lower') | reject('eq', '') | list %}
+      {% set cat = (trigger.event.data.category or '') | lower %}
+      {{ words | count == 0 or words | select('in', cat) | list | count > 0 }}
+
+actions:
+  - variables:
+      agenda_change_summary: >-
+        {% set d = trigger.event.data %}
+        {% set p = d.get('previous') or {} %}
+        {% set day = d.date[8:10] ~ '.' ~ d.date[5:7] if d.date else '' %}
+        {% set head = (d.student ~ ': ' if d.student else '') ~ ('[' ~ d.category ~ '] ' if d.category else '') ~ (d.subject ~ ' ' if d.subject else '') %}
+        {% if d.kind == 'removed' %}
+        {{ head }}{{ day }} - usunięte z terminarza: {{ (d.content or '')[:120] }}
+        {% else %}
+        {% set ns = namespace(parts=[]) %}
+        {% if 'date' in p %}{% set ns.parts = ns.parts + ['termin ' ~ ((p.date[8:10] ~ '.' ~ p.date[5:7]) if p.date else '?') ~ ' → ' ~ day] %}{% endif %}
+        {% if 'time_from' in p %}{% set ns.parts = ns.parts + ['godzina ' ~ (p.time_from or '-') ~ ' → ' ~ (d.time_from or '-')] %}{% endif %}
+        {% if 'subject_id' in p %}{% set ns.parts = ns.parts + ['zmiana przedmiotu'] %}{% endif %}
+        {% if 'category_id' in p %}{% set ns.parts = ns.parts + ['zmiana kategorii'] %}{% endif %}
+        {% if 'content' in p %}{% set ns.parts = ns.parts + ['nowy opis: ' ~ (d.content or '')[:120]] %}{% endif %}
+        {{ head }}{{ day if 'date' not in p else '' }}{{ ' - ' if 'date' not in p else '- ' }}{{ ns.parts | join(', ') }}
+        {% endif %}
+  - !input notify_action
+
+mode: queued
+max: 10

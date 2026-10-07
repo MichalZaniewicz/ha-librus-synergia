@@ -11,6 +11,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.librus_synergia.const import (
+    EVENT_AGENDA_CHANGED,
     EVENT_NEW_GRADE,
     STATE_STORE_VERSION,
     STATUS_DEGRADED,
@@ -250,3 +251,83 @@ async def test_failed_timetable_week_keeps_its_last_good_copy(hass, freezer) -> 
     assert sum(len(lessons) for lessons in data.timetable.values()) == 1
     assert coordinator.fallback_sections == {"Timetable"}
     assert coordinator.status == STATUS_DEGRADED
+
+
+# ----------------------------------------------------------------------
+# Agenda entries changed or removed (EVENT_AGENDA_CHANGED)
+# ----------------------------------------------------------------------
+
+
+def _agenda(*entries: tuple[int, str, str]) -> dict:
+    return {
+        "HomeWorks": [
+            {"Id": item_id, "Date": day, "Content": text, "Category": {"Id": 5}, "Subject": {"Id": 100}}
+            for item_id, day, text in entries
+        ]
+    }
+
+
+async def test_agenda_entry_moved_and_removed_fire_events(hass, freezer) -> None:
+    freezer.move_to("2026-10-07T10:00:00+00:00")
+    events = async_capture_events(hass, EVENT_AGENDA_CHANGED)
+    client = build_mock_client(
+        async_get_homeworks=_agenda(
+            (1, "2026-10-12", "Ułamki"), (2, "2026-10-15", "Komórka"), (3, "2026-10-01", "Stary")
+        ),
+        async_get_homework_categories={"Categories": [{"Id": 5, "Name": "Sprawdzian"}]},
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+    )
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+    assert events == []  # first sync only seeds
+
+    # 1 moved to the 14th, 2 removed, 3 (in the past) removed - ignored.
+    client.async_get_homeworks.return_value = _agenda((1, "2026-10-14", "Ułamki"))
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+
+    by_kind = {e.data["kind"]: e.data for e in events}
+    assert len(events) == 2
+    assert by_kind["changed"]["id"] == 1
+    assert by_kind["changed"]["changed_fields"] == ["date"]
+    assert by_kind["changed"]["previous"] == {"date": "2026-10-12"}
+    assert by_kind["changed"]["category"] == "Sprawdzian"
+    assert by_kind["changed"]["subject"] == "Matematyka"
+    assert by_kind["removed"]["id"] == 2
+    assert by_kind["removed"]["content"] == "Komórka"
+
+
+async def test_agenda_emptied_at_once_is_not_announced(hass, freezer) -> None:
+    freezer.move_to("2026-10-07T10:00:00+00:00")
+    events = async_capture_events(hass, EVENT_AGENDA_CHANGED)
+    client = build_mock_client(async_get_homeworks=_agenda((1, "2026-10-12", "Ułamki")))
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+
+    client.async_get_homeworks.return_value = {"HomeWorks": []}
+    await coordinator._async_update_data()
+    client.async_get_homeworks.return_value = _agenda((1, "2026-10-12", "Ułamki"))
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+
+    assert events == []
+
+
+async def test_agenda_change_survives_restart(hass, hass_storage, freezer) -> None:
+    freezer.move_to("2026-10-07T10:00:00+00:00")
+    first = _coordinator(hass, build_mock_client(async_get_homeworks=_agenda((1, "2026-10-12", "Ułamki"))))
+    await first._async_update_data()
+    saved = json.loads(json.dumps(first._state_to_save()))
+
+    events = async_capture_events(hass, EVENT_AGENDA_CHANGED)
+    entry = make_config_entry()
+    _store(hass_storage, entry.entry_id, saved)
+    second = _coordinator(
+        hass, build_mock_client(async_get_homeworks=_agenda((1, "2026-10-13", "Ułamki"))), entry
+    )
+    await second.async_restore_state()
+    await second._async_update_data()
+    await hass.async_block_till_done()
+
+    assert [e.data["previous"] for e in events] == [{"date": "2026-10-12"}]

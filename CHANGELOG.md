@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Agenda entry changed or removed.** Event `librus_synergia_agenda_changed`
+  when an upcoming Agenda entry changes (`kind: changed`: date, time,
+  description, subject or category, with `changed_fields` and the old
+  values in `previous`) or disappears from Librus (`kind: removed`). Event
+  entity *Agenda entry changed* (`changed` / `removed`) and the blueprint
+  **Agenda Entry Changed or Removed** (25 blueprints). Entries dated before
+  today are ignored; the first sync only records what's there.
+
 ## 0.11.1-beta.2
 
 ### Added

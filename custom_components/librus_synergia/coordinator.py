@@ -116,6 +116,7 @@ from .const import (
     DEFAULT_SMART_POLLING,
     DOMAIN,
     EVENT_ACHIEVEMENT_UNLOCKED,
+    EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
@@ -166,6 +167,26 @@ _CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
 _POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
 # `_async_get_messages`' result when nothing was fetched.
 _NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [])
+
+
+# Agenda fields whose change fires EVENT_AGENDA_CHANGED (names resolved
+# alongside, but compared by id so a renamed category isn't a change).
+_AGENDA_COMPARED = ("date", "time_from", "content", "category_id", "subject_id")
+
+
+def _agenda_fields(item: Any, data: LibrusData) -> dict[str, Any]:
+    """One Agenda entry as a JSON-able dict (saved, and the event payload)."""
+    return {
+        "date": item.date,
+        "time_from": item.time_from,
+        "content": (item.content or "")[:500],
+        "category_id": item.category_id,
+        "category": data.homework_categories.get(item.category_id)
+        if item.category_id is not None
+        else None,
+        "subject_id": item.subject_id,
+        "subject": data.subjects.get(item.subject_id) if item.subject_id is not None else None,
+    }
 
 
 def state_store_key(entry_id: str) -> str:
@@ -495,6 +516,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Real homework assignments - the library's ChangeTracker doesn't
         # cover HomeWorkAssignments, so same seed-then-union set as above.
         self._known_homework_assignment_ids: set[Any] | None = None
+        # Agenda entry id -> its last seen fields (see
+        # _fire_agenda_change_events); None until the first sync.
+        self._known_agenda: dict[str, dict[str, Any]] | None = None
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
         # to raise a repair issue only once a supplementary endpoint has
@@ -542,6 +566,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return
         if isinstance(seen := stored.get("seen"), dict):
             self._change_tracker = ChangeTracker(SeenIds.from_dict(seen))
+        if isinstance(agenda := stored.get("agenda"), dict):
+            self._known_agenda = agenda
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(keys := stored.get("achievements"), list):
@@ -567,6 +593,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         tracker = self._change_tracker
         return {
             "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
+            "agenda": self._known_agenda,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -1075,6 +1102,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendances, attendance_types = data.attendances, data.attendance_types
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
         self._fire_new_homework_assignment_events(data)
+        self._fire_agenda_change_events(data, today)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
         self._fire_forecast_events(data, today)
         return data
@@ -2035,6 +2063,58 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "subject": subject_name(lesson.subject_id),
                     "hour_from": lesson.hour_from,
                 },
+            )
+
+    def _fire_agenda_change_events(self, data: LibrusData, today: date) -> None:
+        """EVENT_AGENDA_CHANGED for an upcoming Agenda entry whose date,
+        time, text, category or subject changed since the last sync, or
+        that disappeared from Librus. Entries dated before today are left
+        alone (old entries drop out of Librus's window, and editing them
+        doesn't matter any more). New entries fire EVENT_NEW_HOMEWORK
+        instead, via the change tracker."""
+        current = {str(item.id): _agenda_fields(item, data) for item in data.homeworks}
+        known = self._known_agenda
+        self._known_agenda = current
+        if known is None or "HomeWorks" in self.fallback_sections:
+            return
+        if known and not current:
+            # Everything gone at once is a failed or emptied fetch, not a
+            # school cancelling every event - don't announce it.
+            self._known_agenda = known
+            return
+        today_iso = today.isoformat()
+        base = {
+            "entry_id": self.config_entry.entry_id if self.config_entry else None,
+            "student": data.me.display_name,
+        }
+
+        def upcoming(fields: dict[str, Any]) -> bool:
+            return (fields.get("date") or "")[:10] >= today_iso
+
+        for item_id, fields in current.items():
+            before = known.get(item_id)
+            if before is None:
+                continue
+            changed = [key for key in _AGENDA_COMPARED if before.get(key) != fields.get(key)]
+            if not changed or not (upcoming(fields) or upcoming(before)):
+                continue
+            self.hass.bus.async_fire(
+                EVENT_AGENDA_CHANGED,
+                {
+                    **base,
+                    "id": _restore_id(item_id),
+                    "kind": "changed",
+                    **fields,
+                    "changed_fields": changed,
+                    "previous": {key: before.get(key) for key in changed},
+                },
+            )
+        for item_id, before in known.items():
+            if item_id in current or not upcoming(before):
+                continue
+            self.hass.bus.async_fire(
+                EVENT_AGENDA_CHANGED,
+                {**base, "id": _restore_id(item_id), "kind": "removed", **before},
             )
 
     def _fire_new_homework_assignment_events(self, data: LibrusData) -> None:

@@ -296,6 +296,11 @@ EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
 # events. Carries the resolved subject + category name so an automation
 # can filter e.g. category == "Sprawdzian" without its own lookup.
 EVENT_NEW_HOMEWORK = f"{DOMAIN}_new_homework"
+# Fires when an upcoming Agenda entry is changed (`kind: changed`, with
+# `changed_fields` and the `previous` values - e.g. a test moved to another
+# day) or disappears from Librus (`kind: removed` - e.g. a cancelled trip).
+# Only for entries dated today or later; seeded silently on the first sync.
+EVENT_AGENDA_CHANGED = f"{DOMAIN}_agenda_changed"
 # Fires for a new real homework assignment ("zadanie domowe", the
 # `HomeWorkAssignments` endpoint) - distinct from EVENT_NEW_HOMEWORK, which
 # despite its name covers the Agenda feed. Carries topic/text/due date, the
