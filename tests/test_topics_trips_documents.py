@@ -105,6 +105,8 @@ async def test_lesson_topics_trips_and_documents_sensors(hass, freezer) -> None:
         },
         async_get_school_trips=TRIPS,
         async_get_school_files=FILES,
+        async_get_attendances={"Attendances": [{"Id": 1, "Date": "2026-10-06", "LessonNo": "1", "Type": {"Id": 1}}]},
+        async_get_attendance_types={"Types": [{"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False}]},
     )
     entry = await setup_integration(hass, client)
 
@@ -113,6 +115,7 @@ async def test_lesson_topics_trips_and_documents_sensors(hass, freezer) -> None:
     assert topics.attributes["today"][0]["topic"] == "Ułamki zwykłe"
     assert topics.attributes["today"][0]["subject"] == "Matematyka"
     assert len(topics.attributes["recent"]) == 2
+    assert [r["absent"] for r in topics.attributes["recent"]] == [False, True]
 
     trip = _entity(hass, entry, "school_trips")
     assert trip.state == "2026-10-08"

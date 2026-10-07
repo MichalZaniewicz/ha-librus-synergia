@@ -2053,6 +2053,14 @@ class LibrusPointGradesSensor(LibrusSensorBase):
         }
 
 
+def _as_lesson_no(value: Any) -> int | None:
+    """Attendances carry LessonNo raw (a string or a number)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class LibrusLessonTopicsSensor(LibrusSensorBase):
     """What was taught: lessons held with their topics (Librus's
     `Realizations`). The state is how many lessons today have a topic;
@@ -2067,6 +2075,13 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
 
     def _rows(self, since: str | None = None, only: str | None = None) -> list[dict[str, Any]]:
         data = self.coordinator.data
+        # Lessons the student missed (a non-presence attendance record on the
+        # same date and lesson number) - "what to catch up on".
+        missed = {
+            ((a.date or "")[:10], _as_lesson_no(a.lesson_no))
+            for a in data.attendances
+            if (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
+        }
         rows = []
         for t in data.lesson_topics:
             day = (t.date or "")[:10]
@@ -2079,6 +2094,7 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
                     "subject": data.subjects.get(t.subject_id) if t.subject_id is not None else None,
                     "topic": t.topic,
                     "is_trip": t.is_trip,
+                    "absent": (day, t.lesson_no) in missed,
                 }
             )
         return rows
