@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1-beta.1
 
 ### Added
 - **Class register number read from Librus.** The Lucky number sensor's
