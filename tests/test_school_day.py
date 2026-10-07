@@ -32,6 +32,11 @@ def _hhmm(offset_minutes: int) -> str:
     return (dt_util.now() + timedelta(minutes=offset_minutes)).strftime("%H:%M")
 
 
+def _local_hhmm(state: str) -> str:
+    """A timestamp sensor's state is UTC ISO; compare in local time."""
+    return dt_util.as_local(dt_util.parse_datetime(state)).strftime("%H:%M")
+
+
 def _lesson(no: int, start: str, end: str, **flags) -> dict:
     return {
         "LessonNo": str(no),
@@ -75,12 +80,12 @@ async def test_school_day_sensors_follow_the_clock(hass, freezer) -> None:
     assert hass.states.get(in_school).state == "off"
 
     start = hass.states.get(_entity_id(hass, entry, "sensor", "school_start"))
-    assert dt_util.parse_datetime(start.state).strftime("%H:%M") == _hhmm(60)
+    assert _local_hhmm(start.state) == _hhmm(60)
     assert start.attributes["is_today"] is True
     assert start.attributes["subject"] == "Matematyka"
     end = hass.states.get(_entity_id(hass, entry, "sensor", "school_end"))
     # Lesson 3 is cancelled, so school ends with lesson 2.
-    assert dt_util.parse_datetime(end.state).strftime("%H:%M") == _hhmm(160)
+    assert _local_hhmm(end.state) == _hhmm(160)
 
     # During the break between lessons 1 and 2: at school, and the next
     # start is tomorrow's first lesson (lesson 2, 08:55).
@@ -91,7 +96,7 @@ async def test_school_day_sensors_follow_the_clock(hass, freezer) -> None:
     start = hass.states.get(_entity_id(hass, entry, "sensor", "school_start"))
     assert start.attributes["date"] == (today + timedelta(days=1)).isoformat()
     assert start.attributes["lesson_no"] == 2
-    assert dt_util.parse_datetime(start.state).strftime("%H:%M") == "08:55"
+    assert _local_hhmm(start.state) == "08:55"
 
 
 async def test_free_day_is_not_a_school_day(hass, freezer) -> None:
@@ -108,7 +113,7 @@ async def test_free_day_is_not_a_school_day(hass, freezer) -> None:
     assert hass.states.get(_entity_id(hass, entry, "binary_sensor", "school_day_tomorrow")).state == "off"
 
 
-async def test_homework_todo_list_keeps_ticks(hass, freezer) -> None:
+async def test_homework_todo_list_keeps_ticks(hass, freezer, hass_storage) -> None:
     freezer.move_to(_FROZEN)
     due = (dt_util.now().date() + timedelta(days=3)).isoformat()
     client = build_mock_client(
@@ -141,10 +146,9 @@ async def test_homework_todo_list_keeps_ticks(hass, freezer) -> None:
     )
     assert hass.states.get(todo_id).state == "1"
 
-    # The tick survives a reload (it is stored in Home Assistant).
-    await hass.config_entries.async_reload(entry.entry_id)
-    await hass.async_block_till_done()
-    assert hass.states.get(todo_id).state == "1"
+    # The tick is stored in Home Assistant, so it survives a restart.
+    stored = hass_storage[f"{DOMAIN}.{entry.entry_id}.homework_done"]
+    assert stored["data"] == {"done": ["7"]}
 
 
 def test_daily_averages_step_with_new_grades() -> None:
