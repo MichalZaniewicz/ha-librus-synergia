@@ -44,6 +44,7 @@ from .coordinator import (
     school_year_issue_id,
     state_store_key,
 )
+from .attachment_view import async_register_attachment_view
 from .llm_api import async_setup_llm_api, async_unload_llm_api
 from .services import async_setup_services, async_unload_services
 
@@ -165,6 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
 
     async_setup_services(hass)
     async_setup_llm_api(hass)
+    async_register_attachment_view(hass)
     return True
 
 

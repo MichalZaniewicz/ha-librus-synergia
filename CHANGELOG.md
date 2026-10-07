@@ -16,8 +16,11 @@
 - **School documents.** Sensor *School documents* (with links), event
   `librus_synergia_new_school_document` + event entity, and the blueprint
   **New School Document** (28 blueprints).
-- **Message attachments.** Action `librus_synergia.download_attachment`
-  saves an attachment to the media folder without opening the message.
+- **Message attachments.** A logged-in endpoint
+  (`/api/librus_synergia/attachment/<device>/<message>/<attachment>`) passes a
+  Wiadomości attachment straight from Librus to the browser, without saving
+  it in Home Assistant and without opening the message in Librus. The
+  companion Messages card uses it when a file name is tapped.
 - Homework assignments carry their category name (`category`).
 
 ### Changed

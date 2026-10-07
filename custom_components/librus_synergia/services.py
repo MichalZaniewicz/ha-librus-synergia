@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 import voluptuous as vol
@@ -39,7 +38,6 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_GET_MESSAGE = "get_message"
 SERVICE_REFRESH = "refresh"
 SERVICE_GET_GRADES = "get_grades"
-SERVICE_DOWNLOAD_ATTACHMENT = "download_attachment"
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
     {
@@ -51,13 +49,6 @@ _GET_MESSAGE_SCHEMA = vol.Schema(
 
 _REFRESH_SCHEMA = vol.Schema({vol.Optional("device_id"): cv.string})
 
-_DOWNLOAD_ATTACHMENT_SCHEMA = vol.Schema(
-    {
-        vol.Required("device_id"): cv.string,
-        vol.Required("message_id"): cv.string,
-        vol.Required("attachment_id"): cv.string,
-    }
-)
 
 _GET_GRADES_SCHEMA = vol.Schema(
     {
@@ -67,7 +58,7 @@ _GET_GRADES_SCHEMA = vol.Schema(
 )
 
 
-def _resolve_coordinator(hass: HomeAssistant, device_id: str) -> LibrusDataUpdateCoordinator:
+def resolve_coordinator(hass: HomeAssistant, device_id: str) -> LibrusDataUpdateCoordinator:
     device = dr.async_get(hass).async_get(device_id)
     if device is None:
         raise ServiceValidationError(f"Unknown device: {device_id}")
@@ -101,7 +92,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         coordinator's debounced request, so spamming it is harmless."""
         device_id = call.data.get("device_id")
         if device_id:
-            coordinators = [_resolve_coordinator(hass, device_id)]
+            coordinators = [resolve_coordinator(hass, device_id)]
         else:
             coordinators = [
                 entry.runtime_data
@@ -129,7 +120,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         never marks anything read (see LibrusApiClient's module comment
         above async_get_message).
         """
-        coordinator = _resolve_coordinator(hass, call.data["device_id"])
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
         message_id = call.data["message_id"]
         mailbox = call.data["mailbox"]
         try:
@@ -182,7 +173,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         but reading "every grade across every subject" today means polling
         16+ separate sensors; this is the single-call equivalent.
         """
-        coordinator = _resolve_coordinator(hass, call.data["device_id"])
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
         if coordinator.data is None:
             raise HomeAssistantError("No data available yet - the integration hasn't completed its first refresh.")
 
@@ -250,44 +241,6 @@ def async_setup_services(hass: HomeAssistant) -> None:
             response["points_percentage"] = point_grades_percentage(point_grades)
         return response
 
-    async def _async_handle_download_attachment(call: ServiceCall) -> ServiceResponse:
-        """Download one message attachment into Home Assistant's media
-        folder (`<media>/librus_synergia/<message id>/<file name>`), without
-        opening the message in Librus. Returns where it was saved, including
-        a `media-source://` id a card can turn into a link."""
-        coordinator = _resolve_coordinator(hass, call.data["device_id"])
-        message_id = call.data["message_id"]
-        try:
-            file = await coordinator.async_download_attachment(call.data["attachment_id"], message_id)
-        except LibrusError as err:
-            raise HomeAssistantError(f"Couldn't download the attachment: {err}") from err
-        media_root = hass.config.media_dirs.get("local") or hass.config.path("media")
-        safe_message = "".join(ch for ch in str(message_id) if ch.isalnum()) or "message"
-        name = _safe_filename(file.filename)
-        folder = os.path.join(media_root, "librus_synergia", safe_message)
-        path = os.path.join(folder, name)
-
-        def _write() -> None:
-            os.makedirs(folder, exist_ok=True)
-            with open(path, "wb") as handle:
-                handle.write(file.content)
-
-        await hass.async_add_executor_job(_write)
-        return {
-            "filename": name,
-            "content_type": file.content_type,
-            "size": len(file.content),
-            "path": path,
-            "media_content_id": f"media-source://media_source/local/librus_synergia/{safe_message}/{name}",
-        }
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DOWNLOAD_ATTACHMENT,
-        _async_handle_download_attachment,
-        schema=_DOWNLOAD_ATTACHMENT_SCHEMA,
-        supports_response=SupportsResponse.OPTIONAL,
-    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_GET_GRADES,
@@ -302,13 +255,7 @@ def async_unload_services(hass: HomeAssistant) -> None:
     entry is about to be unloaded (see __init__.py::async_unload_entry),
     so a second student's entry doesn't lose the service while the first
     one is just being reloaded."""
-    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH, SERVICE_GET_GRADES, SERVICE_DOWNLOAD_ATTACHMENT):
+    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH, SERVICE_GET_GRADES):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
 
-
-def _safe_filename(name: str) -> str:
-    """A file name without path parts or characters a file system rejects."""
-    name = name.replace("\\", "/").rsplit("/", 1)[-1]
-    cleaned = "".join(ch for ch in name if ch not in '<>:"|?*' and ord(ch) >= 32).strip(" .")
-    return cleaned[:150] or "attachment"

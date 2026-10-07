@@ -33,24 +33,6 @@ get_message:
             - "justifications"
             - "trash"
 
-download_attachment:
-  fields:
-    device_id:
-      required: true
-      selector:
-        device:
-          integration: librus_synergia
-    message_id:
-      required: true
-      example: "100001"
-      selector:
-        text:
-    attachment_id:
-      required: true
-      example: "200002"
-      selector:
-        text:
-
 get_grades:
   fields:
     device_id:

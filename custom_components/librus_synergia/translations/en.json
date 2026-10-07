@@ -259,15 +259,6 @@
         }
       }
     },
-    "download_attachment": {
-      "name": "Download message attachment",
-      "description": "Saves one attachment of a Librus message to Home Assistant's media folder (librus_synergia, a folder per message), without opening the message in Librus. Returns where it was saved.",
-      "fields": {
-        "device_id": { "name": "Device", "description": "The Librus Synergia device (student) the message belongs to." },
-        "message_id": { "name": "Message ID", "description": "The message's id." },
-        "attachment_id": { "name": "Attachment ID", "description": "The attachment's id, from the get_message response's \"attachments\"." }
-      }
-    },
     "get_grades": {
       "name": "Get grades",
       "description": "Returns every grade for a student in one response, optionally filtered to one subject - instead of reading each subject sensor's own \"grades\" attribute separately.",

@@ -354,19 +354,6 @@ Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 integration, see [Known limitations](#known-limitations--unverified-details)
 below, but at least you'll know what to look for in the real Librus app).
 
-### `librus_synergia.download_attachment`
-
-Saves one attachment of a Librus message to Home Assistant's media folder (`librus_synergia/<message id>/<file name>`) **without opening the message** in Librus, and returns `filename`, `content_type`, `size`, `path` and a `media_content_id` (`media-source://media_source/local/...`). The attachment ids come from `get_message`'s `attachments`. The file then shows up under **Media** in the sidebar.
-
-```yaml
-action: librus_synergia.download_attachment
-data:
-  device_id: <your Librus device>
-  message_id: "100001"
-  attachment_id: "200002"
-response_variable: file
-```
-
 ### `librus_synergia.get_grades`
 
 Returns every grade for a student in one response, optionally filtered to

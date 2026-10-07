@@ -259,15 +259,6 @@
         }
       }
     },
-    "download_attachment": {
-      "name": "Pobierz załącznik wiadomości",
-      "description": "Zapisuje jeden załącznik wiadomości z Librusa w folderze multimediów Home Assistanta (librus_synergia, osobny folder na każdą wiadomość), bez otwierania wiadomości w Librusie. Zwraca, gdzie zapisano plik.",
-      "fields": {
-        "device_id": { "name": "Urządzenie", "description": "Urządzenie Librus Synergia (uczeń), do którego należy wiadomość." },
-        "message_id": { "name": "ID wiadomości", "description": "Identyfikator wiadomości." },
-        "attachment_id": { "name": "ID załącznika", "description": "Identyfikator załącznika, z pola \"attachments\" odpowiedzi get_message." }
-      }
-    },
     "get_grades": {
       "name": "Pobierz oceny",
       "description": "Zwraca wszystkie oceny ucznia w jednej odpowiedzi, opcjonalnie ograniczone do jednego przedmiotu - zamiast odczytywać osobno atrybut \"grades\" z każdego sensora średniej przedmiotowej.",

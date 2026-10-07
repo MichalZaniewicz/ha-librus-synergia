@@ -3,7 +3,6 @@ categories, the student number from JSON and attachment download."""
 
 from __future__ import annotations
 
-import os
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntryState
@@ -155,25 +154,23 @@ async def test_student_number_from_the_users_record(hass) -> None:
     client.async_get_student_info_page.assert_not_called()
 
 
-async def test_download_attachment_service_saves_to_media(hass, tmp_path) -> None:
-    hass.config.media_dirs = {"local": str(tmp_path)}
+async def test_attachment_view_streams_the_file(hass, hass_client) -> None:
+    """The file goes straight to the browser - nothing saved in HA."""
     client = build_mock_client()
     client.async_download_message_attachment.return_value = AttachmentFileData(
-        filename="Plan/lekcji.pdf", content_type="application/pdf", content=b"%PDF-1.4"
+        filename="Plan lekcji ąę.pdf", content_type="application/pdf", content=b"%PDF-1.4"
     )
     entry = await setup_integration(hass, client)
     device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    http = await hass_client()
 
-    response = await hass.services.async_call(
-        DOMAIN,
-        "download_attachment",
-        {"device_id": device.id, "message_id": "99", "attachment_id": "55"},
-        blocking=True,
-        return_response=True,
-    )
+    response = await http.get(f"/api/{DOMAIN}/attachment/{device.id}/99/55")
 
-    assert response["filename"] == "lekcji.pdf"
-    assert response["media_content_id"] == "media-source://media_source/local/librus_synergia/99/lekcji.pdf"
-    with open(os.path.join(tmp_path, "librus_synergia", "99", "lekcji.pdf"), "rb") as handle:
-        assert handle.read() == b"%PDF-1.4"
+    assert response.status == 200
+    assert await response.read() == b"%PDF-1.4"
+    assert response.headers["Content-Type"].startswith("application/pdf")
+    assert "filename*=UTF-8''Plan%20lekcji%20%C4%85%C4%99.pdf" in response.headers["Content-Disposition"]
     client.async_download_message_attachment.assert_awaited_once_with("55", "99")
+
+    missing = await http.get(f"/api/{DOMAIN}/attachment/unknown-device/99/55")
+    assert missing.status == 404

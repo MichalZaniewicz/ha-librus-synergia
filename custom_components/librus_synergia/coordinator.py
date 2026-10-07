@@ -1865,8 +1865,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return payload
 
     async def async_download_attachment(self, attachment_id: str, message_id: str) -> Any:
-        """Download one message attachment for the `download_attachment`
-        service, with the same one-retry Wiadomości recovery as
+        """Download one message attachment for the attachment view
+        (attachment_view.py), with the same one-retry Wiadomości recovery as
         `async_fetch_message`. Doesn't open (mark read) the message."""
         assert self.config_entry is not None
         try:
