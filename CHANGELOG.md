@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Blueprint **Copy School Events to a Calendar**: tests, quizzes, trips,
+  meetings and days off copied into a calendar of your choice (daily and on
+  a new Agenda entry), filtered by Agenda category, without duplicates.
+
 ## 0.11.0
 
 ### Added

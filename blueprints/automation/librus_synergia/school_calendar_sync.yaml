@@ -1,0 +1,175 @@
+blueprint:
+  name: "Librus: Copy School Events to a Calendar"
+  description: >
+    Copies tests, quizzes, trips, meetings and days off from Librus into a
+    calendar of your choice - for example a family Google Calendar - so the
+    whole family sees them outside Home Assistant.
+
+
+    Runs once a day for the coming days and right after a new Agenda entry
+    appears. An entry already in the target calendar (same title, same day)
+    is skipped, so running it again never creates duplicates. Home Assistant
+    can only add events to a calendar, not move or remove them: if a teacher
+    moves a test, the new date is added and the old one has to be deleted by
+    hand.
+
+
+    The target calendar must allow adding events from Home Assistant (Google
+    Calendar, Local Calendar).
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_calendar_sync.yaml
+  input:
+    agenda_calendar:
+      name: Agenda calendar
+      description: The Librus "Agenda" (Terminarz) calendar of the student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: calendar
+    free_days_calendar:
+      name: Free days calendar (optional)
+      description: The Librus "Free days" calendar, to copy days off too. Leave empty to skip them.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: calendar
+    target_calendar:
+      name: Target calendar
+      description: Where the events go, e.g. your family Google Calendar.
+      selector:
+        entity:
+          domain: calendar
+    categories:
+      name: Agenda categories to copy
+      description: >
+        Comma-separated words matched against the Agenda category
+        (case-insensitive, part of the word is enough). Leave empty to copy
+        every entry.
+      default: "sprawdzian, kartkówka, egzamin, wycieczka, zebranie"
+      selector:
+        text: {}
+    days_ahead:
+      name: Days ahead
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 120
+          unit_of_measurement: days
+    sync_time:
+      name: Daily sync time
+      default: "18:00:00"
+      selector:
+        time: {}
+    add_name:
+      name: Put the student's first name in front
+      description: '"Ola: [Sprawdzian] Matematyka: …" - handy with more than one child.'
+      default: true
+      selector:
+        boolean: {}
+
+variables:
+  agenda_cal: !input agenda_calendar
+  free_cal: !input free_days_calendar
+  target_cal: !input target_calendar
+  categories_raw: !input categories
+  days: !input days_ahead
+  add_name: !input add_name
+  # The device is named "E-dziennik <first> <last>" by the integration.
+  student_first: >-
+    {{ ((device_attr(agenda_cal, 'name') or '') | replace('E-dziennik ', '')).split(' ')[0] }}
+  prefix: "{{ (student_first ~ ': ') if add_name and student_first else '' }}"
+  keywords: >-
+    {{ categories_raw.split(',') | map('trim') | map('lower') | reject('eq', '') | list }}
+
+triggers:
+  - trigger: time
+    at: !input sync_time
+  - trigger: event
+    event_type: librus_synergia_new_homework
+
+conditions: []
+
+actions:
+  - action: calendar.get_events
+    target:
+      entity_id: "{{ agenda_cal }}"
+    data:
+      start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
+      duration:
+        days: "{{ days | int(30) }}"
+    response_variable: agenda
+  - if:
+      - condition: template
+        value_template: "{{ free_cal not in ['', none] }}"
+    then:
+      - action: calendar.get_events
+        target:
+          entity_id: "{{ free_cal }}"
+        data:
+          start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
+          duration:
+            days: "{{ days | int(30) }}"
+        response_variable: free_days
+    else:
+      - variables:
+          free_days: {}
+  - action: calendar.get_events
+    target:
+      entity_id: "{{ target_cal }}"
+    data:
+      start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
+      duration:
+        days: "{{ days | int(30) + 1 }}"
+    response_variable: existing
+  - variables:
+      to_create: >-
+        {%- set have = namespace(keys=[]) -%}
+        {%- for e in (existing[target_cal].events if target_cal in existing else []) -%}
+          {%- set have.keys = have.keys + [e.summary ~ '|' ~ (e.start | string)[:10]] -%}
+        {%- endfor -%}
+        {%- set out = namespace(items=[]) -%}
+        {%- for e in (agenda[agenda_cal].events if agenda_cal in agenda else []) -%}
+          {%- set cat = (e.summary.split(']')[0][1:] if e.summary.startswith('[') else '') | lower -%}
+          {%- set ns = namespace(ok=(keywords | count == 0)) -%}
+          {%- for kw in keywords -%}{%- if kw in cat -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
+          {%- set title = prefix ~ e.summary -%}
+          {%- if ns.ok and (title ~ '|' ~ (e.start | string)[:10]) not in have.keys -%}
+            {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': e.description or ''}] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- for e in (free_days[free_cal].events if free_cal and free_cal in free_days else []) -%}
+          {%- set title = prefix ~ 'Dzień wolny: ' ~ e.summary -%}
+          {%- if (title ~ '|' ~ (e.start | string)[:10]) not in have.keys -%}
+            {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': ''}] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ out.items }}
+  - repeat:
+      for_each: "{{ to_create }}"
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ 'T' in (repeat.item.start | string) }}"
+          then:
+            - action: calendar.create_event
+              target:
+                entity_id: "{{ target_cal }}"
+              data:
+                summary: "{{ repeat.item.summary }}"
+                description: "{{ repeat.item.description }}"
+                start_date_time: "{{ repeat.item.start }}"
+                end_date_time: "{{ repeat.item.end }}"
+          else:
+            - action: calendar.create_event
+              target:
+                entity_id: "{{ target_cal }}"
+              data:
+                summary: "{{ repeat.item.summary }}"
+                description: "{{ repeat.item.description }}"
+                start_date: "{{ repeat.item.start }}"
+                end_date: "{{ repeat.item.end }}"
+
+mode: queued
+max: 3
