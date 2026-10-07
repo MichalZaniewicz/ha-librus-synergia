@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1-beta.2
 
 ### Added
 - **Ask Assist about school.** The integration registers a "Librus
