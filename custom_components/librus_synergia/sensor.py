@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTime
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -46,6 +46,7 @@ from .const import (
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_HIDE_EMPTY_SUBJECTS,
     DOMAIN,
+    STATUS_OPTIONS,
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
@@ -266,6 +267,8 @@ async def async_setup_entry(
             LibrusBehaviourStreakSensor(coordinator, entry),
             LibrusGoodGradeStreakSensor(coordinator, entry),
             LibrusRankSensor(coordinator, entry),
+            LibrusStatusSensor(coordinator, entry),
+            LibrusLastUpdateSensor(coordinator, entry),
         ]
     )
 
@@ -317,7 +320,13 @@ async def async_setup_entry(
 
 
 class LibrusSensorBase(CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEntity):
-    """Common bits for every Librus Synergia sensor."""
+    """Common bits for every Librus Synergia sensor.
+
+    Lists and per-item breakdowns in attributes are kept out of the recorder
+    (`_unrecorded_attributes` on each sensor): they change with every new
+    record, and storing a copy each time grows the database for no use -
+    history graphs only need the state. Templates and cards still read them
+    from the live state."""
 
     _attr_has_entity_name = True
 
@@ -382,6 +391,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     discovered dynamically."""
 
     _attr_translation_key = "subject_average"
+    _unrecorded_attributes = frozenset({"grades", "latest_grade_comments"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
@@ -533,6 +543,7 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
     grade in the last two weeks. See forecast.py."""
 
     _attr_translation_key = "grade_forecast"
+    _unrecorded_attributes = frozenset({"subjects"})
     _attr_icon = "mdi:crystal-ball"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
@@ -649,6 +660,9 @@ class LibrusAttendanceSensor(LibrusSensorBase):
     """
 
     _attr_translation_key = "attendance"
+    _unrecorded_attributes = frozenset(
+        {"breakdown", "presence_by_type", "by_date", "by_semester", "by_weekday", "by_subject"}
+    )
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:calendar-remove"
 
@@ -838,6 +852,7 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
     lists the days still needing a justification."""
 
     _attr_translation_key = "unexcused_absences"
+    _unrecorded_attributes = frozenset({"recent_dates"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:account-alert-outline"
 
@@ -916,6 +931,7 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     `subject` and `at_risk`."""
 
     _attr_translation_key = "subject_attendance"
+    _unrecorded_attributes = frozenset({"subjects"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 1
@@ -1170,6 +1186,7 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
     Behaviour notices and Unread messages sensors' pattern."""
 
     _attr_translation_key = "unread_announcements"
+    _unrecorded_attributes = frozenset({"recent"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:bullhorn"
 
@@ -1225,6 +1242,7 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
     """Count of behaviour notices ("uwagi"), with a short recent-items list."""
 
     _attr_translation_key = "behaviour_notices"
+    _unrecorded_attributes = frozenset({"recent"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:alert-circle-outline"
 
@@ -1268,6 +1286,7 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
     `HomeWorkAssignments` endpoint has always been empty."""
 
     _attr_translation_key = "homework_assignments"
+    _unrecorded_attributes = frozenset({"recent"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:notebook-edit-outline"
 
@@ -1323,6 +1342,7 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
     (`BehaviourGradeData.display`/`name`, librus-synergia 0.3.1)."""
 
     _attr_translation_key = "behaviour_grade"
+    _unrecorded_attributes = frozenset({"recent"})
     _attr_icon = "mdi:medal-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1387,6 +1407,7 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
     populated."""
 
     _attr_translation_key = "descriptive_grades"
+    _unrecorded_attributes = frozenset({"recent"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:text-box-outline"
 
@@ -1463,6 +1484,9 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
     """
 
     _attr_translation_key = "unread_messages"
+    _unrecorded_attributes = frozenset(
+        {"recent", "substitutions_recent", "alerts_recent", "justifications_recent"}
+    )
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:email-outline"
 
@@ -1510,6 +1534,7 @@ class LibrusSchoolSensor(LibrusSensorBase):
     (refreshed on the same 24h cadence as subjects/teachers/classrooms)."""
 
     _attr_translation_key = "school"
+    _unrecorded_attributes = frozenset({"bell_schedule", "subject_teachers"})
     _attr_icon = "mdi:school"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1756,6 +1781,7 @@ class LibrusNextExamSensor(LibrusSensorBase):
     `_EXAM_CATEGORY_RE`) - deliberately conservative."""
 
     _attr_translation_key = "next_exam"
+    _unrecorded_attributes = frozenset({"upcoming"})
     _attr_device_class = SensorDeviceClass.DATE
     _attr_icon = "mdi:file-document-alert-outline"
 
@@ -1829,6 +1855,71 @@ class LibrusNextExamSensor(LibrusSensorBase):
                 for d, it in upcoming[:10]
             ],
         }
+
+
+class LibrusStatusSensor(LibrusSensorBase):
+    """Connection health: `ok`, `degraded` (some section failed this cycle
+    and its last good copy is shown), `stale` (Librus isn't answering, the
+    last data is shown) or `error` (no usable data - the other entities are
+    unavailable). Stays available itself so the outage can be seen."""
+
+    _attr_translation_key = "status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = STATUS_OPTIONS
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:lan-check"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "status")
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.status
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        coordinator = self.coordinator
+
+        def iso(value: datetime | None) -> str | None:
+            return value.isoformat() if value else None
+
+        return {
+            "data_source": coordinator.data_source,
+            "last_success": iso(coordinator.last_success_at),
+            "last_attempt": iso(coordinator.last_attempt_at),
+            "last_error": coordinator.last_error,
+            "failures": coordinator.failures,
+            "next_attempt": iso(coordinator.next_attempt_at),
+            "fallback_sections": sorted(coordinator.fallback_sections),
+            "degraded_endpoints": {
+                label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()
+            },
+        }
+
+
+class LibrusLastUpdateSensor(LibrusSensorBase):
+    """When Librus last answered a full refresh - survives restarts, so it
+    also tells how old the data shown during an outage is."""
+
+    _attr_translation_key = "last_update"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:cloud-clock-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "last_update")
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_success_at is not None
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.last_success_at
 
 
 class LibrusWeeklySummarySensor(SensorEntity):

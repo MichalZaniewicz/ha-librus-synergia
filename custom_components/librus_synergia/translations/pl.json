@@ -173,6 +173,8 @@
       "homework": { "name": "Zadania domowe" }
     },
     "sensor": {
+      "status": { "name": "Status połączenia", "state": { "ok": "OK", "degraded": "Częściowo z zapisanych danych", "stale": "Librus nie odpowiada", "error": "Błąd" } },
+      "last_update": { "name": "Ostatnia udana aktualizacja" },
       "weekly_summary": { "name": "Podsumowanie tygodnia" },
       "grade_forecast": { "name": "Prognoza ocen" },
       "overall_average": { "name": "Średnia ocen" },

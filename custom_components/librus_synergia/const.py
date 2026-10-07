@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.const import Platform
 
 DOMAIN = "librus_synergia"
@@ -51,6 +53,26 @@ SMART_POLLING_DAY_OFF = 60  # minutes
 SMART_POLLING_NIGHT = 180  # minutes
 SMART_POLLING_NIGHT_START = 22
 SMART_POLLING_NIGHT_END = 6
+
+# Saved coordinator state (coordinator.async_restore_state): what was already
+# seen, so a grade added while HA was off still fires its event, and the last
+# good response of every endpoint, the fallback while Librus is down.
+STATE_STORE_VERSION = 1
+STATE_SAVE_DELAY = 300  # seconds
+# How old the last good data may get and still be shown while Librus keeps
+# failing (and be rebuilt from the saved responses at HA start). Past this the
+# entities go unavailable.
+LAST_GOOD_DATA_MAX_AGE = timedelta(days=3)
+# After the second failed cycle in a row the next attempts back off: twice the
+# update interval, then four times, ... up to this.
+OUTAGE_BACKOFF_MAX = timedelta(hours=2)
+
+# Status sensor states.
+STATUS_OK = "ok"
+STATUS_DEGRADED = "degraded"
+STATUS_STALE = "stale"
+STATUS_ERROR = "error"
+STATUS_OPTIONS = [STATUS_OK, STATUS_DEGRADED, STATUS_STALE, STATUS_ERROR]
 
 # Hide subject average sensors for subjects without a single grade yet
 # (e.g. Religia early in the year). Off by default; the sensor appears as

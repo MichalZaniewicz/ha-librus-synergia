@@ -99,6 +99,10 @@ async def async_get_config_entry_diagnostics(
     ]
     integration = await async_get_integration(hass, DOMAIN)
     reference_data_fetched_at = coordinator.reference_data_fetched_at
+
+    def iso(value: Any) -> str | None:
+        return value.isoformat() if value else None
+
     return {
         "integration_version": integration.version,
         "last_update_success": coordinator.last_update_success,
@@ -120,6 +124,16 @@ async def async_get_config_entry_diagnostics(
         # Label -> ISO timestamp it started failing (see
         # `degraded_endpoints`'s own docstring) - empty means every
         # degradable endpoint succeeded on the last cycle.
+        "connection": {
+            "status": coordinator.status,
+            "data_source": coordinator.data_source,
+            "last_success": iso(coordinator.last_success_at),
+            "last_attempt": iso(coordinator.last_attempt_at),
+            "last_error": coordinator.last_error,
+            "failures": coordinator.failures,
+            "next_attempt": iso(coordinator.next_attempt_at),
+            "fallback_sections": sorted(coordinator.fallback_sections),
+        },
         "degraded_endpoints": {
             label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()
         },

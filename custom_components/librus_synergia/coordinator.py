@@ -22,6 +22,7 @@ from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -31,7 +32,7 @@ from librus_synergia import (
     LibrusError,
     LibrusSessionExpiredError,
 )
-from librus_synergia.changes import Changes, ChangeTracker
+from librus_synergia.changes import Changes, ChangeTracker, SeenIds
 from librus_synergia.models import (
     AttendanceData,
     AttendanceTypeData,
@@ -122,13 +123,21 @@ from .const import (
     EVENT_TIMETABLE_CHANGED,
     ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
     ISSUE_SCHOOL_YEAR_ROLLOVER,
+    LAST_GOOD_DATA_MAX_AGE,
     LUCKY_NUMBER_PUBLISH_HOUR,
     OPTIONAL_ENDPOINT_LABELS,
+    OUTAGE_BACKOFF_MAX,
     REFERENCE_DATA_ENDPOINT_LABELS,
     SMART_POLLING_DAY_OFF,
     SMART_POLLING_NIGHT,
     SMART_POLLING_NIGHT_END,
     SMART_POLLING_NIGHT_START,
+    STATE_SAVE_DELAY,
+    STATE_STORE_VERSION,
+    STATUS_DEGRADED,
+    STATUS_ERROR,
+    STATUS_OK,
+    STATUS_STALE,
 )
 from .forecast import average_sums, forecast_basis, parse_thresholds, subject_forecasts
 
@@ -146,6 +155,24 @@ STUDENT_INFO_LABEL = "Informacja"
 # candidate LIDs to probe per attempt.
 _KINDERGARTEN_DISCOVERY_RETRY = timedelta(hours=24)
 _KINDERGARTEN_MAX_CANDIDATES = 6
+
+# The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
+_CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
+# `_async_get_messages`' result when nothing was fetched.
+_NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [])
+
+
+def state_store_key(entry_id: str) -> str:
+    """Storage key of one entry's saved coordinator state."""
+    return f"{DOMAIN}.{entry_id}.state"
+
+
+def _restore_id(key: str) -> int | str:
+    """JSON object keys are strings - subject ids are ints."""
+    try:
+        return int(key)
+    except ValueError:
+        return key
 
 
 def optional_endpoint_issue_id(entry_id: str, label: str) -> str:
@@ -472,6 +499,100 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # low-stakes.
         self._optional_endpoint_first_failure: dict[str, datetime] = {}
 
+        # Saved across restarts (see async_restore_state): the last good
+        # response per endpoint label and per timetable week - the fallback
+        # when one fails, or when Librus is down while HA starts.
+        self._state_store: Store[dict[str, Any]] = Store(
+            hass, STATE_STORE_VERSION, state_store_key(entry.entry_id)
+        )
+        self._last_good: dict[str, Any] = {}
+        self._timetable_cache: dict[str, Any] = {}
+        # Health of the last cycles, for the Status / Last update sensors.
+        self.last_success_at: datetime | None = None
+        self.last_attempt_at: datetime | None = None
+        self.last_error: str | None = None
+        self.failures = 0
+        self.next_attempt_at: datetime | None = None
+        # "live" (fetched this cycle), "stale" (Librus failed, showing the
+        # last data) or "cache" (rebuilt from the saved responses at start).
+        self.data_source = "live"
+        # Sections shown from their saved copy this cycle (they failed).
+        self.fallback_sections: set[str] = set()
+
+    async def async_restore_state(self) -> None:
+        """Load what the previous run saved: the ids already announced (so
+        a grade added while HA was off still fires its event instead of
+        being swallowed by the silent first-poll seeding), the last good
+        responses and when Librus last answered. A missing or unreadable
+        file just means a fresh start."""
+        try:
+            stored = await self._state_store.async_load()
+        except Exception:  # noqa: BLE001 - a corrupt file must not block setup
+            _LOGGER.warning("Could not read the saved Librus state - starting fresh", exc_info=True)
+            stored = None
+        if not isinstance(stored, dict):
+            return
+        if isinstance(seen := stored.get("seen"), dict):
+            self._change_tracker = ChangeTracker(SeenIds.from_dict(seen))
+        if isinstance(ids := stored.get("homework_assignment_ids"), list):
+            self._known_homework_assignment_ids = set(ids)
+        if isinstance(keys := stored.get("achievements"), list):
+            self._known_achievements = {str(k) for k in keys}
+        forecast = stored.get("forecast")
+        if isinstance(forecast, dict) and isinstance(forecast.get("values"), dict):
+            self._known_forecast = {
+                _restore_id(k): v for k, v in forecast["values"].items() if isinstance(v, int)
+            }
+            self._known_forecast_basis = forecast.get("basis")
+        if isinstance(payloads := stored.get("payloads"), dict):
+            self._last_good = payloads
+        if isinstance(weeks := stored.get("timetable"), dict):
+            self._timetable_cache = weeks
+        if isinstance(number := stored.get("student_number"), int):
+            self.student_number_from_librus = number
+        if saved := stored.get("last_success_at"):
+            self.last_success_at = dt_util.parse_datetime(saved)
+
+    def _state_to_save(self) -> dict[str, Any]:
+        tracker = self._change_tracker
+        return {
+            "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
+            "homework_assignment_ids": (
+                sorted(self._known_homework_assignment_ids, key=str)
+                if self._known_homework_assignment_ids is not None
+                else None
+            ),
+            "achievements": (
+                sorted(self._known_achievements) if self._known_achievements is not None else None
+            ),
+            "forecast": (
+                {
+                    "basis": self._known_forecast_basis,
+                    "values": {str(k): v for k, v in self._known_forecast.items()},
+                }
+                if self._known_forecast is not None
+                else None
+            ),
+            "payloads": self._last_good,
+            "timetable": self._timetable_cache,
+            "student_number": self.student_number_from_librus,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+        }
+
+    @property
+    def status(self) -> str:
+        """Overall health for the Status sensor: `error` while the entities
+        are unavailable, `stale` while Librus fails and the last data is
+        shown, `degraded` when some section failed this cycle and its last
+        good copy is shown, `ok` otherwise."""
+        if not self.last_update_success:
+            return STATUS_ERROR
+        if self.data_source != "live":
+            return STATUS_STALE
+        if self.fallback_sections:
+            return STATUS_DEGRADED
+        return STATUS_OK
+
     @property
     def client(self) -> LibrusApiClient:
         """Expose the client so calendar entities can fetch arbitrary weeks
@@ -577,9 +698,31 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     self._timetable_forbidden = True
                 return {}
             raise
+        except LibrusError:
+            # A transient failure (timeout, 5xx, garbled response): the last
+            # good copy of that week beats failing the whole cycle.
+            cached = self._timetable_cache.get(week_start.isoformat())
+            if cached is None:
+                raise
+            _LOGGER.debug("Timetable %s fetch failed - using the saved copy", week_start)
+            self._note_optional_endpoint_failure("Timetable")
+            self.fallback_sections.add("Timetable")
+            return cached
         self._timetable_forbidden = False
         self._note_optional_endpoint_recovery("Timetable")
+        self._remember_timetable_week(week_start, payload)
         return payload
+
+    def _remember_timetable_week(self, week_start: date, payload: dict[str, Any]) -> None:
+        """Keep the last good copy of the current and the next week (the two
+        the coordinator polls; weeks a dashboard browses to are not kept)."""
+        this_week = dt_util.now().date()
+        this_week -= timedelta(days=this_week.weekday())
+        if not this_week <= week_start <= this_week + timedelta(days=7):
+            return
+        self._timetable_cache[week_start.isoformat()] = payload
+        for key in [k for k in self._timetable_cache if k < this_week.isoformat()]:
+            del self._timetable_cache[key]
 
     async def _async_maybe_discover_kindergarten(self, me_payload: dict[str, Any]) -> bool:
         """Try to find a kindergarten child's LID, returning True only when
@@ -757,6 +900,85 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._force_next_fetch = False
         if self.data is not None and not force and self._smart_polling_skip():
             return self.data
+        if self.data is not None and not force and self._in_outage_backoff():
+            return self.data
+        self.last_attempt_at = dt_util.utcnow()
+        self.fallback_sections = set()
+        try:
+            data = await self._async_fetch_live()
+        except UpdateFailed as err:
+            return self._handle_failed_cycle(err)
+        self.last_success_at = self._last_fetch_at = dt_util.utcnow()
+        self.last_error = None
+        self.failures = 0
+        self.next_attempt_at = None
+        self.data_source = "live"
+        self._state_store.async_delay_save(self._state_to_save, STATE_SAVE_DELAY)
+        return data
+
+    def _in_outage_backoff(self) -> bool:
+        return self.next_attempt_at is not None and dt_util.utcnow() < self.next_attempt_at
+
+    def _handle_failed_cycle(self, err: UpdateFailed) -> LibrusData:
+        """Librus failed this cycle (not a rejected password - that raises
+        ConfigEntryAuthFailed and never gets here). Keep showing the last
+        good data while it is recent enough, rebuild it from the saved
+        responses when there is none yet (HA started during the outage),
+        and space out the next attempts after the second failure in a row
+        so an outage isn't met with a login attempt every cycle."""
+        now = dt_util.utcnow()
+        self.failures += 1
+        self.last_error = str(err)
+        if self.failures >= 2 and self.update_interval is not None:
+            delay = min(self.update_interval * 2 ** (self.failures - 1), OUTAGE_BACKOFF_MAX)
+            self.next_attempt_at = now + delay
+        recent = (
+            self.last_success_at is not None
+            and now - self.last_success_at < LAST_GOOD_DATA_MAX_AGE
+        )
+        if recent and self.data is not None:
+            if self.failures == 1:
+                _LOGGER.warning("Librus is not responding (%s) - showing the last data", err)
+            if self.data_source == "live":
+                self.data_source = "stale"
+            return self.data
+        if recent and self.data is None:
+            data = self._build_data_from_saved_responses()
+            if data is not None:
+                _LOGGER.warning(
+                    "Librus is not responding (%s) - starting with the data saved at %s",
+                    err,
+                    self.last_success_at,
+                )
+                self.data_source = "cache"
+                return data
+        raise err
+
+    def _build_data_from_saved_responses(self) -> LibrusData | None:
+        """LibrusData parsed from the last good responses (no events, no
+        messages, no lucky number), or None when nothing usable is saved."""
+        if "Me" not in self._last_good:
+            return None
+        today = dt_util.now().date()
+        week_start = today - timedelta(days=today.weekday())
+        core = [self._last_good.get(label, {}) for label in _CORE_PAYLOAD_LABELS]
+        timetable_index = _CORE_PAYLOAD_LABELS.index("Timetable (this week)")
+        core[timetable_index] = self._timetable_cache.get(week_start.isoformat(), {})
+        core[timetable_index + 1] = self._timetable_cache.get(
+            (week_start + timedelta(days=7)).isoformat(), {}
+        )
+        self._apply_reference_payloads(
+            {label: self._last_good.get(label, {}) for label in REFERENCE_DATA_ENDPOINT_LABELS}
+        )
+        try:
+            return self._build_data(tuple(core), None, _NO_MESSAGES)
+        except Exception:  # noqa: BLE001 - a bad saved file must not block setup
+            _LOGGER.warning("Could not rebuild data from the saved responses", exc_info=True)
+            return None
+
+    async def _async_fetch_live(self) -> LibrusData:
+        """One real fetch from Librus, with the new-item events."""
+        assert self.config_entry is not None
         try:
             await self._client.async_ensure_session_valid(self.config_entry.data[CONF_PASSWORD])
         except LibrusAuthError as err:
@@ -793,27 +1015,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         except LibrusError as err:
             raise UpdateFailed(str(err)) from err
 
-        # NOTE: this order must match _async_fetch_core_payloads' return -
-        # tier 1 (core) fields first, then tier 2 (optional) fields, each
-        # tier in the exact order its own gather() lists them.
-        (
-            me_payload,
-            grades_payload,
-            categories_payload,
-            notes_payload,
-            attendances_payload,
-            attendance_types_payload,
-            timetable_this_week,
-            timetable_next_week,
-            homeworks_payload,
-            notices_payload,
-            grade_comments_payload,
-            homework_assignments_payload,
-            behaviour_grades_payload,
-            behaviour_grade_comments_payload,
-            descriptive_grades_payload,
-            parent_teacher_conferences_payload,
-        ) = core_payloads
+        # Order: _CORE_PAYLOAD_LABELS (Me, tier 1, tier 2).
+        me_payload = core_payloads[0]
+        self._last_good["Me"] = me_payload
+        timetable_this_week, timetable_next_week = core_payloads[6], core_payloads[7]
 
         if await self._async_maybe_discover_kindergarten(me_payload):
             try:
@@ -848,6 +1053,47 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._async_refresh_reference_data(),
         )
         messages_result = await self._async_get_messages()
+        core_payloads = (
+            *core_payloads[:6],
+            timetable_this_week,
+            timetable_next_week,
+            *core_payloads[8:],
+        )
+        data = self._build_data(core_payloads, lucky_number, messages_result)
+        me, grades, notes = data.me, data.grades, data.notes
+        attendances, attendance_types = data.attendances, data.attendance_types
+        self._fire_change_events(self._change_tracker.update(data, today=today), data)
+        self._fire_new_homework_assignment_events(data)
+        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
+        self._fire_forecast_events(data, today)
+        return data
+
+    def _build_data(
+        self,
+        core_payloads: tuple[Any, ...],
+        lucky_number: LuckyNumberData | None,
+        messages_result: tuple[Any, ...],
+    ) -> LibrusData:
+        """Parse one cycle's responses (in `_CORE_PAYLOAD_LABELS` order)
+        together with the cached reference lookups."""
+        (
+            me_payload,
+            grades_payload,
+            categories_payload,
+            notes_payload,
+            attendances_payload,
+            attendance_types_payload,
+            timetable_this_week,
+            timetable_next_week,
+            homeworks_payload,
+            notices_payload,
+            grade_comments_payload,
+            homework_assignments_payload,
+            behaviour_grades_payload,
+            behaviour_grade_comments_payload,
+            descriptive_grades_payload,
+            parent_teacher_conferences_payload,
+        ) = core_payloads
         (
             unread_count,
             unread_by_mailbox,
@@ -866,7 +1112,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendance_types = parse_attendance_types(attendance_types_payload)
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
         grade_categories = parse_grade_categories(categories_payload)
-        data = LibrusData(
+        return LibrusData(
             me=me,
             grades=grades,
             grade_categories=grade_categories,
@@ -903,12 +1149,6 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 parent_teacher_conferences_payload
             ),
         )
-        self._fire_change_events(self._change_tracker.update(data, today=today), data)
-        self._fire_new_homework_assignment_events(data)
-        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
-        self._fire_forecast_events(data, today)
-        self._last_fetch_at = dt_util.utcnow()
-        return data
 
     @property
     def weighted_average(self) -> bool:
@@ -1147,10 +1387,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     exc_info=result,
                 )
                 self._note_optional_endpoint_failure(label)
-                return {}
+                return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
+        self._last_good[label] = result
         return result
+
+    def _fallback(self, label: str) -> dict[str, Any]:
+        """The last good response of a failed section (`{}` if none)."""
+        if label not in self._last_good:
+            return {}
+        self.fallback_sections.add(label)
+        return self._last_good[label]
 
     def _degrade_core_payload(
         self, label: str, result: dict[str, Any] | BaseException
@@ -1189,9 +1437,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     result,
                 )
                 self._note_optional_endpoint_failure(label)
+                self._last_good[label] = {}
                 return {}
+            if (
+                isinstance(result, LibrusError)
+                and not isinstance(result, LibrusSessionExpiredError)
+                and label in self._last_good
+            ):
+                # A transient failure (timeout, 5xx, garbled response) of
+                # one section: keep its last good response rather than
+                # failing the whole cycle over it.
+                _LOGGER.debug("Core endpoint '%s' failed - using the saved copy: %s", label, result)
+                self._note_optional_endpoint_failure(label)
+                return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
+        self._last_good[label] = result
         return result
 
     # How long a supplementary endpoint must fail on EVERY attempt before a
@@ -1281,9 +1542,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     exc_info=result,
                 )
                 self._note_optional_endpoint_failure(label)
-                return {}
+                # The last good copy - an empty dict here wiped e.g. every
+                # subject name for a whole day (reference data is refetched
+                # only every 24h).
+                return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
+        self._last_good[label] = result
         return result
 
     async def _async_refresh_reference_data(self) -> None:
@@ -1341,48 +1606,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_lessons(),
             return_exceptions=True,
         )
-        (
-            subjects_payload,
-            teachers_payload,
-            classrooms_payload,
-            schools_payload,
-            classes_payload,
-            homework_categories_payload,
-            school_free_days_payload,
-            class_free_days_payload,
-            note_categories_payload,
-            behaviour_grade_categories_payload,
-            lessons_payload,
-        ) = (
-            self._degrade_reference_result(label, result)
+        payloads = {
+            label: self._degrade_reference_result(label, result)
             for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results)
-        )
-        self._cached_subjects = parse_id_name_map(subjects_payload, ("Subjects",))
-        self._cached_teachers = parse_id_name_map(teachers_payload, ("Users", "Teachers"))
-        self._cached_classrooms = parse_id_name_map(classrooms_payload, ("Classrooms",))
-        self._cached_lesson_subjects = parse_lesson_subjects(lessons_payload)
-        self._cached_school = parse_school(schools_payload)
-        self._cached_class = parse_class(classes_payload)
+        }
+        self._apply_reference_payloads(payloads)
         if self._kindergarten_lid is not None:
-            await self._async_refresh_kindergarten_reference_data(teachers_payload)
+            await self._async_refresh_kindergarten_reference_data(payloads["Teachers"])
         self._check_school_year_rollover()
-        self._cached_homework_categories = parse_id_name_map(
-            homework_categories_payload, ("Categories",)
-        )
-        # A disabled toggle's payload is already `{}` (via `_maybe`), which
-        # `parse_free_days`/`parse_id_name_map` below already treat the
-        # same as a genuinely empty account - no extra branching needed.
-        self._cached_free_days = parse_free_days(
-            school_free_days_payload, "SchoolFreeDays"
-        ) + parse_free_days(class_free_days_payload, "ClassFreeDays")
-        self._cached_note_categories = parse_id_name_map(
-            note_categories_payload, ("Categories",)
-        )
-        self._cached_behaviour_grade_categories = parse_id_name_map(
-            behaviour_grade_categories_payload, ("Categories",)
-        )
         await self._async_refresh_student_number()
         self._reference_data_fetched_at = now
+
+    def _apply_reference_payloads(self, payloads: dict[str, Any]) -> None:
+        """Parse the reference-data responses (keyed by
+        REFERENCE_DATA_ENDPOINT_LABELS) into the name lookups. Also used to
+        rebuild them from the saved responses when Librus is down at start.
+        A disabled toggle's payload is `{}` (via `_maybe`), which every
+        parser treats the same as a genuinely empty account."""
+
+        def payload(label: str) -> dict[str, Any]:
+            return payloads.get(label) or {}
+
+        self._cached_subjects = parse_id_name_map(payload("Subjects"), ("Subjects",))
+        self._cached_teachers = parse_id_name_map(payload("Teachers"), ("Users", "Teachers"))
+        self._cached_classrooms = parse_id_name_map(payload("Classrooms"), ("Classrooms",))
+        self._cached_lesson_subjects = parse_lesson_subjects(payload("Lessons"))
+        self._cached_school = parse_school(payload("Schools"))
+        self._cached_class = parse_class(payload("Classes"))
+        self._cached_homework_categories = parse_id_name_map(
+            payload("HomeworkCategories"), ("Categories",)
+        )
+        self._cached_free_days = parse_free_days(
+            payload("SchoolFreeDays"), "SchoolFreeDays"
+        ) + parse_free_days(payload("ClassFreeDays"), "ClassFreeDays")
+        self._cached_note_categories = parse_id_name_map(
+            payload("NoteCategories"), ("Categories",)
+        )
+        self._cached_behaviour_grade_categories = parse_id_name_map(
+            payload("BehaviourGradeCategories"), ("Categories",)
+        )
 
     async def _async_refresh_student_number(self) -> None:
         """Read the class register number from Synergia's informacja web

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Works through Librus outages.** The last good response of every part of
+  Librus is saved. A part that fails (grades, timetable, subject names, ...)
+  shows its last good copy instead of going empty; if Librus doesn't answer
+  at all, the last data stays up for up to 3 days instead of every entity
+  going unavailable, and when Home Assistant starts during an outage the
+  data is rebuilt from the saved responses instead of the integration
+  failing to load.
+- **Retry backoff.** After two failed refreshes in a row the next attempts
+  are spaced out (2x, 4x the poll interval, up to 2 hours) - no login
+  attempt every cycle during an outage. The refresh action ignores it.
+- Diagnostic sensors **Connection status** (`ok` / `degraded` / `stale` /
+  `error`, with the last error, failures and next attempt) and **Last
+  successful update**. Diagnostics gained a `connection` section.
+
+### Changed
+- What has already been announced is saved, so a grade, note, absence or
+  message that arrives while Home Assistant is off still fires its event
+  after the restart (it used to be swallowed as part of the silent first
+  poll).
+- Long attribute lists (grade logs, `recent` lists, attendance breakdowns,
+  bell schedule, ...) are no longer written to the recorder's history -
+  a smaller database; the live attributes are unchanged.
+
 ## 0.11.1-beta.1
 
 ### Added

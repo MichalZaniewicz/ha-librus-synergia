@@ -173,6 +173,8 @@
       "homework": { "name": "Homework" }
     },
     "sensor": {
+      "status": { "name": "Connection status", "state": { "ok": "OK", "degraded": "Partly from saved data", "stale": "Librus not responding", "error": "Error" } },
+      "last_update": { "name": "Last successful update" },
       "weekly_summary": { "name": "Weekly summary" },
       "grade_forecast": { "name": "Grade forecast" },
       "overall_average": { "name": "Overall grade average" },

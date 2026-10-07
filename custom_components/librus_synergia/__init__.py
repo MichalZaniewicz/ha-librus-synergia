@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import time, timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
+from homeassistant.const import CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
@@ -36,11 +36,13 @@ from .const import (
     OPTIONAL_ENDPOINT_LABELS,
     PLATFORMS,
     REFERENCE_DATA_ENDPOINT_LABELS,
+    STATE_STORE_VERSION,
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     optional_endpoint_issue_id,
     school_year_issue_id,
+    state_store_key,
 )
 from .llm_api import async_setup_llm_api, async_unload_llm_api
 from .services import async_setup_services, async_unload_services
@@ -91,17 +93,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
             logged_in_at=entry.data.get(CONF_SESSION_LOGGED_IN_AT, 0.0),
         )
     )
-    # A brand-new entry (just created by the config flow) already has a
-    # fresh session from the login the flow itself performed - only force a
-    # login here if that session looks stale (e.g. a HA restart long after
-    # the last refresh, or the cookies didn't come through intact).
-    if not client.is_session_valid():
-        await client.async_login(entry.data[CONF_PASSWORD])
-
+    # No login here: the first refresh's `async_ensure_session_valid` logs in
+    # when the imported session looks stale. Doing it here instead let a
+    # Librus outage at HA start fail the whole setup before the coordinator
+    # could fall back to its saved data.
     scan_interval_minutes = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     coordinator = LibrusDataUpdateCoordinator(
         hass, entry, client, timedelta(minutes=scan_interval_minutes)
     )
+    # What was already seen (new-item events) and the last good responses
+    # (fallback when Librus is down) - see coordinator.async_restore_state.
+    await coordinator.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
@@ -206,3 +208,5 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
         ir.async_delete_issue(hass, DOMAIN, issue_id)
     # Ticked-off homework of the removed student's to-do list (todo.py).
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.homework_done").async_remove()
+    # Seen ids + last good responses (coordinator.async_restore_state).
+    await Store(hass, STATE_STORE_VERSION, state_store_key(entry.entry_id)).async_remove()
