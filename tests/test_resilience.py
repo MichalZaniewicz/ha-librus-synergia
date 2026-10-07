@@ -146,6 +146,7 @@ async def test_manual_refresh_ignores_backoff(hass, freezer) -> None:
     await hass.async_block_till_done()
 
     assert client.async_ensure_session_valid.call_count == calls + 1
+    await coordinator.async_shutdown()  # the refresh request's debounce timer
 
 
 async def test_last_data_expires_after_max_age(hass, freezer) -> None:
