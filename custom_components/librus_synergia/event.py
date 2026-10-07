@@ -2,7 +2,7 @@
 
 Each entity mirrors one of the integration's existing bus events
 (`librus_synergia_new_grade` etc.) for its own student, so an automation
-can be built in the UI ("When Kacper's New grade event fires") without
+can be built in the UI ("When Ola's New grade event fires") without
 blueprints or typing event names, and every occurrence lands in the
 logbook. The bus events themselves are unchanged. The event type says what
 kind of thing happened where that matters for automations: a positive /

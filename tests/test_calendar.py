@@ -429,7 +429,7 @@ async def test_parent_teacher_conference_merged_into_agenda(hass) -> None:
                 }
             ]
         },
-        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Amelia", "LastName": "Marciszak"}]},
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Anna", "LastName": "Nowak"}]},
     )
     entry = await setup_integration(hass, client)
 

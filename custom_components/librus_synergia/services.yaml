@@ -15,7 +15,7 @@ get_message:
           integration: librus_synergia
     message_id:
       required: true
-      example: "186536"
+      example: "100001"
       selector:
         text:
     mailbox:

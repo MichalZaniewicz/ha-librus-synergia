@@ -59,7 +59,7 @@ async def test_user_flow_success(hass) -> None:
     # Title comes from Me.User (the student), not Me.Account (the login
     # owner) - see config_flow.py's _login docstring/comment.
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "E-dziennik Kacper Zaniewicz"
+    assert result["title"] == "E-dziennik Ola Kowalska"
     assert result["data"][CONF_USERNAME] == "1234567u"
     assert result["data"][CONF_PASSWORD] == "correct-password"
     assert result["data"][CONF_COOKIES]

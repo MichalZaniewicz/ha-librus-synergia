@@ -5,7 +5,7 @@ installed. This rebuilds the whole school year instead: for every day
 since the first grade, the average of the grades added up to that day -
 overall and per subject - written as external statistics
 (`librus_synergia:<entry>_average[_<subject>]`). A Statistics graph card
-can then chart the year, picked by name ("Kacper Zaniewicz - średnia
+can then chart the year, picked by name ("Ola Kowalska - średnia
 Matematyka").
 
 The statistics are rewritten whenever the grades change and once a day

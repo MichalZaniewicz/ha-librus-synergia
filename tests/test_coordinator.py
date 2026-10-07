@@ -103,7 +103,7 @@ async def test_second_refresh_fires_new_grade_event(hass) -> None:
     # notification blueprint has no other way to say WHOSE grade this is -
     # one blueprint instance's action runs for every config entry
     # (student) that fires the event.
-    assert events[0].data["student"] == "Kacper Zaniewicz"
+    assert events[0].data["student"] == "Ola Kowalska"
 
 
 async def test_new_grade_event_carries_details(hass) -> None:
@@ -438,7 +438,7 @@ async def test_messages_parsed_when_available(hass) -> None:
         "data": [
             {
                 "messageId": "42",
-                "senderName": "Amelia Marciszak",
+                "senderName": "Anna Nowak",
                 "topic": "Zebranie",
                 "content": "RHppZcWEIGRvYnJ5",
                 "sendDate": "2026-09-04T17:47:10",
@@ -478,7 +478,7 @@ async def test_message_sender_name_falls_back_to_first_and_last_name(hass) -> No
             {
                 "messageId": "42",
                 "senderFirstName": "Amelia",
-                "senderLastName": "Marciszak",
+                "senderLastName": "Nowak",
                 "topic": "Zebranie",
                 "content": "",
                 "sendDate": None,
@@ -492,7 +492,7 @@ async def test_message_sender_name_falls_back_to_first_and_last_name(hass) -> No
     data = await coordinator._async_update_data()
 
     assert len(data.messages) == 1
-    assert data.messages[0].sender_name == "Amelia Marciszak"
+    assert data.messages[0].sender_name == "Anna Nowak"
 
 
 async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
@@ -584,7 +584,7 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
             "data": [
                 {
                     "messageId": "42",
-                    "senderName": "Amelia Marciszak",
+                    "senderName": "Anna Nowak",
                     "topic": "Zebranie",
                     "content": "",
                     "sendDate": None,
@@ -824,7 +824,7 @@ async def test_message_content_truncated_mid_char_decodes_readable_prefix(hass) 
         "data": [
             {
                 "messageId": "99",
-                "senderName": "Hanke Kamila",
+                "senderName": "Woźniak Barbara",
                 "topic": "Zajecia",
                 "content": (
                     "U3phbm93bmkgUGHFhHN0d28sCgp6YXByYXN6YW0gY2jEmXRueWNoIHVj"
@@ -857,7 +857,7 @@ async def test_fetch_message_recovers_from_mid_cycle_session_expiry(hass) -> Non
     successful poll."""
     good_payload = {
         "data": {
-            "senderName": "Marciszak Amelia",
+            "senderName": "Nowak Anna",
             "topic": "Zebranie z rodzicami",
             "Message": "RHppZWQgZG9icnk=",  # "Dzied dobry" (base64)
             "sendDate": "2026-09-04T17:47:10",
@@ -871,7 +871,7 @@ async def test_fetch_message_recovers_from_mid_cycle_session_expiry(hass) -> Non
     ]
     coordinator = _make_coordinator(hass, client)
 
-    result = await coordinator.async_fetch_message("inbox", "186536")
+    result = await coordinator.async_fetch_message("inbox", "100001")
 
     assert result == good_payload
     force_calls = [
@@ -899,7 +899,7 @@ async def test_fetch_message_raises_when_recovery_also_fails(hass) -> None:
     coordinator = _make_coordinator(hass, client)
 
     with pytest.raises(LibrusInvalidCredentialsError):
-        await coordinator.async_fetch_message("inbox", "186536")
+        await coordinator.async_fetch_message("inbox", "100001")
 
 
 async def test_notes_positive_resolves_to_sentiment_label(hass) -> None:
@@ -1112,7 +1112,7 @@ async def test_new_absence_event_fires_with_excused_flag(hass) -> None:
     assert events[0].data["excused"] is False
     assert events[0].data["date"] == "2026-09-11"
     assert events[0].data["lesson_no"] == 3
-    assert events[0].data["student"] == "Kacper Zaniewicz"
+    assert events[0].data["student"] == "Ola Kowalska"
 
 
 async def test_attendance_with_non_numeric_id_does_not_crash_coordinator(hass) -> None:
@@ -1804,7 +1804,7 @@ async def test_new_homework_assignment_event_seeds_silently_then_fires(hass) -> 
     old = {"Id": 1, "Topic": "Stare", "Text": "a", "Teacher": {"Id": 200}, "Date": "2026-09-01", "DueDate": "2026-09-03"}
     client = build_mock_client(
         async_get_homework_assignments={"HomeWorkAssignments": [old]},
-        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Kamila", "LastName": "Hanke"}]},
+        async_get_teachers={"Users": [{"Id": 200, "FirstName": "Barbara", "LastName": "Woźniak"}]},
         async_get_subjects={"Subjects": [{"Id": 41994, "Name": "Chemia"}]},
         async_get_timetable={
             "Timetable": {
@@ -1839,6 +1839,6 @@ async def test_new_homework_assignment_event_seeds_silently_then_fires(hass) -> 
     assert data["id"] == 2
     assert data["topic"] == "Lapbook"
     assert data["due_date"] == "2026-10-14"
-    assert data["teacher"] == "Kamila Hanke"
+    assert data["teacher"] == "Barbara Woźniak"
     assert data["subject"] == "Chemia"
-    assert data["student"] == "Kacper Zaniewicz"
+    assert data["student"] == "Ola Kowalska"

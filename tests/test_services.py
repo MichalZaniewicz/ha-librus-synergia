@@ -13,7 +13,7 @@ from .conftest import build_mock_client, setup_integration
 
 GOOD_MESSAGE_PAYLOAD = {
     "data": {
-        "senderName": "Marciszak Amelia",
+        "senderName": "Nowak Anna",
         "topic": "Zebranie z rodzicami",
         # base64 for "Dzien dobry, zapraszam na zebranie."
         "Message": "RHppZW4gZG9icnksIHphcHJhc3phbSBuYSB6ZWJyYW5pZS4=",
@@ -75,18 +75,18 @@ async def test_get_message_service_returns_decoded_content(hass) -> None:
     response = await hass.services.async_call(
         DOMAIN,
         "get_message",
-        {"device_id": _device_id(hass, entry), "message_id": "186536"},
+        {"device_id": _device_id(hass, entry), "message_id": "100001"},
         blocking=True,
         return_response=True,
     )
 
-    assert response["sender"] == "Marciszak Amelia"
+    assert response["sender"] == "Nowak Anna"
     assert response["topic"] == "Zebranie z rodzicami"
     assert response["content"] == "Dzien dobry, zapraszam na zebranie."
     assert response["read_date"] == "2026-09-06T18:22:51"
     assert response["has_attachment"] is False
     assert response["attachments"] == []
-    client.async_get_message.assert_awaited_once_with("inbox", "186536")
+    client.async_get_message.assert_awaited_once_with("inbox", "100001")
 
 
 async def test_get_message_service_returns_attachment_filenames(hass) -> None:
@@ -97,7 +97,7 @@ async def test_get_message_service_returns_attachment_filenames(hass) -> None:
         "data": {
             **GOOD_MESSAGE_PAYLOAD["data"],
             "attachments": [
-                {"filename": "PREZENTACJA-RODZICE-WRZESIEN-2026.pdf", "id": "7982536"}
+                {"filename": "informacja-dla-rodzicow.pdf", "id": "500001"}
             ],
         }
     }
@@ -106,14 +106,14 @@ async def test_get_message_service_returns_attachment_filenames(hass) -> None:
     response = await hass.services.async_call(
         DOMAIN,
         "get_message",
-        {"device_id": _device_id(hass, entry), "message_id": "428360"},
+        {"device_id": _device_id(hass, entry), "message_id": "100002"},
         blocking=True,
         return_response=True,
     )
 
     assert response["has_attachment"] is True
     assert response["attachments"] == [
-        {"id": "7982536", "filename": "PREZENTACJA-RODZICE-WRZESIEN-2026.pdf"}
+        {"id": "500001", "filename": "informacja-dla-rodzicow.pdf"}
     ]
 
 
@@ -127,7 +127,7 @@ async def test_get_message_service_falls_back_to_first_and_last_name(hass) -> No
     client.async_get_message.return_value = {
         "data": {
             "senderFirstName": "Amelia",
-            "senderLastName": "Marciszak",
+            "senderLastName": "Nowak",
             "topic": "Zebranie z rodzicami",
             "Message": GOOD_MESSAGE_PAYLOAD["data"]["Message"],
             "sendDate": "2026-09-04T17:47:10",
@@ -140,12 +140,12 @@ async def test_get_message_service_falls_back_to_first_and_last_name(hass) -> No
     response = await hass.services.async_call(
         DOMAIN,
         "get_message",
-        {"device_id": _device_id(hass, entry), "message_id": "186536"},
+        {"device_id": _device_id(hass, entry), "message_id": "100001"},
         blocking=True,
         return_response=True,
     )
 
-    assert response["sender"] == "Amelia Marciszak"
+    assert response["sender"] == "Anna Nowak"
 
 
 async def test_get_message_service_mailbox_field_passed_through(hass) -> None:
@@ -175,7 +175,7 @@ async def test_get_message_service_unknown_device_raises(hass) -> None:
         await hass.services.async_call(
             DOMAIN,
             "get_message",
-            {"device_id": "not-a-real-device", "message_id": "186536"},
+            {"device_id": "not-a-real-device", "message_id": "100001"},
             blocking=True,
             return_response=True,
         )
@@ -193,7 +193,7 @@ async def test_get_message_service_client_error_surfaces_as_hass_error(hass) -> 
         await hass.services.async_call(
             DOMAIN,
             "get_message",
-            {"device_id": _device_id(hass, entry), "message_id": "186536"},
+            {"device_id": _device_id(hass, entry), "message_id": "100001"},
             blocking=True,
             return_response=True,
         )

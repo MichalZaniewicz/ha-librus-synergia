@@ -46,7 +46,7 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 ME_PAYLOAD = {
     "Me": {
         "Account": {"Id": 3461991, "FirstName": "Michał", "LastName": "Zaniewicz"},
-        "User": {"FirstName": "Kacper", "LastName": "Zaniewicz"},
+        "User": {"FirstName": "Ola", "LastName": "Zaniewicz"},
     }
 }
 

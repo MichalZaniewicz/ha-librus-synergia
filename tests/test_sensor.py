@@ -610,8 +610,8 @@ async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
         async_get_messages={
             "data": [
                 {
-                    "messageId": "186536",
-                    "senderName": "Marciszak Amelia",
+                    "messageId": "100001",
+                    "senderName": "Nowak Anna",
                     "topic": "Zebranie z rodzicami",
                     "content": "RHppZWQgZG9icnk=",
                     "sendDate": "2026-09-04T17:47:10",
@@ -625,7 +625,7 @@ async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
 
     entity_id = _entity_id(hass, entry, "unread_messages")
     state = hass.states.get(entity_id)
-    assert state.attributes["recent"][0]["id"] == "186536"
+    assert state.attributes["recent"][0]["id"] == "100001"
     assert state.attributes["recent"][0]["mailbox"] == "inbox"
 
 
@@ -697,11 +697,11 @@ async def test_school_and_class_sensors(hass) -> None:
     client = build_mock_client(
         async_get_schools={
             "School": {
-                "Name": "Zespół Szkolno-Przedszkolny nr 21",
-                "Town": "Wrocław",
-                "Street": "ul. Kłodzka",
+                "Name": "Szkoła Podstawowa nr 1",
+                "Town": "Przykładowo",
+                "Street": "ul. Szkolna",
                 "NameHeadTeacher": "Edyta",
-                "SurnameHeadTeacher": "Krajewska",
+                "SurnameHeadTeacher": "Wiśniewska",
             }
         },
         async_get_classes={
@@ -713,7 +713,7 @@ async def test_school_and_class_sensors(hass) -> None:
             }
         },
         async_get_teachers={
-            "Users": [{"Id": 1823984, "FirstName": "Amelia", "LastName": "Marciszak"}]
+            "Users": [{"Id": 1823984, "FirstName": "Anna", "LastName": "Nowak"}]
         },
         async_get_student_info_page=_INFO_PAGE,
     )
@@ -721,13 +721,13 @@ async def test_school_and_class_sensors(hass) -> None:
 
     school_entity_id = _entity_id(hass, entry, "school")
     school_state = hass.states.get(school_entity_id)
-    assert school_state.state == "Zespół Szkolno-Przedszkolny nr 21"
-    assert school_state.attributes["head_teacher"] == "Edyta Krajewska"
+    assert school_state.state == "Szkoła Podstawowa nr 1"
+    assert school_state.attributes["head_teacher"] == "Ewa Wiśniewska"
 
     class_entity_id = _entity_id(hass, entry, "school_class")
     class_state = hass.states.get(class_entity_id)
     assert class_state.state == "7d"
-    assert class_state.attributes["homeroom_teacher"] == "Amelia Marciszak"
+    assert class_state.attributes["homeroom_teacher"] == "Anna Nowak"
     assert class_state.attributes["first_semester_end"] == "2027-01-31"
     assert class_state.attributes["student_number"] == 25
 

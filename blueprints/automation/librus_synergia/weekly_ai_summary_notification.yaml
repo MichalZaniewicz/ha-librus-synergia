@@ -7,7 +7,7 @@ blueprint:
     "Generate weekly summary". Needs the weekly AI summary turned on there.
 
 
-    Inside your action, use `{{ title }}` (e.g. "Kacper - Weekly summary: Good")
+    Inside your action, use `{{ title }}` (e.g. "Ola - Weekly summary: Good")
     and `{{ message }}` (the report in the format you pick below), or
     `{{ message_short }}` / `{{ message_full }}` for a fixed format. Section
     names and statuses are in your Home Assistant language. With more than

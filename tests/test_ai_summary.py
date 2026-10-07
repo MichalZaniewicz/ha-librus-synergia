@@ -140,7 +140,7 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
     entry = await setup_integration(hass, _client())
     data = entry.runtime_data.data
 
-    context = build_context(data, _TODAY, weighted=True, include_news=False, student="Kacper Z")
+    context = build_context(data, _TODAY, weighted=True, include_news=False, student="Ola K")
 
     assert context["this_week"] == {"from": "2026-09-28", "to": "2026-10-04"}
     assert [g["value"] for g in context["grades"]] == ["6"]
@@ -169,11 +169,11 @@ async def test_empty_week_is_detected(hass) -> None:
 
 
 def test_instructions_follow_the_audience() -> None:
-    context = {"student": "Kacper Zaniewicz"}
+    context = {"student": "Ola Kowalska"}
     parent = build_instructions(context, _TODAY, "pl", "parent", None)
     student = build_instructions(context, _TODAY, "pl", "student", "egzamin w tym roku")
-    assert "PARENT of Kacper" in parent
-    assert "directly to Kacper" in student
+    assert "PARENT of Ola" in parent
+    assert "directly to Ola" in student
     assert "Polish" in student
     assert "egzamin w tym roku" in student
 
@@ -230,7 +230,7 @@ async def test_button_generates_summary_and_fires_event(hass) -> None:
     assert calls[0]["entity_id"] == "ai_task.test"
     assert "grades_status" in calls[0]["structure"]
     assert "school_news" not in calls[0]["structure"]
-    assert "PARENT of Kacper" in calls[0]["instructions"]
+    assert "PARENT of Ola" in calls[0]["instructions"]
 
     state = hass.states.get(sensor_id)
     assert state.state == "Dobry tydzień z geografii"
@@ -241,7 +241,7 @@ async def test_button_generates_summary_and_fires_event(hass) -> None:
 
     assert len(events) == 1
     assert events[0].data["manual"] is True
-    assert events[0].data["student"] == "Kacper Zaniewicz"
+    assert events[0].data["student"] == "Ola Kowalska"
     assert events[0].data["labels"]["sections"]["grades"]
 
 

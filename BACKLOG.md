@@ -99,7 +99,7 @@ these can't be built or verified against a real shape:
   Librus poll cycle) for accurate timing regardless of poll interval.
 - **`Units` data** — surface the bell schedule (`LessonsRange`), the more
   specific school-unit name ("Szkoła Podstawowa 32" vs the broad "Zespół
-  Szkolno-Przedszkolny nr 21"), grade-system flags. Client method
+  Szkoła Podstawowa nr 1"), grade-system flags. Client method
   `async_get_units` exists but isn't wired to the coordinator. Needs the
   reference parser (`szkolny-android`) for exact field names — modest
   payoff (bell schedule is already derived from the timetable).
@@ -134,9 +134,9 @@ these can't be built or verified against a real shape:
 - **`librus_synergia.download_attachment` service** — investigated live
   (2026-09-17, one-time consented probe, same pattern as `get_message`
   back in 2026-09-06). **Genuinely blocked, not just unverified.**
-  `client.async_get_message("inbox", "428360")` against a real message
+  `client.async_get_message("inbox", "100002")` against a real message
   confirmed the modern JSON API's `attachments` field shape:
-  `[{"filename": "...", "id": "7982536"}]` - so at least THAT part is now
+  `[{"filename": "...", "id": "500001"}]` - so at least THAT part is now
   known. But two reasoned guesses at a REST download URL under
   `wiadomosci.librus.pl/api/...` (`.../messages/{id}/attachments/{id}`,
   `/api/attachments/{id}`) both 404'd with an empty-route JSON body
