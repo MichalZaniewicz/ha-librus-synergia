@@ -91,7 +91,7 @@
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
           "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne.",
           "average_mode": "Ważona uwzględnia wagi kategorii ocen (tak liczy sam Librus). Arytmetyczna to zwykła średnia tych samych ocen. Obie są zawsze dostępne w atrybutach.",
-          "student_number": "Opcjonalne - Librus nie udostępnia tej informacji w API, więc trzeba wpisać ją ręcznie. Gdy podany, sensor Szczęśliwy numerek pokaże, czy to Twój numerek. Zostaw puste, aby wyłączyć.",
+          "student_number": "Opcjonalne - numer jest pobierany z Librusa automatycznie (strona Informacje). Wpisz go tylko, jeśli chcesz go nadpisać. Sensor Szczęśliwy numerek pokazuje na jego podstawie, czy to Twój numerek.",
           "quiet_hours_enabled": "Gdy włączone, w oknie poniżej nie są pobierane żadne dane z Librusa - encje po prostu zachowują ostatni znany stan przez noc.",
           "quiet_hours_start": "Używane tylko, gdy cisza nocna jest włączona powyżej.",
           "quiet_hours_end": "Używane tylko, gdy cisza nocna jest włączona powyżej. Może być wcześniejsze niż godzina początku (np. 23:00 -> 06:00), aby obejmować północ."

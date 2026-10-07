@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- **Class register number read from Librus.** The Lucky number sensor's
+  `is_yours` now works without typing anything in: the number ("Nr w
+  dzienniku") is read once a day from Synergia's *Informacje* web page,
+  the only place Librus shows it. A number entered under **Configure**
+  still wins. New attribute `student_number_source` (`librus` /
+  `options`). The "Your Lucky Number" blueprint works out of the box.
 - **Grade corrections ("poprawy").** A correction now says which grade it
   improves: subject average sensors' `grades` attribute and the
   `get_grades` service gained `improves` (the earlier grade's value, e.g.

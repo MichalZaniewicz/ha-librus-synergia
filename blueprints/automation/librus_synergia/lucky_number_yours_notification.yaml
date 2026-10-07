@@ -6,9 +6,9 @@ blueprint:
     they're safe from being asked to answer that day.
 
 
-    Librus doesn't expose the student's number anywhere, so this only works
-    once it's set under the integration's **Configure** -> "Student's number
-    in the class register". Librus sometimes publishes the next school
+    The student's number is read from Librus automatically (integration
+    0.10.1+); you can override it under the integration's **Configure** ->
+    "Student's number in the class register". Librus sometimes publishes the next school
     day's number a day early; the message says "dziś" or names the day.
 
 

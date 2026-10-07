@@ -80,6 +80,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_notes,
     parse_parent_teacher_conferences,
     parse_school,
+    parse_student_number,
     parse_school_notices,
     resolve_sender_name,
 )
@@ -123,6 +124,10 @@ if TYPE_CHECKING:
     from .ai_summary import LibrusWeeklySummary
 
 _LOGGER = logging.getLogger(__name__)
+
+# Label for degraded-endpoint tracking of the informacja web page (listed
+# in const.MISC_DEGRADABLE_ENDPOINT_LABELS too).
+STUDENT_INFO_LABEL = "Informacja"
 
 # Kindergarten discovery (see `_async_maybe_discover_kindergarten`): how
 # long to wait before trying again after finding nothing, and how many
@@ -406,6 +411,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
+        # Class register number ("nr w dzienniku") read from Synergia's
+        # informacja web page (the API doesn't carry it), refreshed with the
+        # rest of the reference data. The Configure-dialog value wins.
+        self.student_number_from_librus: int | None = None
         # Kindergarten (przedszkole) accounts - issue #5 / PR #8. Their
         # standard `Timetables` 403s; the real timetable lives in a separate
         # `/gateway/ms/kindergartens/...` API keyed by the CHILD's LID
@@ -1290,7 +1299,26 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_behaviour_grade_categories = parse_id_name_map(
             behaviour_grade_categories_payload, ("Categories",)
         )
+        await self._async_refresh_student_number()
         self._reference_data_fetched_at = now
+
+    async def _async_refresh_student_number(self) -> None:
+        """Read the class register number from Synergia's informacja web
+        page (HTML, so not part of the reference-data gather above). A
+        failure keeps the last known number and is tracked like any other
+        optional endpoint."""
+        if self._kindergarten_lid is not None:
+            return
+        try:
+            page = await self._client.async_get_student_info_page()
+        except LibrusError as err:
+            _LOGGER.debug("Student info page fetch failed (non-fatal): %s", err)
+            self._note_optional_endpoint_failure(STUDENT_INFO_LABEL)
+            return
+        self._note_optional_endpoint_recovery(STUDENT_INFO_LABEL)
+        number = parse_student_number(page)
+        if number is not None:
+            self.student_number_from_librus = number
 
     async def _async_refresh_kindergarten_reference_data(
         self, teachers_payload: dict[str, Any]

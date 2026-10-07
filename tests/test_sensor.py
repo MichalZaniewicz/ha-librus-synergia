@@ -59,9 +59,7 @@ async def test_lucky_number_sensor_flags_when_published_for_a_future_day(hass) -
 
 
 async def test_lucky_number_sensor_flags_is_yours_when_student_number_matches(hass) -> None:
-    """Librus's API doesn't expose the student's own class-register number
-    anywhere (confirmed via szkolny-android's reference source) - it's a
-    fact the user types in once via CONF_STUDENT_NUMBER, not fetched data."""
+    """A number typed in Configure (CONF_STUDENT_NUMBER) is used as-is."""
     client = build_mock_client(
         async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 7, "LuckyNumberDay": "2099-01-01"}}
     )
@@ -94,6 +92,42 @@ async def test_lucky_number_sensor_is_yours_none_when_student_number_not_configu
     state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
     assert state.attributes["student_number"] is None
     assert state.attributes["is_yours"] is None
+
+
+_INFO_PAGE = (
+    '<table class="decorated form"><tbody>'
+    "<tr><th>Klasa</th><td>7 d</td></tr>"
+    "<tr><th>Nr w dzienniku</th><td>25</td></tr>"
+    "</tbody></table>"
+)
+
+
+async def test_lucky_number_uses_student_number_from_librus(hass) -> None:
+    """With nothing in Configure, the number comes from Synergia's
+    informacja page (the API doesn't carry it)."""
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 25, "LuckyNumberDay": "2099-01-01"}},
+        async_get_student_info_page=_INFO_PAGE,
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.attributes["student_number"] == 25
+    assert state.attributes["student_number_source"] == "librus"
+    assert state.attributes["is_yours"] is True
+
+
+async def test_configured_student_number_overrides_librus(hass) -> None:
+    client = build_mock_client(
+        async_get_lucky_number={"LuckyNumber": {"LuckyNumber": 25, "LuckyNumberDay": "2099-01-01"}},
+        async_get_student_info_page=_INFO_PAGE,
+    )
+    entry = await setup_integration(hass, client, options={"student_number": 12})
+
+    state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
+    assert state.attributes["student_number"] == 12
+    assert state.attributes["student_number_source"] == "options"
+    assert state.attributes["is_yours"] is False
 
 
 async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:

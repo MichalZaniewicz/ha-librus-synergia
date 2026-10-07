@@ -1033,7 +1033,13 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         day = self.coordinator.data.lucky_number.day
         entry = self.coordinator.config_entry
         raw_student_number = entry.options.get(CONF_STUDENT_NUMBER) if entry else None
-        student_number = int(raw_student_number) if raw_student_number is not None else None
+        # The number typed in Configure wins; otherwise the one Librus shows
+        # on its informacja page.
+        student_number = (
+            int(raw_student_number)
+            if raw_student_number is not None
+            else self.coordinator.student_number_from_librus
+        )
         is_yours = (
             student_number == self.coordinator.data.lucky_number.number
             if student_number is not None
@@ -1043,6 +1049,11 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
             "day": day,
             "is_today": day == dt_util.now().date().isoformat() if day else None,
             "student_number": student_number,
+            "student_number_source": (
+                None
+                if student_number is None
+                else "options" if raw_student_number is not None else "librus"
+            ),
             "is_yours": is_yours,
         }
 

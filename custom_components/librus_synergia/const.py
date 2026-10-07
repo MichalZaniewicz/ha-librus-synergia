@@ -216,6 +216,8 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     "LuckyNumbers",
     "Messages",
     "Messages/Secondary",
+    # Synergia's informacja web page (class register number).
+    "Informacja",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and

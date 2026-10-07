@@ -91,7 +91,7 @@
           "descriptive_grades_enabled": "When off, the Descriptive grades sensor goes unavailable and no DescriptiveGrades calls are made.",
           "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
           "average_mode": "Weighted uses each grade category's weight (what Librus itself shows). Arithmetic is a plain mean of the same grades. Both stay available as attributes either way.",
-          "student_number": "Optional - Librus's API doesn't expose this anywhere, so it has to be entered by hand. When set, the Lucky number sensor shows whether it's your number. Leave blank to disable.",
+          "student_number": "Optional - the number is read from Librus automatically (its Informacje page). Fill this in only to override it. The Lucky number sensor uses it to show whether it's your number.",
           "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
           "quiet_hours_start": "Only used while quiet hours are enabled above.",
           "quiet_hours_end": "Only used while quiet hours are enabled above. Can be earlier than the start time (e.g. 23:00 -> 06:00) to span midnight."
