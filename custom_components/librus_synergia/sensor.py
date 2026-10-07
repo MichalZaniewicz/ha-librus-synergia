@@ -26,7 +26,9 @@ from librus_synergia.models import (
     LessonData,
     LibrusData,
     MessageData,
+    PointGradeData,
 )
+from librus_synergia.parsers import point_grades_percentage
 
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
@@ -235,6 +237,37 @@ def _subject_teachers(data: LibrusData) -> dict[str, list[str]]:
     return {subject: sorted(names) for subject, names in sorted(seen.items())}
 
 
+def _point_grade_log(data: LibrusData, grades: list[PointGradeData]) -> list[dict[str, Any]]:
+    """Point grades newest first, for attributes."""
+    return [
+        {
+            "value": g.value,
+            "points": g.points,
+            "max_points": g.max_points,
+            "percentage": g.percentage,
+            "category": g.category,
+            "weight": g.weight,
+            "counts_to_average": g.counts_to_average,
+            "date": g.add_date,
+            "subject": data.subjects.get(g.subject_id) if g.subject_id is not None else None,
+            "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+        }
+        for g in sorted(grades, key=lambda g: g.add_date or "", reverse=True)
+    ]
+
+
+def _point_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
+    """A subject's point grades and their percentage - only when it has any,
+    so 1-6 schools see no extra attributes."""
+    grades = [g for g in data.point_grades if g.subject_id == subject_id]
+    if not grades:
+        return {}
+    return {
+        "points_percentage": point_grades_percentage(grades),
+        "point_grades": _point_grade_log(data, grades),
+    }
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: LibrusConfigEntry,
@@ -272,6 +305,12 @@ async def async_setup_entry(
         ]
     )
 
+    # Point grades: only at schools that use them.
+    if coordinator.point_grades_enabled or (
+        coordinator.data is not None and coordinator.data.point_grades
+    ):
+        async_add_entities([LibrusPointGradesSensor(coordinator, entry)])
+
     # The weekly AI summary exists only while an ai_task entity is picked in
     # the options.
     if coordinator.weekly_summary is not None:
@@ -290,7 +329,9 @@ async def async_setup_entry(
         data = coordinator.data
         if data is None:
             return
-        graded_ids = {g.subject_id for g in data.grades if g.subject_id is not None}
+        graded_ids = {
+            g.subject_id for g in (*data.grades, *data.point_grades) if g.subject_id is not None
+        }
         # Fall back to subject ids seen on grades even if the (unverified)
         # Subjects lookup hasn't resolved a name for it yet. With "hide
         # subjects without grades" on, only subjects that have a grade.
@@ -306,7 +347,11 @@ async def async_setup_entry(
     if hide_empty and coordinator.data is not None:
         # Turning the option on removes the existing sensors of subjects
         # that still have no grade (the options change reloads the entry).
-        graded = {str(g.subject_id) for g in coordinator.data.grades if g.subject_id is not None}
+        graded = {
+            str(g.subject_id)
+            for g in (*coordinator.data.grades, *coordinator.data.point_grades)
+            if g.subject_id is not None
+        }
         registry = er.async_get(hass)
         prefix, suffix = f"{entry.entry_id}_subject_", "_average"
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
@@ -391,7 +436,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     discovered dynamically."""
 
     _attr_translation_key = "subject_average"
-    _unrecorded_attributes = frozenset({"grades", "latest_grade_comments"})
+    _unrecorded_attributes = frozenset({"grades", "latest_grade_comments", "point_grades"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
@@ -505,6 +550,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                 weighted=self._weighted,
             ),
             **self._forecast_attrs(),
+            **_point_grade_attrs(self.coordinator.data, self._subject_id),
         }
 
     def _forecast_attrs(self) -> dict[str, Any]:
@@ -1851,6 +1897,52 @@ class LibrusNextExamSensor(LibrusSensorBase):
                 }
                 for d, it in upcoming[:10]
             ],
+        }
+
+
+class LibrusPointGradesSensor(LibrusSensorBase):
+    """Point grades (schools grading in points or percent, e.g. 0-100):
+    the state is the share of points earned, weighted by category - only
+    categories counting towards the average. Per subject in `subjects`,
+    every grade in `recent`. Created only where the school uses them."""
+
+    _attr_translation_key = "point_grades"
+    _unrecorded_attributes = frozenset({"subjects", "recent"})
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:percent-circle-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "point_grades")
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        return point_grades_percentage(self.coordinator.data.point_grades)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        by_subject: dict[Any, list[PointGradeData]] = {}
+        for grade in data.point_grades:
+            by_subject.setdefault(grade.subject_id, []).append(grade)
+        subjects = {
+            (data.subjects.get(subject_id) if subject_id is not None else None)
+            or str(subject_id): {
+                ATTR_SUBJECT_ID: subject_id,
+                "percentage": point_grades_percentage(grades),
+                "count": len(grades),
+            }
+            for subject_id, grades in by_subject.items()
+        }
+        return {
+            "count": len(data.point_grades),
+            "subjects": dict(sorted(subjects.items())),
+            "recent": _point_grade_log(data, data.point_grades),
         }
 
 

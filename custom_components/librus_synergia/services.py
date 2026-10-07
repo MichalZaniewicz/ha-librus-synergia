@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
@@ -22,6 +23,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from librus_synergia import LibrusError
+from librus_synergia.parsers import point_grades_percentage
 
 from .const import DOMAIN
 from .coordinator import (
@@ -198,7 +200,29 @@ def async_setup_services(hass: HomeAssistant) -> None:
             if subject_id is None or grade.subject_id == subject_id
         ]
         grades.sort(key=lambda g: g["date"] or "", reverse=True)
-        return {"grades": grades, "count": len(grades)}
+        response: dict[str, Any] = {"grades": grades, "count": len(grades)}
+        # Schools grading in points (0-100 etc.) - only when there are any.
+        point_grades = [
+            g for g in data.point_grades if subject_id is None or g.subject_id == subject_id
+        ]
+        if point_grades:
+            response["point_grades"] = [
+                {
+                    "subject": data.subjects.get(g.subject_id) if g.subject_id is not None else None,
+                    "subject_id": g.subject_id,
+                    "value": g.value,
+                    "points": g.points,
+                    "max_points": g.max_points,
+                    "percentage": g.percentage,
+                    "category": g.category,
+                    "date": g.add_date,
+                    "semester": g.semester,
+                    "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                }
+                for g in sorted(point_grades, key=lambda g: g.add_date or "", reverse=True)
+            ]
+            response["points_percentage"] = point_grades_percentage(point_grades)
+        return response
 
     hass.services.async_register(
         DOMAIN,

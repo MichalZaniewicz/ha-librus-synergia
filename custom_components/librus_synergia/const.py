@@ -244,6 +244,9 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     "NoteCategories",
     "BehaviourGradeCategories",
     "Lessons",
+    # School configuration - only `GradesSettings.PointGradesEnabled` is
+    # read, to skip the point-grade requests at schools without them.
+    "Units",
 )
 
 # The handful of degradable fetches that don't belong to any of the three
@@ -264,6 +267,10 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     "Messages/Secondary",
     # Synergia's informacja web page (class register number).
     "Informacja",
+    # Point grades (0-100 / points out of a maximum) - fetched every cycle
+    # only where Units doesn't say the school has them off.
+    "PointGrades",
+    "PointGrades/Categories",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and

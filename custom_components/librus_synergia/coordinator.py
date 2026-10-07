@@ -45,6 +45,7 @@ from librus_synergia.models import (
     LuckyNumberData,
     MessageData,
     NoteData,
+    PointGradeData,
     SchoolData,
 )
 
@@ -80,9 +81,12 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_messages,
     parse_notes,
     parse_parent_teacher_conferences,
+    parse_point_grade_categories,
+    parse_point_grades,
     parse_school,
     parse_school_notices,
     parse_student_number,
+    point_grades_enabled,
     resolve_sender_name,
 )
 
@@ -158,6 +162,8 @@ _KINDERGARTEN_MAX_CANDIDATES = 6
 
 # The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
 _CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
+# Labels of the two point-grade requests (const.MISC_DEGRADABLE_ENDPOINT_LABELS).
+_POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
 # `_async_get_messages`' result when nothing was fetched.
 _NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [])
 
@@ -518,6 +524,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.data_source = "live"
         # Sections shown from their saved copy this cycle (they failed).
         self.fallback_sections: set[str] = set()
+        # Whether the school grades in points (Units); None until known.
+        self.point_grades_enabled: bool | None = None
 
     async def async_restore_state(self) -> None:
         """Load what the previous run saved: the ids already announced (so
@@ -546,6 +554,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_forecast_basis = forecast.get("basis")
         if isinstance(payloads := stored.get("payloads"), dict):
             self._last_good = payloads
+            if isinstance(units := payloads.get("Units"), dict):
+                self.point_grades_enabled = point_grades_enabled(units)
         if isinstance(weeks := stored.get("timetable"), dict):
             self._timetable_cache = weeks
         if isinstance(number := stored.get("student_number"), int):
@@ -971,7 +981,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             {label: self._last_good.get(label, {}) for label in REFERENCE_DATA_ENDPOINT_LABELS}
         )
         try:
-            return self._build_data(tuple(core), None, _NO_MESSAGES)
+            return self._build_data(tuple(core), None, _NO_MESSAGES, self._saved_point_grades())
         except Exception:  # noqa: BLE001 - a bad saved file must not block setup
             _LOGGER.warning("Could not rebuild data from the saved responses", exc_info=True)
             return None
@@ -1053,13 +1063,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._async_refresh_reference_data(),
         )
         messages_result = await self._async_get_messages()
+        point_grades = await self._async_get_point_grades()
         core_payloads = (
             *core_payloads[:6],
             timetable_this_week,
             timetable_next_week,
             *core_payloads[8:],
         )
-        data = self._build_data(core_payloads, lucky_number, messages_result)
+        data = self._build_data(core_payloads, lucky_number, messages_result, point_grades)
         me, grades, notes = data.me, data.grades, data.notes
         attendances, attendance_types = data.attendances, data.attendance_types
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
@@ -1073,6 +1084,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         core_payloads: tuple[Any, ...],
         lucky_number: LuckyNumberData | None,
         messages_result: tuple[Any, ...],
+        point_grades: list[PointGradeData] | None = None,
     ) -> LibrusData:
         """Parse one cycle's responses (in `_CORE_PAYLOAD_LABELS` order)
         together with the cached reference lookups."""
@@ -1145,6 +1157,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             note_categories=self._cached_note_categories,
             behaviour_grade_categories=self._cached_behaviour_grade_categories,
             descriptive_grades=parse_descriptive_grades(descriptive_grades_payload),
+            point_grades=point_grades or [],
             parent_teacher_conferences=parse_parent_teacher_conferences(
                 parent_teacher_conferences_payload
             ),
@@ -1604,6 +1617,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
             ),
             self._client.async_get_lessons(),
+            self._client.async_get_units(),
             return_exceptions=True,
         )
         payloads = {
@@ -1644,6 +1658,32 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         self._cached_behaviour_grade_categories = parse_id_name_map(
             payload("BehaviourGradeCategories"), ("Categories",)
+        )
+        if "Units" in payloads:
+            self.point_grades_enabled = point_grades_enabled(payload("Units"))
+
+    async def _async_get_point_grades(self) -> list[PointGradeData]:
+        """Point grades with their categories (maximum, weight). Skipped
+        when Units says the school doesn't grade in points; a failure keeps
+        the last good copy, like any optional endpoint."""
+        if self.point_grades_enabled is False:
+            return []
+        results = await asyncio.gather(
+            self._client.async_get_point_grades(),
+            self._client.async_get_point_grade_categories(),
+            return_exceptions=True,
+        )
+        grades_payload, categories_payload = (
+            self._degrade_optional_payload(label, result)
+            for label, result in zip(_POINT_GRADE_LABELS, results)
+        )
+        return parse_point_grades(grades_payload, parse_point_grade_categories(categories_payload))
+
+    def _saved_point_grades(self) -> list[PointGradeData]:
+        grades_label, categories_label = _POINT_GRADE_LABELS
+        return parse_point_grades(
+            self._last_good.get(grades_label) or {},
+            parse_point_grade_categories(self._last_good.get(categories_label) or {}),
         )
 
     async def _async_refresh_student_number(self) -> None:

@@ -13,6 +13,13 @@
 - **Retry backoff.** After two failed refreshes in a row the next attempts
   are spaced out (2x, 4x the poll interval, up to 2 hours) - no login
   attempt every cycle during an outage. The refresh action ignores it.
+- **Point grades** for schools grading in points or percent (e.g. 0-100):
+  a *Point grades* sensor (share of points earned, weighted by category,
+  per subject in attributes), `points_percentage`/`point_grades` on the
+  subject average sensors and `point_grades` in `get_grades`. Created only
+  where the school uses them; the requests are skipped where the school
+  configuration says they are off. A number outside the 1-6 scale in the
+  regular grades (e.g. "85") no longer counts towards the averages.
 - Diagnostic sensors **Connection status** (`ok` / `degraded` / `stale` /
   `error`, with the last error, failures and next attempt) and **Last
   successful update**. Diagnostics gained a `connection` section.
