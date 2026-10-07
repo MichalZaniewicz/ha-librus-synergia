@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1-beta.4
 
 ### Added
 - **Event entities** for new grades, behaviour notes (positive / negative /
