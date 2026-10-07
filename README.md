@@ -391,7 +391,7 @@ For the full, endpoint-by-endpoint picture, see the [unofficial Librus API notes
 
 ## Related projects
 
-- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 60 Lovelace cards for this integration.
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 61 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 

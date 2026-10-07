@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1-beta.4
 
 ### Added
 - **Text grades.** Grades a teacher enters as text never showed up anywhere -
