@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1-beta.3
 
 ### Added
 - **Agenda entry changed or removed.** Event `librus_synergia_agenda_changed`
