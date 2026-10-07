@@ -131,30 +131,12 @@ these can't be built or verified against a real shape:
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   a `mark_message_read` service (would just wrap `get_message`, low value).
-- **`librus_synergia.download_attachment` service** — investigated live
-  (2026-09-17, one-time consented probe, same pattern as `get_message`
-  back in 2026-09-06). **Genuinely blocked, not just unverified.**
-  `client.async_get_message("inbox", "100002")` against a real message
-  confirmed the modern JSON API's `attachments` field shape:
-  `[{"filename": "...", "id": "500001"}]` - so at least THAT part is now
-  known. But two reasoned guesses at a REST download URL under
-  `wiadomosci.librus.pl/api/...` (`.../messages/{id}/attachments/{id}`,
-  `/api/attachments/{id}`) both 404'd with an empty-route JSON body
-  (`[]`), meaning those routes don't exist in this API's router at all.
-  Reading szkolny-android's reference classes all the way down (not just
-  `LibrusMessagesGetAttachment.kt`, but its base `LibrusMessages.kt` and
-  `LibrusSandboxDownloadAttachment.kt`) confirmed why: attachment download
-  in that reference app goes through a COMPLETELY SEPARATE legacy XML
-  protocol (`sandboxGet`/`sandboxGetFile` against a `LIBRUS_SANDBOX_URL`,
-  a `singleUseKey` polling handshake, `CSCheckKey`/`CSDownload` actions)
-  authenticated with its own `messagesSessionId`/`DZIENNIKSID` cookie -
-  NOT the `oauth_token` this integration's whole session model is built
-  on. Building this for real would mean standing up a second, fully
-  separate auth/session subsystem just for file downloads - a large,
-  disproportionate undertaking for one feature. Not pursuing further
-  without a stronger signal (e.g. capturing the real modern web app's own
-  network requests some other way) that a same-session JSON download path
-  actually exists.
+- ~~**Message attachment download**~~ — done (0.11.1-beta.4). The earlier
+  "blocked" verdict (2026-09-17) was wrong: a 2026-10-07 live probe confirmed
+  `wiadomosci.librus.pl/api/attachments/<file>/messages/<msg>` returns a
+  `sandbox.librus.pl/GetFile/<key>` link that downloads with the same session
+  (`<link>/get`), without opening the message. Exposed as a logged-in HTTP
+  view (`attachment_view.py`); nothing is saved in Home Assistant.
 - ~~**Teacher directory**~~ — done (Unreleased): `sensor.*_school` gained a
   `subject_teachers` attribute (subject name -> sorted teacher name list),
   derived client-side from the already-fetched timetable, same approach as

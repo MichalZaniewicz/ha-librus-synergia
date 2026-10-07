@@ -524,8 +524,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
-        # Class register number ("nr w dzienniku") read from Synergia's
-        # informacja web page (the API doesn't carry it), refreshed with the
+        # Class register number ("nr w dzienniku") from the student's own
+        # Users record (informacja web page as a fallback), refreshed with the
         # rest of the reference data. The Configure-dialog value wins.
         self.student_number_from_librus: int | None = None
         # Kindergarten (przedszkole) accounts - issue #5 / PR #8. Their
@@ -1897,10 +1897,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
 
     async def _async_refresh_student_number(self) -> None:
-        """Read the class register number from Synergia's informacja web
-        page (HTML, so not part of the reference-data gather above). A
-        failure keeps the last known number and is tracked like any other
-        optional endpoint."""
+        """Read the class register number: `Users/{Me.Account.UserId}
+        .ClassRegisterNumber` in JSON, falling back to Synergia's informacja
+        web page. A failure keeps the last known number and is tracked like
+        any other optional endpoint."""
         if self._kindergarten_lid is not None:
             return
         # The student's own Users record carries ClassRegisterNumber in JSON

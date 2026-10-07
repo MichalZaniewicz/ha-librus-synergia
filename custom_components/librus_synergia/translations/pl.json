@@ -94,7 +94,7 @@
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
           "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne.",
           "average_mode": "Ważona uwzględnia wagi kategorii ocen (tak liczy sam Librus). Arytmetyczna to zwykła średnia tych samych ocen. Obie są zawsze dostępne w atrybutach.",
-          "student_number": "Opcjonalne - numer jest pobierany z Librusa automatycznie (strona Informacje). Wpisz go tylko, jeśli chcesz go nadpisać. Sensor Szczęśliwy numerek pokazuje na jego podstawie, czy to Twój numerek.",
+          "student_number": "Opcjonalne - numer jest pobierany z Librusa automatycznie. Wpisz go tylko, jeśli chcesz go nadpisać. Sensor Szczęśliwy numerek pokazuje na jego podstawie, czy to Twój numerek.",
           "grade_thresholds": "Minimalna średnia na 2, 3, 4, 5 i 6, po przecinku (np. 1.75, 2.75, 3.75, 4.75, 5.50). Sprawdź statut szkoły (WSO) - szkoły mają różne progi. Używane przez sensor Prognoza ocen i czujnik Zagrożenie oceną.",
           "hide_empty_subjects": "Średnia z przedmiotu pojawia się dopiero po jego pierwszej ocenie (np. Religia na początku roku). Istniejące sensory takich przedmiotów zostaną usunięte i wrócą z pierwszą oceną.",
           "smart_polling": "Oszczędza zapytania, kiedy nic się nie dzieje. W dni szkolne od 6:00 do 22:00 dane odświeżają się co interwał ustawiony wyżej. W dzień bez lekcji (weekend, ferie) najwyżej raz na godzinę, a w nocy (22:00-6:00) najwyżej co 3 godziny. Akcja Odśwież (librus_synergia.refresh) zawsze pobiera od razu. Godziny ciszy poniżej, jeśli włączone, nadal działają.",

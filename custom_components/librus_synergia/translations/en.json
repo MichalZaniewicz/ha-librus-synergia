@@ -94,7 +94,7 @@
           "descriptive_grades_enabled": "When off, the Descriptive grades sensor goes unavailable and no DescriptiveGrades calls are made.",
           "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
           "average_mode": "Weighted uses each grade category's weight (what Librus itself shows). Arithmetic is a plain mean of the same grades. Both stay available as attributes either way.",
-          "student_number": "Optional - the number is read from Librus automatically (its Informacje page). Fill this in only to override it. The Lucky number sensor uses it to show whether it's your number.",
+          "student_number": "Optional - the number is read from Librus automatically. Fill this in only to override it. The Lucky number sensor uses it to show whether it's your number.",
           "grade_thresholds": "Minimum average for a 2, 3, 4, 5 and 6, comma separated (e.g. 1.75, 2.75, 3.75, 4.75, 5.50). Check your school's statute (WSO) - schools use different ones. Used by the Grade forecast sensor and the Grade at risk binary sensor.",
           "hide_empty_subjects": "No average sensor for a subject until it gets its first grade (e.g. Religia early in the year). Existing sensors of such subjects are removed; they come back with the first grade.",
           "smart_polling": "Saves requests when nothing is happening. On school days between 06:00 and 22:00 data is refreshed at the poll interval above. On a day without lessons (weekend, holidays) at most once an hour, and at night (22:00-06:00) at most every 3 hours. The Refresh action (librus_synergia.refresh) always fetches straight away. Quiet hours below, if on, still apply.",

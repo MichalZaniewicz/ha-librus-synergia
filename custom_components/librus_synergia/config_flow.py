@@ -399,8 +399,8 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_GRADE_THRESHOLDS,
                     default=options.get(CONF_GRADE_THRESHOLDS, DEFAULT_GRADE_THRESHOLDS),
                 ): TextSelector(TextSelectorConfig()),
-                # Optional override: the number is read from Synergia's
-                # informacja page (coordinator.student_number_from_librus);
+                # Optional override: the number is read from Librus
+                # (coordinator.student_number_from_librus);
                 # a value here wins over it.
                 vol.Optional(
                     CONF_STUDENT_NUMBER,

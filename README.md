@@ -350,9 +350,11 @@ from an automation that isn't a direct response to someone opening it.
 
 Returns `id`, `mailbox`, `sender`, `topic`, `content` (full text),
 `send_date`, `read_date`, `has_attachment`, and `attachments` (a list of
-`id`/`filename` - the file itself still can't be downloaded through this
-integration, see [Known limitations](#known-limitations--unverified-details)
-below, but at least you'll know what to look for in the real Librus app).
+`id`/`filename`). To download a file, open
+`/api/librus_synergia/attachment/<device id>/<message id>/<attachment id>` while
+logged in to Home Assistant - it passes the file straight from Librus to the
+browser without saving it in Home Assistant or opening the message in Librus.
+The companion Messages card does this when a file name is tapped.
 
 ### `librus_synergia.get_grades`
 
@@ -381,7 +383,6 @@ Almost everything this integration reads has been checked against a real account
 - **Grade corrections ("poprawy"):** the link from a correction to the grade it replaces comes from another client's reading of the API; no correction has appeared on the test account yet.
 
 **Deliberately not supported:**
-- **Downloading message attachments.** `get_message` returns each attachment's file name, but the download itself only works through Librus's older XML protocol, which uses a separate session.
 - **Point grades, text grades and virtual classes.** The client can fetch them, but no entity uses them: point grades are disabled at the test school, and the others had nothing to show.
 
 **Never tested on purpose:**

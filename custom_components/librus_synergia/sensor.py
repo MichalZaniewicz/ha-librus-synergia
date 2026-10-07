@@ -1268,8 +1268,8 @@ def _student_number(
     coordinator: LibrusDataUpdateCoordinator,
 ) -> tuple[int | None, str | None]:
     """The class register number and where it came from: the number typed
-    in Configure wins (`"options"`), otherwise the one Librus shows on its
-    informacja page (`"librus"`)."""
+    in Configure wins (`"options"`), otherwise the one read from Librus
+    (`"librus"`: the student's record, informacja page as a fallback)."""
     entry = coordinator.config_entry
     raw = entry.options.get(CONF_STUDENT_NUMBER) if entry else None
     if raw is not None:
