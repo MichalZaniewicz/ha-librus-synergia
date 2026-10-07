@@ -8,6 +8,12 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResultType
+from librus_synergia import (
+    LibrusAccountActionRequiredError,
+    LibrusCaptchaRequiredError,
+    LibrusConnectionError,
+    LibrusInvalidCredentialsError,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
@@ -23,18 +29,14 @@ from custom_components.librus_synergia.const import (
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
+    CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MESSAGES_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
+    CONF_SMART_POLLING,
     CONF_STUDENT_NUMBER,
     DOMAIN,
-)
-from librus_synergia import (
-    LibrusAccountActionRequiredError,
-    LibrusCaptchaRequiredError,
-    LibrusConnectionError,
-    LibrusInvalidCredentialsError,
 )
 
 from .conftest import build_mock_client
@@ -306,6 +308,8 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
         CONF_QUIET_HOURS_ENABLED: False,
         CONF_QUIET_HOURS_START: "23:00:00",
         CONF_QUIET_HOURS_END: "06:00:00",
+        CONF_SMART_POLLING: False,
+        CONF_HIDE_EMPTY_SUBJECTS: False,
     }
 
 
@@ -329,6 +333,8 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
             CONF_QUIET_HOURS_ENABLED: True,
             CONF_QUIET_HOURS_START: "22:30:00",
             CONF_QUIET_HOURS_END: "07:15:00",
+            CONF_SMART_POLLING: True,
+            CONF_HIDE_EMPTY_SUBJECTS: True,
         },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -343,6 +349,8 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         CONF_QUIET_HOURS_ENABLED: True,
         CONF_QUIET_HOURS_START: "22:30:00",
         CONF_QUIET_HOURS_END: "07:15:00",
+        CONF_SMART_POLLING: True,
+        CONF_HIDE_EMPTY_SUBJECTS: True,
     }
 
 
