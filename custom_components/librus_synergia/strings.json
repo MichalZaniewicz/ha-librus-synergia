@@ -261,7 +261,7 @@
     },
     "download_attachment": {
       "name": "Download message attachment",
-      "description": "Saves one attachment of a Librus message to Home Assistant's media folder (librus_synergia/<message id>/), without opening the message in Librus. Returns where it was saved.",
+      "description": "Saves one attachment of a Librus message to Home Assistant's media folder (librus_synergia, a folder per message), without opening the message in Librus. Returns where it was saved.",
       "fields": {
         "device_id": { "name": "Device", "description": "The Librus Synergia device (student) the message belongs to." },
         "message_id": { "name": "Message ID", "description": "The message's id." },

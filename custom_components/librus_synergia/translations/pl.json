@@ -261,7 +261,7 @@
     },
     "download_attachment": {
       "name": "Pobierz załącznik wiadomości",
-      "description": "Zapisuje jeden załącznik wiadomości z Librusa w folderze multimediów Home Assistanta (librus_synergia/<id wiadomości>/), bez otwierania wiadomości w Librusie. Zwraca, gdzie zapisano plik.",
+      "description": "Zapisuje jeden załącznik wiadomości z Librusa w folderze multimediów Home Assistanta (librus_synergia, osobny folder na każdą wiadomość), bez otwierania wiadomości w Librusie. Zwraca, gdzie zapisano plik.",
       "fields": {
         "device_id": { "name": "Urządzenie", "description": "Urządzenie Librus Synergia (uczeń), do którego należy wiadomość." },
         "message_id": { "name": "ID wiadomości", "description": "Identyfikator wiadomości." },
