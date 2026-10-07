@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- **Ask Assist about school.** The integration registers a "Librus
+  Synergia" tool set (LLM API) that a conversation agent can turn on next
+  to *Assist*: seven read-only tools for the timetable, grades and
+  averages, what's coming up, attendance, behaviour, school/class info and
+  messages. Answers come from data already fetched, so questions add no
+  Librus requests.
 - The Class sensor also carries `student_number` (class register number),
   so a card can show it next to the class without depending on the Lucky
   number sensor, which has no attributes while no number is published.

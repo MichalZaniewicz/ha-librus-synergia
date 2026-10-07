@@ -40,6 +40,7 @@ from .coordinator import (
     optional_endpoint_issue_id,
     school_year_issue_id,
 )
+from .llm_api import async_setup_llm_api, async_unload_llm_api
 from .services import async_setup_services, async_unload_services
 
 type LibrusConfigEntry = ConfigEntry[LibrusDataUpdateCoordinator]
@@ -153,6 +154,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     async_setup_services(hass)
+    async_setup_llm_api(hass)
     return True
 
 
@@ -170,6 +172,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
     remaining = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
     if unloaded and not remaining:
         async_unload_services(hass)
+        async_unload_llm_api(hass)
     return unloaded
 
 

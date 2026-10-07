@@ -161,6 +161,34 @@ own summary, and the blueprint's title says whose it is.
   gets, but it can still make mistakes, so check anything important in
   Librus itself.
 
+## Ask Assist about school
+
+Turn Librus on as a tool set for your Assist conversation agent (Gemini,
+OpenAI, Claude, Ollama...) and ask about school in plain words, by voice or
+in the Assist chat:
+
+- "Co Ola ma jutro i o której zaczyna?"
+- "Jakie oceny dostał w tym tygodniu?"
+- "Kiedy najbliższy sprawdzian z matematyki?"
+- "Ile ma nieusprawiedliwionych nieobecności?"
+
+**Setup:** Settings → Devices & services → your AI integration (e.g. Google
+Generative AI) → the conversation agent's **Configure** → under *Control
+Home Assistant* tick **Librus Synergia** (you can keep *Assist* ticked too).
+Then pick that agent in Settings → Voice assistants.
+
+The agent gets seven read-only tools: timetable for any day, grades and
+averages, what's coming up (tests, homework, days off, timetable changes),
+attendance, behaviour, school and class info (incl. the lucky number), and
+recent messages and announcements. They answer from data the integration
+already holds, so a question adds no Librus request (a timetable date
+outside the current and next week fetches that one week). Nothing is
+changed or sent to Librus. With more than one child, name the child in the
+question; otherwise the agent gets every child.
+
+What you ask, and the tool results it needs, go to the AI provider behind
+that agent. Use a local model (Ollama) if nothing should leave your network.
+
 <p align="center">
   <img src="docs/cards-banner.svg" alt="Custom Lovelace cards">
 </p>
