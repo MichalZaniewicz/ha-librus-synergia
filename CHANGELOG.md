@@ -861,8 +861,7 @@ Fixed at both levels:
 
 ## 0.4.13
 
-Two feature-parity additions inspired by a comparison against
-`dani3l0/librusik` (a third-party Librus web client):
+Two additions:
 
 - **Attendance sensor**: new `percentage` (independently computed - works
   even if your school disables Librus's own average display) and

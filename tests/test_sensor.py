@@ -185,7 +185,7 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
         "2026-09-03": "bad",
         "2026-09-04": "warn",
     }
-    # Independent % calculation (librusik-inspired, new 2026-09-06) - 2 of
+    # Independent % calculation (new 2026-09-06) - 2 of
     # 4 records are presence-kind.
     assert state.attributes["percentage"] == round(100 * 2 / 4, 1)
     assert state.attributes["by_semester"]["1"] == {"total": 2, "present": 2, "percentage": 100.0}
@@ -630,7 +630,7 @@ async def test_unread_messages_sensor_recent_includes_message_id(hass) -> None:
 
 
 async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) -> None:
-    """New (2026-09-06, librusik-inspired): substitutions/alerts/
+    """New (2026-09-06): substitutions/alerts/
     justifications get full content, not just a count - each tagged with
     its own mailbox so a card can pass the right value back to the
     `get_message` service. justifications (usprawiedliwienia) added on

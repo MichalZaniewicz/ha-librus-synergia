@@ -496,7 +496,7 @@ async def test_message_sender_name_falls_back_to_first_and_last_name(hass) -> No
 
 
 async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
-    """New (2026-09-06, librusik-inspired): "substitutions" and "alerts"
+    """New (2026-09-06): "substitutions" and "alerts"
     now get their own full message list (not just an unread count, unlike
     every other secondary mailbox), each message tagged with which
     mailbox it came from so a card can pass the right value to the

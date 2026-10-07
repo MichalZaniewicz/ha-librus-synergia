@@ -737,11 +737,8 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             if existing is None or _STATUS_RANK[status] > _STATUS_RANK[existing]:
                 by_date[a.date] = status
 
-        # Independent attendance-percentage calculation - inspired by a
-        # feature comparison against dani3l0/librusik (a third-party
-        # Librus web client), which computes this itself rather than
-        # relying on Librus's own UI showing it (some schools disable
-        # theirs). AttendanceData.semester was already parsed but never
+        # Attendance percentage computed here rather than relying on
+        # Librus's own UI showing it (some schools disable theirs). AttendanceData.semester was already parsed but never
         # actually used until now.
         total_records = len(data.attendances)
         presence_records = sum(
