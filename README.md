@@ -352,7 +352,9 @@ Almost everything this integration reads has been checked against a real account
 
 **Waiting for real data:**
 - **Final semester and year grades** (as opposed to the *proposed* ones, which are confirmed) are left out of averages and streaks. None exist yet, because the first semester ends on 2027-01-31.
-- **Behaviour grade** and **descriptive grades** sensors are in place, but their endpoints have been empty on every check so far.
+- **Descriptive grades:** the sensor is in place, but the endpoint has been empty on every check so far.
+- **Behaviour grade on a points scale:** the classic scale (wz, bdb, db, popr, ndp, ng) is confirmed on a real account; the points variant some schools use has not been seen yet.
+- **Grade corrections ("poprawy"):** the link from a correction to the grade it replaces comes from another client's reading of the API; no correction has appeared on the test account yet.
 
 **Deliberately not supported:**
 - **Downloading message attachments.** `get_message` returns each attachment's file name, but the download itself only works through Librus's older XML protocol, which uses a separate session.
