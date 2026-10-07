@@ -79,7 +79,9 @@ variables:
   # The device is named "E-dziennik <first> <last>" by the integration.
   student_first: >-
     {{ ((device_attr(agenda_cal, 'name') or '') | replace('E-dziennik ', '')).split(' ')[0] }}
-  prefix: "{{ (student_first ~ ': ') if add_name and student_first else '' }}"
+  # No trailing space here: Home Assistant trims rendered values, so the
+  # space after the colon is added where the title is built.
+  prefix: "{{ (student_first ~ ':') if add_name and student_first else '' }}"
   keywords: >-
     {{ categories_raw.split(',') | map('trim') | map('lower') | reject('eq', '') | list }}
 
@@ -122,7 +124,7 @@ actions:
           {%- set cat = (e.summary.split(']')[0][1:] if e.summary.startswith('[') else '') | lower -%}
           {%- set ns = namespace(ok=(keywords | count == 0)) -%}
           {%- for kw in keywords -%}{%- if kw in cat -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
-          {%- set title = prefix ~ e.summary -%}
+          {%- set title = ((prefix ~ ' ') if prefix else '') ~ e.summary -%}
           {%- if ns.ok and (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
             {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': e.description or ''}] -%}
           {%- endif -%}
@@ -168,7 +170,7 @@ actions:
           for_each: >-
             {%- set out = namespace(items=[]) -%}
             {%- for e in (free_days[free_cal].events if free_cal in free_days else []) -%}
-              {%- set title = prefix ~ 'Dzień wolny: ' ~ e.summary -%}
+              {%- set title = ((prefix ~ ' ') if prefix else '') ~ 'Dzień wolny: ' ~ e.summary -%}
               {%- if (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
                 {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': ''}] -%}
               {%- endif -%}
