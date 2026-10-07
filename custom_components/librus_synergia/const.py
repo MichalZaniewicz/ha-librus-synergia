@@ -91,6 +91,11 @@ AVERAGE_MODE_WEIGHTED = "weighted"
 AVERAGE_MODE_ARITHMETIC = "arithmetic"
 DEFAULT_AVERAGE_MODE = AVERAGE_MODE_WEIGHTED
 
+# Minimum averages for a 2, 3, 4, 5 and 6, used by the grade forecast
+# (forecast.py). Free text so any school's statute fits; an unusable value
+# falls back to forecast.DEFAULT_GRADE_THRESHOLDS.
+CONF_GRADE_THRESHOLDS = "grade_thresholds"
+
 # The student's own number in the class register ("numer w dzienniku") -
 # CONFIRMED (via szkolny-android's reference source) that Librus's API does
 # not expose this anywhere at all; even that reference app just asks the
@@ -283,6 +288,10 @@ EVENT_TIMETABLE_CHANGED = f"{DOMAIN}_timetable_changed"
 # Librus actually reports. Each achievement key fires at most once (seeded
 # silently on the first sync, same as every other *_new_*/_changed event).
 EVENT_ACHIEVEMENT_UNLOCKED = f"{DOMAIN}_achievement_unlocked"
+# Fires when a subject's forecast grade (forecast.py) moves up or down a
+# grade vs. the previous poll. Seeded silently on the first sync and again
+# when the basis switches from the first semester to the school year.
+EVENT_FORECAST_CHANGED = f"{DOMAIN}_forecast_changed"
 
 # Fired after every successful weekly AI summary (see ai_summary.py),
 # carrying the whole result plus labels in the HA language for a report.

@@ -23,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import LibrusConfigEntry, librus_device_info
 from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
+    EVENT_FORECAST_CHANGED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -89,6 +90,13 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
     ),
     LibrusEventDescription(
         "message", EVENT_NEW_MESSAGE, ("new_message",), "mdi:email-outline", lambda d: "new_message"
+    ),
+    LibrusEventDescription(
+        "forecast",
+        EVENT_FORECAST_CHANGED,
+        ("up", "down"),
+        "mdi:crystal-ball",
+        lambda d: "up" if d.get("direction") == "up" else "down",
     ),
     LibrusEventDescription(
         "achievement",

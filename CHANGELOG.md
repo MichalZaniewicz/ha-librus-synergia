@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- **Grade forecast.** A *Grade forecast* sensor: what each subject's
+  average gives on the report card (thresholds under Configure, default
+  1.75 / 2.75 / 3.75 / 4.75 / 5.50), how many 6s lift a grade and how many
+  1s drop it, subjects heading for a 1, subjects whose forecast fell in the
+  last two weeks, and the forecast report-card average. First semester's
+  grades until the semester ends, then the whole year. Subject average
+  sensors carry the same forecast in attributes.
+- Binary sensor **Grade at risk** (on while a subject points to a 1), event
+  `librus_synergia_forecast_changed` with an event entity, and the blueprint
+  **Grade Forecast Changed** (24 now). Ask Assist and the weekly AI summary
+  see the forecast too.
 - Blueprint **Copy School Events to a Calendar**: tests, quizzes, trips,
   meetings and days off copied into a calendar of your choice (daily and on
   a new Agenda entry), filtered by Agenda category, without duplicates.

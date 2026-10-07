@@ -119,6 +119,15 @@ async def test_grades_tool_filters_by_subject_and_marks_corrections(hass) -> Non
     assert oldest["teacher"] == "Anna Nowak"
     assert set(data["subject_averages"]) == {"Matematyka"}
     assert "overall_average" not in data  # a subject filter leaves it out
+    # (2*3 + 5*3) / 6 = 3.5 -> 3 on the default thresholds.
+    assert data["forecast"] == [
+        {
+            "subject": "Matematyka",
+            "forecast_grade": 3,
+            "sixes_needed_for_next_grade": 1,
+            "ones_until_grade_drops": 3,
+        }
+    ]
 
 
 async def test_unknown_student_is_an_error(hass) -> None:

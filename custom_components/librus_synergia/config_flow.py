@@ -70,6 +70,7 @@ from .const import (
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
+    CONF_GRADE_THRESHOLDS,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MESSAGES_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
@@ -98,6 +99,7 @@ from .const import (
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
 )
+from .forecast import DEFAULT_GRADE_THRESHOLDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -393,6 +395,10 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         translation_key=CONF_AVERAGE_MODE,
                     )
                 ),
+                vol.Required(
+                    CONF_GRADE_THRESHOLDS,
+                    default=options.get(CONF_GRADE_THRESHOLDS, DEFAULT_GRADE_THRESHOLDS),
+                ): TextSelector(TextSelectorConfig()),
                 # Optional override: the number is read from Synergia's
                 # informacja page (coordinator.student_number_from_librus);
                 # a value here wins over it.

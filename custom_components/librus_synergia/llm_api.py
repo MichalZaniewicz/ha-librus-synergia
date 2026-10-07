@@ -20,9 +20,9 @@ detected at runtime instead of pinning one Home Assistant version.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 import importlib
 import logging
+from datetime import date, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntryState
@@ -45,6 +45,7 @@ from .coordinator import (
     merge_timetables,
     teacher_subject_ids,
 )
+from .forecast import subject_forecasts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -274,7 +275,9 @@ class GradesTool(_LibrusTool):
         "Grades with date, subject, value, category (e.g. sprawdzian, kartkówka), weight, "
         "teacher and comment, newest first, plus the current averages. Polish scale 1-6; "
         "'+' adds 0.5 and '-' takes 0.25; marks such as np, bz, + or - alone do not count "
-        "towards the average. Filter by subject and by how many days back."
+        "towards the average. Also a forecast of the report-card grade per subject (from the "
+        "average and the school's thresholds - the teacher decides the real grade) with how "
+        "many 6s lift it and how many 1s drop it. Filter by subject and by how many days back."
     )
     parameters = _schema(
         {
@@ -346,6 +349,26 @@ class GradesTool(_LibrusTool):
                 if subject_ids is None
                 else None,
                 "subject_averages": averages,
+                # What the averages point to on the report card, with what it
+                # takes to move a grade (thresholds from the options).
+                "forecast": [
+                    _compact(
+                        {
+                            "subject": f.subject,
+                            "forecast_grade": f.predicted,
+                            "sixes_needed_for_next_grade": f.sixes_to_next,
+                            "ones_until_grade_drops": f.ones_to_drop,
+                            "at_risk_of_failing": True if f.at_risk else None,
+                            "dropped_recently": True if f.declining else None,
+                            "teacher_proposed": f.proposed,
+                        }
+                    )
+                    for f in subject_forecasts(
+                        data, today, coordinator.grade_thresholds, weighted=weighted
+                    )
+                    if subject_ids is None or f.subject_id in subject_ids
+                ]
+                or None,
                 "grades": grades,
                 "more_grades_not_shown": len(picked) - MAX_GRADES if len(picked) > MAX_GRADES else None,
                 "no_grades": True if not picked else None,

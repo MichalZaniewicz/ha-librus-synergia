@@ -56,6 +56,7 @@ from .coordinator import (
     infer_subject_id,
     teacher_subject_ids,
 )
+from .forecast import subject_forecasts
 
 if TYPE_CHECKING:
     from .coordinator import LibrusDataUpdateCoordinator
@@ -198,7 +199,9 @@ work), a bare "+" or "-" (activity plus/minus), "nb" (absent) do not count towar
 the average. weight is the category weight in the weighted average;
 counts_to_average false means it does not count. averages[].week_ago is the
 average without this week's grades (null = the subject had no grades before).
-average_mode says which average the family uses. attendance.this_week counts
+average_mode says which average the family uses. forecast_on_the_edge is the
+report-card grade the averages point to (a forecast - the teacher decides), only for
+subjects at risk of a 1, that fell recently, or where one 6 / one 1 moves the grade. attendance.this_week counts
 lesson records; open_unexcused is the whole school year. Streaks: good_grade_streak
 = grades 4 or better in a row, days_without_absence / days_without_negative_note
 are calendar days. attendance.absences lists this week's absences and lates. next_week.agenda holds tests, trips and other entries from the
@@ -290,6 +293,7 @@ def build_context(
     weighted: bool,
     include_news: bool,
     student: str | None,
+    thresholds: tuple[float, ...] | None = None,
 ) -> dict[str, Any]:
     """Compact, JSON-ready snapshot of the week before and after ``today``."""
     week_from = today - timedelta(days=WINDOW_DAYS - 1)
@@ -489,6 +493,24 @@ def build_context(
         "average_mode": "weighted" if weighted else "arithmetic",
         "grades": grades,
         "averages": averages,
+        # Only the subjects worth a word: a forecast 1, a forecast that fell
+        # recently, or one grade away from moving.
+        "forecast_on_the_edge": [
+            _compact(
+                {
+                    "subject": f.subject,
+                    "forecast_grade": f.predicted,
+                    "at_risk_of_failing": True if f.at_risk else None,
+                    "dropped_recently": True if f.declining else None,
+                    "one_six_lifts_it": True if f.sixes_to_next == 1 else None,
+                    "one_one_drops_it": True if f.ones_to_drop == 1 else None,
+                }
+            )
+            for f in subject_forecasts(data, today, thresholds, weighted=weighted)
+            if f.at_risk or f.declining or f.sixes_to_next == 1 or f.ones_to_drop == 1
+        ]
+        if thresholds
+        else [],
         "overall_average": _compact(
             {
                 "now": calculate_average(data.grades, data.grade_categories, weighted=weighted),
@@ -843,7 +865,12 @@ class LibrusWeeklySummary:
         )
         student = f"{data.me.first_name} {data.me.last_name}".strip() or None
         context = build_context(
-            data, today, weighted=weighted, include_news=self.include_news, student=student
+            data,
+            today,
+            weighted=weighted,
+            include_news=self.include_news,
+            student=student,
+            thresholds=self._coordinator.grade_thresholds,
         )
         if skip_empty and is_empty_week(context):
             _LOGGER.debug("Weekly summary skipped: nothing happened this week or next")

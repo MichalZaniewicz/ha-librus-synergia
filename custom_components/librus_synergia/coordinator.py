@@ -86,10 +86,13 @@ from librus_synergia.parsers import (  # noqa: F401
 )
 
 from .const import (
+    AVERAGE_MODE_ARITHMETIC,
     CONF_ANNOUNCEMENTS_ENABLED,
+    CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
+    CONF_GRADE_THRESHOLDS,
     CONF_MESSAGES_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
@@ -97,6 +100,7 @@ from .const import (
     CONF_SMART_POLLING,
     CORE_ENDPOINT_LABELS,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
+    DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
@@ -107,6 +111,7 @@ from .const import (
     DEFAULT_SMART_POLLING,
     DOMAIN,
     EVENT_ACHIEVEMENT_UNLOCKED,
+    EVENT_FORECAST_CHANGED,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -125,6 +130,7 @@ from .const import (
     SMART_POLLING_NIGHT_END,
     SMART_POLLING_NIGHT_START,
 )
+from .forecast import average_sums, forecast_basis, parse_thresholds, subject_forecasts
 
 if TYPE_CHECKING:
     from .ai_summary import LibrusWeeklySummary
@@ -356,29 +362,9 @@ def calculate_average(
     grade category's weight unless `weighted=False` (plain arithmetic
     mean of the same counted grades). `semester` restricts to grades from
     that semester when given."""
-    running = 0.0
-    weight_total = 0.0
-    for grade in grades:
-        if (
-            grade.is_semester_proposition
-            or grade.is_final_proposition
-            or grade.is_semester
-            or grade.is_final
-        ):
-            continue
-        if subject_id is not None and grade.subject_id != subject_id:
-            continue
-        if semester is not None and grade.semester != semester:
-            continue
-        category = categories.get(grade.category_id) if grade.category_id is not None else None
-        if category is not None and not category.count_to_average:
-            continue
-        numeric = parse_grade_value(grade.value)
-        if numeric is None:
-            continue
-        weight = (category.weight if category is not None else 1) if weighted else 1
-        running += numeric * weight
-        weight_total += weight
+    running, weight_total = average_sums(
+        grades, categories, subject_id=subject_id, semester=semester, weighted=weighted
+    )
     if weight_total <= 0:
         return None
     return round(running / weight_total, 2)
@@ -469,6 +455,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # a small fixed vocabulary of milestones (the library knows nothing
         # about achievements). See _check_achievements.
         self._known_achievements: set[str] | None = None
+        # subject id -> forecast grade at the previous poll (None = not
+        # seeded yet), and the basis it was computed on.
+        self._known_forecast: dict[int, int] | None = None
+        self._known_forecast_basis: str | None = None
         # Real homework assignments - the library's ChangeTracker doesn't
         # cover HomeWorkAssignments, so same seed-then-union set as above.
         self._known_homework_assignment_ids: set[Any] | None = None
@@ -916,8 +906,57 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
         self._fire_new_homework_assignment_events(data)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
+        self._fire_forecast_events(data, today)
         self._last_fetch_at = dt_util.utcnow()
         return data
+
+    @property
+    def weighted_average(self) -> bool:
+        """The options flow's average mode (weighted unless arithmetic)."""
+        if self.config_entry is None:
+            return True
+        mode = self.config_entry.options.get(CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE)
+        return mode != AVERAGE_MODE_ARITHMETIC
+
+    @property
+    def grade_thresholds(self) -> tuple[float, ...]:
+        """The forecast's minimum averages for a 2..6 (options flow)."""
+        text = self.config_entry.options.get(CONF_GRADE_THRESHOLDS) if self.config_entry else None
+        return parse_thresholds(text)
+
+    def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
+        """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.
+        Silent on the first poll and when the basis changes (the second
+        semester starts), so neither looks like a jump."""
+        basis, _semester = forecast_basis(data, today)
+        forecasts = subject_forecasts(
+            data, today, self.grade_thresholds, weighted=self.weighted_average
+        )
+        current = {f.subject_id: f.predicted for f in forecasts}
+        known = self._known_forecast
+        if known is not None and basis == self._known_forecast_basis:
+            entry_id = self.config_entry.entry_id if self.config_entry else None
+            for forecast in forecasts:
+                old = known.get(forecast.subject_id)
+                if old is None or old == forecast.predicted:
+                    continue
+                self.hass.bus.async_fire(
+                    EVENT_FORECAST_CHANGED,
+                    {
+                        "entry_id": entry_id,
+                        "student": data.me.display_name,
+                        "subject_id": forecast.subject_id,
+                        "subject": forecast.subject,
+                        "old": old,
+                        "new": forecast.predicted,
+                        "direction": "up" if forecast.predicted > old else "down",
+                        "average": forecast.average,
+                        "sixes_to_next": forecast.sixes_to_next,
+                        "ones_to_drop": forecast.ones_to_drop,
+                    },
+                )
+        self._known_forecast = current
+        self._known_forecast_basis = basis
 
     def _feature_enabled(self, key: str, default: bool) -> bool:
         """Read one of the options-flow feature toggles (see config_flow.py)

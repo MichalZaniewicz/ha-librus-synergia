@@ -1,0 +1,60 @@
+blueprint:
+  name: "Librus: Grade Forecast Changed"
+  description: >
+    Runs an action - typically "Send a notification" to your phone -
+    when a subject's forecast report-card grade moves, via the
+    `librus_synergia_forecast_changed` event. The forecast comes from the
+    subject's average and the thresholds set under Configure (see the Grade
+    forecast sensor) - the teacher decides the real grade.
+
+
+    Inside your chosen action, use `{{ forecast_summary }}` for a ready-made
+    message (e.g. "Ola: Matematyka - prognoza spadła z 4 na 3 (średnia
+    3,62). Jedna 6 podnosi ją z powrotem."), or the fields directly:
+    `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.old }}`,
+    `{{ trigger.event.data.new }}`, `{{ trigger.event.data.direction }}`
+    (up/down), `{{ trigger.event.data.average }}`,
+    `{{ trigger.event.data.sixes_to_next }}`,
+    `{{ trigger.event.data.ones_to_drop }}`. With more than one child the
+    summary starts with the child's name.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/grade_forecast_notification.yaml
+  input:
+    only_drops:
+      name: Only when it drops
+      description: Skip the good news (a forecast going up).
+      default: true
+      selector:
+        boolean: {}
+    notify_action:
+      name: Notification action
+      description: The action to run when a forecast changes.
+      selector:
+        action: {}
+
+variables:
+  only_drops: !input only_drops
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_forecast_changed
+
+conditions:
+  - condition: template
+    value_template: "{{ not only_drops or trigger.event.data.direction == 'down' }}"
+
+actions:
+  - variables:
+      forecast_summary: >-
+        {%- set d = trigger.event.data -%}
+        {{ (d.student ~ ': ') if d.student else '' }}{{ d.subject }} -
+        prognoza {{ 'spadła' if d.direction == 'down' else 'wzrosła' }} z {{ d.old }} na {{ d.new }}
+        (średnia {{ '%.2f' | format(d.average) | replace('.', ',') }}).
+        {%- if d.direction == 'down' and d.sixes_to_next %}
+        {{ 'Jedna 6 podnosi ją z powrotem.' if d.sixes_to_next == 1 else 'Do poprawy potrzeba ' ~ d.sixes_to_next ~ (' szóstki.' if d.sixes_to_next < 5 else ' szóstek.') }}
+        {%- elif d.direction == 'up' and d.ones_to_drop == 1 %} Uwaga: jedna 1 cofnie ją z powrotem.
+        {%- endif %}
+  - !input notify_action
+
+mode: queued
+max: 10

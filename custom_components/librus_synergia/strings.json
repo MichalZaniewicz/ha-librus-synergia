@@ -79,6 +79,7 @@
           "free_days_enabled": "Fetch free days calendar",
           "average_mode": "Grade average shown as the sensor state",
           "student_number": "Student's number in the class register",
+          "grade_thresholds": "Grade forecast thresholds",
           "hide_empty_subjects": "Hide subjects without grades",
           "smart_polling": "Smart polling",
           "quiet_hours_enabled": "Enable quiet hours (skip polling overnight)",
@@ -94,6 +95,7 @@
           "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
           "average_mode": "Weighted uses each grade category's weight (what Librus itself shows). Arithmetic is a plain mean of the same grades. Both stay available as attributes either way.",
           "student_number": "Optional - the number is read from Librus automatically (its Informacje page). Fill this in only to override it. The Lucky number sensor uses it to show whether it's your number.",
+          "grade_thresholds": "Minimum average for a 2, 3, 4, 5 and 6, comma separated (e.g. 1.75, 2.75, 3.75, 4.75, 5.50). Check your school's statute (WSO) - schools use different ones. Used by the Grade forecast sensor and the Grade at risk binary sensor.",
           "hide_empty_subjects": "No average sensor for a subject until it gets its first grade (e.g. Religia early in the year). Existing sensors of such subjects are removed; they come back with the first grade.",
           "smart_polling": "Saves requests when nothing is happening. On school days between 06:00 and 22:00 data is refreshed at the poll interval above. On a day without lessons (weekend, holidays) at most once an hour, and at night (22:00-06:00) at most every 3 hours. The Refresh action (librus_synergia.refresh) always fetches straight away. Quiet hours below, if on, still apply.",
           "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
@@ -158,11 +160,13 @@
       "agenda_event": { "name": "New agenda entry", "state_attributes": { "event_type": { "state": { "new_entry": "New entry" } } } },
       "announcement_event": { "name": "New announcement", "state_attributes": { "event_type": { "state": { "new_announcement": "New announcement" } } } },
       "message_event": { "name": "New message", "state_attributes": { "event_type": { "state": { "new_message": "New message" } } } },
+      "forecast_event": { "name": "Grade forecast changed", "state_attributes": { "event_type": { "state": { "up": "Up", "down": "Down" } } } },
       "achievement_event": { "name": "Achievement unlocked", "state_attributes": { "event_type": { "state": { "unlocked": "Unlocked" } } } }
     },
     "binary_sensor": {
       "school_day_today": { "name": "School day today" },
       "school_day_tomorrow": { "name": "School day tomorrow" },
+      "grade_risk": { "name": "Grade at risk" },
       "in_school": { "name": "At school" }
     },
     "todo": {
@@ -170,6 +174,7 @@
     },
     "sensor": {
       "weekly_summary": { "name": "Weekly summary" },
+      "grade_forecast": { "name": "Grade forecast" },
       "overall_average": { "name": "Overall grade average" },
       "subject_average": { "name": "{subject} average" },
       "attendance": { "name": "Absences" },

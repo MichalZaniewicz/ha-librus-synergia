@@ -59,6 +59,13 @@ from .coordinator import (
 from .coordinator import (
     calculate_average as _calculate_average,
 )
+from .forecast import (
+    HONOURS_AVERAGE,
+    SubjectForecast,
+    forecast_basis,
+    report_average,
+    subject_forecasts,
+)
 from .school_day import MinuteRefresh, SchoolDay, next_end, next_start, school_days
 
 
@@ -237,6 +244,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             LibrusOverallAverageSensor(coordinator, entry),
+            LibrusGradeForecastSensor(coordinator, entry),
             LibrusAttendanceSensor(coordinator, entry),
             LibrusUnexcusedAbsencesSensor(coordinator, entry),
             LibrusSubjectAttendanceSensor(coordinator, entry),
@@ -486,6 +494,79 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                 semester=2,
                 weighted=self._weighted,
             ),
+            **self._forecast_attrs(),
+        }
+
+    def _forecast_attrs(self) -> dict[str, Any]:
+        forecast = next(
+            (
+                f
+                for f in subject_forecasts(
+                    self.coordinator.data,
+                    dt_util.now().date(),
+                    self.coordinator.grade_thresholds,
+                    weighted=self._weighted,
+                )
+                if f.subject_id == self._subject_id
+            ),
+            None,
+        )
+        if forecast is None:
+            return {"predicted_grade": None}
+        return {
+            "predicted_grade": forecast.predicted,
+            "next_grade_at": forecast.next_grade_at,
+            "sixes_to_next_grade": forecast.sixes_to_next,
+            "ones_to_drop_grade": forecast.ones_to_drop,
+            "forecast_declining": forecast.declining,
+        }
+
+
+class LibrusGradeForecastSensor(LibrusSensorBase):
+    """The report card the averages point to: state = the mean of every
+    subject's forecast grade, attributes = the forecast per subject (worst
+    first), subjects at risk of a 1 and subjects whose forecast fell by a
+    grade in the last two weeks. See forecast.py."""
+
+    _attr_translation_key = "grade_forecast"
+    _attr_icon = "mdi:crystal-ball"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "grade_forecast")
+
+    def _forecasts(self) -> list[SubjectForecast]:
+        return subject_forecasts(
+            self.coordinator.data,
+            dt_util.now().date(),
+            self.coordinator.grade_thresholds,
+            weighted=self._weighted,
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        return report_average(self._forecasts())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        forecasts = self._forecasts()
+        average = report_average(forecasts)
+        basis, _semester = forecast_basis(data, dt_util.now().date())
+        return {
+            "basis": basis,
+            "thresholds": list(self.coordinator.grade_thresholds),
+            # Only the average part of "świadectwo z wyróżnieniem" - the
+            # behaviour grade must be at least very good as well.
+            "honours_average": average is not None and average >= HONOURS_AVERAGE,
+            "at_risk": [f.subject for f in forecasts if f.at_risk],
+            "declining": [f.subject for f in forecasts if f.declining],
+            "subjects": [f.as_dict() for f in forecasts],
         }
 
 
