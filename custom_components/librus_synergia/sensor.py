@@ -1275,7 +1275,7 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
                     "category": categories.get(g.category_id) if g.category_id else None,
                     "date": g.add_date,
                     "text": g.text[:200],
-                    "comments": g.comments,
+                    "comments": [c.strip() for c in g.comments],
                 }
                 for g in recent
             ]

@@ -812,6 +812,7 @@ async def test_behaviour_grade_sensor_classic_scale(hass) -> None:
     assert state.attributes["name"] == "bardzo dobre"
     assert state.attributes["comment"] == "Ocena zachowania miesiąc za IX/26."
     assert state.attributes["recent"][0]["grade"] == "bdb"
+    assert state.attributes["recent"][0]["comments"] == ["Ocena zachowania miesiąc za IX/26."]
 
 
 async def test_descriptive_grades_sensor(hass) -> None:

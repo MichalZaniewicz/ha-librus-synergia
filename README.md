@@ -231,7 +231,7 @@ Home Assistant theme and language (English, Polish).
 | `sensor` | School | Name, town/street, head teacher, contact details, and a `bell_schedule` attribute (period number -> start/end time, derived from the timetable) |
 | `sensor` | Class | Class name (e.g. "7d"), homeroom teacher, semester/school-year boundary dates |
 | `sensor` | Homework assignments | Count of real "zadania domowe" (distinct from the Agenda calendar's general feed below), with a `recent` attribute (id/topic/text/due date/teacher, and the subject - worked out from the teacher, since Librus doesn't say; empty when that teacher teaches more than one subject) |
-| `sensor` | Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade's short code (e.g. "wz"), with a `recent` attribute (value/category/date/comments) |
+| `sensor` | Behaviour grade | Formal "ocena zachowania" (distinct from Behaviour notices above) - state is the most recent grade: the classic-scale short form (e.g. "bdb") or the points for a points-based school. `name` ("bardzo dobre") and the teacher's `comment` in attributes, plus a `recent` list (grade/name/category/date/comments) |
 | `sensor` | Descriptive grades | Count of non-numeric descriptive grades (this school has these enabled instead of point-scale grades), with a `recent` attribute (subject/value/date) |
 | `sensor` | Attendance streak | Days since the last real absence - falls back to days since the school year started for a perfect-attendance student, rather than `unknown` |
 | `sensor` | Good behaviour streak | Days since the last negative behaviour note, same fallback as Attendance streak |

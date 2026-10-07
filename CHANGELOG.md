@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- Behaviour grade `recent[].comments` kept Librus's padding spaces; now trimmed like the `comment` attribute.
+
 ### Added
 - **School day sensors.** Binary sensors *School day today*, *School day
   tomorrow* (lessons that aren't cancelled, not a free day) and *At school*
