@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1B1740"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="120" fill="url(#bg)"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.055" stroke-width="1">
+    <line x1="0" y1="24" x2="1200" y2="24"/>
+    <line x1="0" y1="52" x2="1200" y2="52"/>
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="108" x2="1200" y2="108"/>
+  </g>
+
+  <text x="48" y="44" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="2.5" fill="#F5B93D">ASK ASSIST</text>
+  <text x="48" y="84" font-family="Georgia, 'Times New Roman', serif" font-size="34" font-weight="700" fill="#FFFFFF">School questions, answered by voice</text>
+  <text x="48" y="106" font-family="Consolas, Menlo, monospace" font-size="13" fill="#B7B0EE">any conversation agent&#160;&#183;&#160;seven read-only tools&#160;&#183;&#160;no extra Librus requests</text>
+
+  <g transform="translate(905,30)">
+    <g transform="translate(0,0)">
+      <rect width="60" height="60" rx="16" fill="#818CF8"/>
+      <path d="M15 18h30a3 3 0 0 1 3 3v15a3 3 0 0 1-3 3H27l-8 7v-7h-4a3 3 0 0 1-3-3V21a3 3 0 0 1 3-3z" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(78,0)">
+      <rect width="60" height="60" rx="16" fill="#2A2568"/>
+      <rect x="24" y="13" width="12" height="21" rx="6" stroke="#D8D4FA" stroke-width="4" fill="none"/><path d="M18 29a12 12 0 0 0 24 0M30 41v6M24 47h12" stroke="#D8D4FA" stroke-width="4" fill="none" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(156,0)">
+      <rect width="60" height="60" rx="16" fill="#F59E0B"/>
+      <path d="M30 16L11 25l19 9 19-9zM19 29v9c0 3 5 6 11 6s11-3 11-6v-9" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

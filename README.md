@@ -161,6 +161,10 @@ own summary, and the blueprint's title says whose it is.
   gets, but it can still make mistakes, so check anything important in
   Librus itself.
 
+<p align="center">
+  <img src="docs/assist-banner.svg" alt="Ask Assist about school">
+</p>
+
 ## Ask Assist about school
 
 Turn Librus on as a tool set for your Assist conversation agent (Gemini,

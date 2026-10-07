@@ -23,7 +23,7 @@
   <text x="60" y="134" font-family="Georgia, 'Times New Roman', serif" font-size="54" font-weight="700" fill="#FFFFFF">Librus Synergia</text>
   <text x="60" y="172" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#D8D4FA">Grades, attendance, timetable and more </text>
   <text x="60" y="198" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#D8D4FA">synced straight into Home Assistant.</text>
-  <text x="60" y="240" font-family="Consolas, Menlo, monospace" font-size="14" fill="#B7B0EE">19 sensors&#160;&#160;&#183;&#160;&#160;3 calendars&#160;&#160;&#183;&#160;&#160;0% CAPTCHA</text>
+  <text x="60" y="240" font-family="Consolas, Menlo, monospace" font-size="14" fill="#B7B0EE">22 sensors&#160;&#160;&#183;&#160;&#160;9 events&#160;&#160;&#183;&#160;&#160;Assist-ready</text>
 
   <g transform="translate(870,25)">
     <rect x="-18" y="18" width="150" height="230" rx="26" fill="#2A2568"/>
