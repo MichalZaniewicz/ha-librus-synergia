@@ -10,10 +10,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.storage import Store
 
 from librus_synergia import LibrusApiClient, LibrusSessionData
 
 from .ai_summary import LibrusWeeklySummary
+from .average_history import LibrusAverageHistory
 from .const import (
     CONF_AI_AUDIENCE,
     CONF_AI_CONTEXT,
@@ -153,6 +155,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Grade-average history for long-term statistics (see average_history.py).
+    average_history = LibrusAverageHistory(hass, coordinator)
+    average_history.async_start()
+    entry.async_on_unload(average_history.async_stop)
+
     async_setup_services(hass)
     async_setup_llm_api(hass)
     return True
@@ -196,3 +204,5 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
     ]
     for issue_id in issue_ids:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
+    # Ticked-off homework of the removed student's to-do list (todo.py).
+    await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.homework_done").async_remove()

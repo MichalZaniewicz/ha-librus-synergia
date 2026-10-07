@@ -8,9 +8,11 @@ DOMAIN = "librus_synergia"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.CALENDAR,
     Platform.BUTTON,
     Platform.SWITCH,
+    Platform.TODO,
 ]
 
 # The session (see librus_synergia.LibrusSessionData) is cookie-based with a

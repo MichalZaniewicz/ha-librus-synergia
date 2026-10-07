@@ -145,6 +145,14 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "school_day_today": { "name": "Dzień szkolny dziś" },
+      "school_day_tomorrow": { "name": "Dzień szkolny jutro" },
+      "in_school": { "name": "Na lekcjach" }
+    },
+    "todo": {
+      "homework": { "name": "Zadania domowe" }
+    },
     "sensor": {
       "weekly_summary": { "name": "Podsumowanie tygodnia" },
       "overall_average": { "name": "Średnia ocen" },
@@ -154,6 +162,8 @@
       "subject_attendance": { "name": "Najniższa frekwencja z przedmiotu" },
       "next_lesson": { "name": "Następna lekcja" },
       "current_lesson": { "name": "Bieżąca lekcja" },
+      "school_start": { "name": "Początek lekcji" },
+      "school_end": { "name": "Koniec lekcji" },
       "next_exam": { "name": "Najbliższy sprawdzian" },
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },

@@ -1,6 +1,7 @@
 {
   "domain": "librus_synergia",
   "name": "Librus Synergia (unofficial)",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@MichalZaniewicz"],
   "config_flow": true,
   "documentation": "https://github.com/MichalZaniewicz/ha-librus-synergia",

@@ -33,7 +33,6 @@ from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
 from .const import (
     ATTR_SUBJECT_ID,
-    DOMAIN,
     AVERAGE_MODE_ARITHMETIC,
     AVERAGE_MODE_WEIGHTED,
     CONF_ANNOUNCEMENTS_ENABLED,
@@ -45,18 +44,22 @@ from .const import (
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
+    DOMAIN,
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     days_since_last_absence,
-    calculate_average as _calculate_average,
-    grade_improvements,
     days_since_last_negative_note,
     good_grade_streak,
+    grade_improvements,
     infer_subject_id,
     parse_grade_value,
     teacher_subject_ids,
 )
+from .coordinator import (
+    calculate_average as _calculate_average,
+)
+from .school_day import MinuteRefresh, SchoolDay, next_end, next_start, school_days
 
 
 def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> GradeData | None:
@@ -239,6 +242,8 @@ async def async_setup_entry(
             LibrusSubjectAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
+            LibrusSchoolStartSensor(coordinator, entry),
+            LibrusSchoolEndSensor(coordinator, entry),
             LibrusNextExamSensor(coordinator, entry),
             LibrusLuckyNumberSensor(coordinator, entry),
             LibrusUnreadAnnouncementsSensor(coordinator, entry),
@@ -1565,6 +1570,82 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
         attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
         attrs["minutes_left"] = max(0, int((end - dt_util.now()).total_seconds() // 60))
         return attrs
+
+
+class _LibrusSchoolTimeSensor(MinuteRefresh, LibrusSensorBase):
+    """Timestamp of the next first-lesson start / last-lesson end - a
+    sensor an automation can trigger on with an offset ("45 minutes
+    before school starts"). Re-checked every minute so it moves on to the
+    next school day right after the moment passes."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def _pick(self) -> SchoolDay | None:
+        raise NotImplementedError
+
+    def _moment(self, school_day: SchoolDay) -> datetime:
+        raise NotImplementedError
+
+    def _lesson(self, school_day: SchoolDay) -> LessonData:
+        raise NotImplementedError
+
+    @property
+    def native_value(self) -> datetime | None:
+        picked = self._pick()
+        return self._moment(picked) if picked else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        picked = self._pick()
+        if picked is None or self.coordinator.data is None:
+            return None
+        lesson = self._lesson(picked)
+        return {
+            "date": picked.day.isoformat(),
+            "is_today": picked.day == dt_util.now().date(),
+            "lesson_no": lesson.lesson_no,
+            "subject": _lesson_subject(lesson, self.coordinator.data),
+        }
+
+
+class LibrusSchoolStartSensor(_LibrusSchoolTimeSensor):
+    """Start of the first lesson of today (until it starts), then of the
+    next school day. For alarm clocks."""
+
+    _attr_translation_key = "school_start"
+    _attr_icon = "mdi:alarm"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school_start")
+
+    def _pick(self) -> SchoolDay | None:
+        return next_start(school_days(self.coordinator.data), dt_util.now())
+
+    def _moment(self, school_day: SchoolDay) -> datetime:
+        return school_day.first_start
+
+    def _lesson(self, school_day: SchoolDay) -> LessonData:
+        return school_day.first_lesson
+
+
+class LibrusSchoolEndSensor(_LibrusSchoolTimeSensor):
+    """End of the last lesson of today (until it ends), then of the next
+    school day. For pick-up reminders."""
+
+    _attr_translation_key = "school_end"
+    _attr_icon = "mdi:home-import-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school_end")
+
+    def _pick(self) -> SchoolDay | None:
+        return next_end(school_days(self.coordinator.data), dt_util.now())
+
+    def _moment(self, school_day: SchoolDay) -> datetime:
+        return school_day.last_end
+
+    def _lesson(self, school_day: SchoolDay) -> LessonData:
+        return school_day.last_lesson
 
 
 class LibrusNextExamSensor(LibrusSensorBase):

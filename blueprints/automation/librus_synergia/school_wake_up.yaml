@@ -1,0 +1,65 @@
+blueprint:
+  name: "Librus: School Wake-Up"
+  description: >
+    Runs your action a set number of minutes before the first lesson of
+    each school day - an alarm that follows the timetable. A day starting
+    with lesson 2 wakes later; days off, holidays and fully cancelled days
+    stay silent, because the School start sensor only points at real
+    school days.
+
+
+    Use it to play music or an alarm on a speaker, open the blinds, turn on
+    the lights, or send a notification. `{{ wake_summary }}` is a ready-made
+    message ("Ola: pierwsza lekcja o 08:00 - Matematyka").
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_wake_up.yaml
+  input:
+    school_start_entity:
+      name: School start sensor
+      description: The Librus "School start" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+          device_class: timestamp
+    minutes_before:
+      name: Minutes before the first lesson
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 180
+          step: 5
+          unit_of_measurement: min
+    wake_action:
+      name: Action
+      description: What to do (alarm, music, lights, notification...).
+      selector:
+        action: {}
+
+trigger_variables:
+  start_entity: !input school_start_entity
+  before: !input minutes_before
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {%- set s = states(start_entity) -%}
+      {%- if s in ['unknown', 'unavailable', ''] -%}false
+      {%- else -%}
+        {%- set t = s | as_datetime -%}
+        {{ t is not none and t - timedelta(minutes=before | int(60)) <= now() < t }}
+      {%- endif -%}
+
+actions:
+  - variables:
+      lesson_time: "{{ as_timestamp(states(start_entity)) | timestamp_custom('%H:%M') }}"
+      first_subject: "{{ state_attr(start_entity, 'subject') }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(start_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      wake_summary: >-
+        {{ (student_name ~ ': ') if student_name else '' }}pierwsza lekcja o {{ lesson_time }}{{ (' - ' ~ first_subject) if first_subject else '' }}
+  - !input wake_action
+
+mode: single

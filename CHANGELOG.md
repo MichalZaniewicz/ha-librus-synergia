@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **School day sensors.** Binary sensors *School day today*, *School day
+  tomorrow* (lessons that aren't cancelled, not a free day) and *At school*
+  (first lesson's start to last lesson's end, breaks included), re-checked
+  every minute.
+- **School start / School end** timestamp sensors: the next first-lesson
+  start and last-lesson end, for automations with an offset.
+- Blueprints **School Wake-Up** (alarm before the first lesson) and
+  **School Pick-Up Reminder** (before the last lesson ends).
+- **Homework to-do list** (`todo` entity) with due dates; ticks are stored
+  in Home Assistant.
+- **Grade-average history in long-term statistics**: overall and
+  per-subject averages for every day since the first grade, for a
+  Statistics graph covering the whole school year.
+
 ## 0.10.1-beta.2
 
 ### Added

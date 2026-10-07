@@ -145,6 +145,14 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "school_day_today": { "name": "School day today" },
+      "school_day_tomorrow": { "name": "School day tomorrow" },
+      "in_school": { "name": "At school" }
+    },
+    "todo": {
+      "homework": { "name": "Homework" }
+    },
     "sensor": {
       "weekly_summary": { "name": "Weekly summary" },
       "overall_average": { "name": "Overall grade average" },
@@ -154,6 +162,8 @@
       "subject_attendance": { "name": "Lowest subject attendance" },
       "next_lesson": { "name": "Next lesson" },
       "current_lesson": { "name": "Current lesson" },
+      "school_start": { "name": "School start" },
+      "school_end": { "name": "School end" },
       "next_exam": { "name": "Next exam" },
       "lucky_number": { "name": "Lucky number" },
       "unread_announcements": { "name": "Unread announcements" },

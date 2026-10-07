@@ -1,0 +1,62 @@
+blueprint:
+  name: "Librus: School Pick-Up Reminder"
+  description: >
+    Runs your action a set number of minutes before the last lesson of the
+    day ends - time to leave for school pick-up, or to warm up the house.
+    Follows the timetable: a short day reminds earlier, days off stay
+    silent.
+
+
+    `{{ pickup_summary }}` is a ready-made message ("Ola kończy lekcje o
+    13:40 (za 15 min).").
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_pickup_reminder.yaml
+  input:
+    school_end_entity:
+      name: School end sensor
+      description: The Librus "School end" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+          device_class: timestamp
+    minutes_before:
+      name: Minutes before the last lesson ends
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 120
+          step: 5
+          unit_of_measurement: min
+    pickup_action:
+      name: Action
+      description: What to do (usually a notification).
+      selector:
+        action: {}
+
+trigger_variables:
+  end_entity: !input school_end_entity
+  before: !input minutes_before
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {%- set s = states(end_entity) -%}
+      {%- if s in ['unknown', 'unavailable', ''] -%}false
+      {%- else -%}
+        {%- set t = s | as_datetime -%}
+        {{ t is not none and t - timedelta(minutes=before | int(15)) <= now() < t }}
+      {%- endif -%}
+
+actions:
+  - variables:
+      end_time: "{{ as_timestamp(states(end_entity)) | timestamp_custom('%H:%M') }}"
+      minutes_left: "{{ ((as_timestamp(states(end_entity)) - as_timestamp(now())) / 60) | round(0) | int }}"
+      student_name: >-
+        {{ (device_attr(end_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      pickup_summary: >-
+        {{ student_name or 'Dziecko' }} kończy lekcje o {{ end_time }} (za {{ minutes_left }} min).
+  - !input pickup_action
+
+mode: single
