@@ -1,7 +1,8 @@
 blueprint:
   name: "Librus: Copy School Events to a Calendar"
   description: >
-    Copies tests, quizzes, trips, meetings and days off from Librus into a
+    Copies tests, quizzes, trips, meetings and days off (only those that fall
+    on a weekday) from Librus into a
     calendar of your choice - for example a family Google Calendar - so the
     whole family sees them outside Home Assistant.
 
@@ -171,7 +172,13 @@ actions:
             {%- set out = namespace(items=[]) -%}
             {%- for e in (free_days[free_cal].events if free_cal in free_days else []) -%}
               {%- set title = ((prefix ~ ' ') if prefix else '') ~ 'Dzień wolny: ' ~ e.summary -%}
-              {%- if (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
+              {#- A holiday on a Saturday or Sunday (e.g. 1 November 2026) is no
+                  day off from school: copy a free day only if it covers a weekday. -#}
+              {%- set s = as_datetime(e.start | string) -%}
+              {%- set n = (as_datetime(e.end | string) - s).days -%}
+              {%- set wk = namespace(any=false) -%}
+              {%- for i in range([n, 1] | max) -%}{%- if (s + timedelta(days=i)).weekday() < 5 -%}{%- set wk.any = true -%}{%- endif -%}{%- endfor -%}
+              {%- if wk.any and (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
                 {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': ''}] -%}
               {%- endif -%}
             {%- endfor -%}
