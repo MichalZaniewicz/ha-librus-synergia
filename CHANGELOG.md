@@ -10,6 +10,23 @@
   entity *Agenda entry changed* (`changed` / `removed`) and the blueprint
   **Agenda Entry Changed or Removed** (25 blueprints). Entries dated before
   today are ignored; the first sync only records what's there.
+- **What a substitution changes.** Librus marks room changes and moved
+  lessons as substitutions too, with the original lesson attached. The
+  Timetable calendar now titles them "(zmiana sali)" / "(przeniesiona)"
+  and adds the details to the description ("Zastępstwo za: Chemia, Jan
+  Kowal", "Zmiana sali: 12 → 21", "Przeniesiona z: 29.09, lekcja 3"). The
+  same goes into `librus_synergia_timetable_changed` (`change`, `teacher`,
+  `original_subject`, `original_teacher`, `classroom`, `original_classroom`,
+  ...) and the Next/Current lesson attributes; the Lesson Change blueprint's
+  message says what changed.
+- **Absence justifications.** Sensor *Absence justifications* (how many wait
+  for the school's decision, with the list and statuses), event
+  `librus_synergia_justification_status` when one is accepted or rejected,
+  event entity *Absence justification decided* and the blueprint **Absence
+  Justification Decided** (26 blueprints). The Unexcused absences sensor
+  gains `awaiting_justification` and `justification_sent`, and the Absences
+  To Justify Reminder skips days a justification was already sent for.
+- Requires `librus-synergia` 0.3.4.
 
 ## 0.11.1-beta.2
 

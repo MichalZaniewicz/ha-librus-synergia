@@ -25,6 +25,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_JUSTIFICATION_STATUS,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -88,6 +89,13 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
         ("changed", "removed"),
         "mdi:calendar-edit",
         lambda d: "removed" if d.get("kind") == "removed" else "changed",
+    ),
+    LibrusEventDescription(
+        "justification",
+        EVENT_JUSTIFICATION_STATUS,
+        ("accepted", "rejected", "changed"),
+        "mdi:file-document-check-outline",
+        lambda d: "accepted" if d.get("accepted") else "rejected" if d.get("rejected") else "changed",
     ),
     LibrusEventDescription(
         "announcement",

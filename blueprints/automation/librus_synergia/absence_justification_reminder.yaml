@@ -9,6 +9,11 @@ blueprint:
     it's dealt with.
 
 
+    Days you've already sent a justification for (and the school hasn't
+    rejected it) are left out, so the reminder stops once everything is
+    sent, not only once it's accepted.
+
+
     Use `{{ reminder_text }}` in your action for a ready-made message, or
     `{{ unexcused_count }}`, `{{ absence_dates }}` (e.g. "05.09, 02.09")
     and `{{ student_name }}` directly.
@@ -67,8 +72,10 @@ triggers:
 conditions:
   - condition: template
     value_template: >-
+      {% set awaiting = state_attr(unexcused_absences_entity, 'awaiting_justification') %}
       {{ (now().isoweekday() | string) in weekdays
-         and (states(unexcused_absences_entity) | int(0)) > 0 }}
+         and ((awaiting | count > 0) if awaiting is not none
+              else (states(unexcused_absences_entity) | int(0)) > 0) }}
 
 actions:
   - variables:
@@ -77,7 +84,8 @@ actions:
       # that still have an unexcused record - "YYYY-MM-DD" strings.
       absence_dates: >-
         {%- set ns = namespace(dates=[]) -%}
-        {%- for d in (state_attr(unexcused_absences_entity, 'recent_dates') or []) -%}
+        {%- set awaiting = state_attr(unexcused_absences_entity, 'awaiting_justification') -%}
+        {%- for d in (awaiting if awaiting is not none else (state_attr(unexcused_absences_entity, 'recent_dates') or [])) -%}
           {%- set ns.dates = ns.dates + [d[8:10] ~ '.' ~ d[5:7]] -%}
         {%- endfor -%}
         {{ ns.dates | join(', ') }}

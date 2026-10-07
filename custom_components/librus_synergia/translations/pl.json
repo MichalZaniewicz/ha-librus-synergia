@@ -159,6 +159,7 @@
       "homework_event": { "name": "Nowe zadanie domowe", "state_attributes": { "event_type": { "state": { "new_homework": "Nowe zadanie domowe" } } } },
       "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
       "agenda_change_event": { "name": "Zmiana w terminarzu", "state_attributes": { "event_type": { "state": { "changed": "Zmieniony", "removed": "Usunięty" } } } },
+      "justification_event": { "name": "Decyzja w usprawiedliwieniu", "state_attributes": { "event_type": { "state": { "accepted": "Przyjęte", "rejected": "Odrzucone", "changed": "Zmiana statusu" } } } },
       "announcement_event": { "name": "Nowe ogłoszenie", "state_attributes": { "event_type": { "state": { "new_announcement": "Nowe ogłoszenie" } } } },
       "message_event": { "name": "Nowa wiadomość", "state_attributes": { "event_type": { "state": { "new_message": "Nowa wiadomość" } } } },
       "forecast_event": { "name": "Zmiana prognozy oceny", "state_attributes": { "event_type": { "state": { "up": "W górę", "down": "W dół" } } } },
@@ -174,6 +175,7 @@
       "homework": { "name": "Zadania domowe" }
     },
     "sensor": {
+      "justifications": { "name": "Usprawiedliwienia" },
       "point_grades": { "name": "Oceny punktowe" },
       "status": { "name": "Status połączenia", "state": { "ok": "OK", "degraded": "Częściowo z zapisanych danych", "stale": "Librus nie odpowiada", "error": "Błąd" } },
       "last_update": { "name": "Ostatnia udana aktualizacja" },

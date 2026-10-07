@@ -271,6 +271,8 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     # only where Units doesn't say the school has them off.
     "PointGrades",
     "PointGrades/Categories",
+    # Absence justifications the parent submitted.
+    "Justifications",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and
@@ -301,6 +303,9 @@ EVENT_NEW_HOMEWORK = f"{DOMAIN}_new_homework"
 # day) or disappears from Librus (`kind: removed` - e.g. a cancelled trip).
 # Only for entries dated today or later; seeded silently on the first sync.
 EVENT_AGENDA_CHANGED = f"{DOMAIN}_agenda_changed"
+# Fires when the school decides on a submitted absence justification (its
+# status changes, e.g. to accepted or rejected). Seeded silently.
+EVENT_JUSTIFICATION_STATUS = f"{DOMAIN}_justification_status"
 # Fires for a new real homework assignment ("zadanie domowe", the
 # `HomeWorkAssignments` endpoint) - distinct from EVENT_NEW_HOMEWORK, which
 # despite its name covers the Agenda feed. Carries topic/text/due date, the

@@ -1,0 +1,53 @@
+blueprint:
+  name: "Librus: Absence Justification Decided"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - when
+    the school decides on an absence justification you submitted (accepted
+    or rejected), via the `librus_synergia_justification_status` event.
+
+
+    Use `{{ justification_summary }}` in your action for a ready-made
+    message such as "Kacper: usprawiedliwienie za 04.09 przyjęte", or the
+    individual fields: `{{ trigger.event.data.status }}`,
+    `{{ trigger.event.data.accepted }}`, `{{ trigger.event.data.rejected }}`,
+    `{{ trigger.event.data.date_from }}`, `{{ trigger.event.data.date_to }}`,
+    `{{ trigger.event.data.justified_absences }}`,
+    `{{ trigger.event.data.message }}` (what you wrote) and
+    `{{ trigger.event.data.teachers }}`.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/justification_status_notification.yaml
+  input:
+    only_rejected:
+      name: Only rejected justifications
+      description: Notify only when a justification is rejected.
+      default: false
+      selector:
+        boolean: {}
+    notify_action:
+      name: Notification action
+      description: The action to run for each decision.
+      selector:
+        action: {}
+
+variables:
+  only_rejected: !input only_rejected
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_justification_status
+
+conditions:
+  - condition: template
+    value_template: "{{ not only_rejected or trigger.event.data.rejected }}"
+
+actions:
+  - variables:
+      justification_summary: >-
+        {% set d = trigger.event.data %}
+        {% set f = d.date_from or '' %}{% set t = d.date_to or f %}
+        {% set days = (f[8:10] ~ '.' ~ f[5:7]) ~ ((' - ' ~ t[8:10] ~ '.' ~ t[5:7]) if t[:10] != f[:10] else '') %}
+        {{ (d.student ~ ': ') if d.student else '' }}usprawiedliwienie za {{ days }} {{ 'przyjęte' if d.accepted else 'odrzucone' if d.rejected else ('- status: ' ~ d.status) }}{{ (' (' ~ d.justified_absences ~ ' nieobecn.)') if d.accepted and d.justified_absences else '' }}.
+  - !input notify_action
+
+mode: queued
+max: 10

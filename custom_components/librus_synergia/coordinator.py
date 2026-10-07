@@ -44,6 +44,7 @@ from librus_synergia.models import (
     LibrusData,
     LuckyNumberData,
     MessageData,
+    JustificationData,
     NoteData,
     PointGradeData,
     SchoolData,
@@ -81,6 +82,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_messages,
     parse_notes,
     parse_parent_teacher_conferences,
+    parse_justifications,
     parse_point_grade_categories,
     parse_point_grades,
     parse_school,
@@ -118,6 +120,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_JUSTIFICATION_STATUS,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -187,6 +190,45 @@ def _agenda_fields(item: Any, data: LibrusData) -> dict[str, Any]:
         "subject_id": item.subject_id,
         "subject": data.subjects.get(item.subject_id) if item.subject_id is not None else None,
     }
+
+
+def lesson_change(day: date, lesson: LessonData, data: LibrusData) -> dict[str, Any]:
+    """What a substituted lesson changes compared with the plan (Librus
+    flags room changes and moved lessons as substitutions too, with the
+    original in `lesson.original`). `kind` is `canceled`, `substitution`
+    (another teacher or subject), `room_change`, `moved` or None for an
+    ordinary lesson; the rest are resolved names (None when unknown)."""
+    original = lesson.original
+
+    def name(lookup: dict[Any, str], key: Any) -> str | None:
+        return lookup.get(key) if key is not None else None
+
+    result: dict[str, Any] = {
+        "kind": None,
+        "room_changed": lesson.room_changed,
+        "classroom": name(data.classrooms, lesson.classroom_id),
+        "original_classroom": name(data.classrooms, original.classroom_id) if original else None,
+        "original_subject": name(data.subjects, original.subject_id) if original else None,
+        "original_teacher": name(data.teachers, original.teacher_id) if original else None,
+        "original_date": original.date if original else None,
+        "original_lesson_no": original.lesson_no if original else None,
+    }
+    if lesson.is_canceled:
+        result["kind"] = "canceled"
+    elif lesson.is_substitution:
+        result["kind"] = "substitution"
+        if original is not None:
+            same_lesson = (original.subject_id in (None, lesson.subject_id)) and (
+                original.teacher_id in (None, lesson.teacher_id)
+            )
+            moved = (original.date is not None and original.date[:10] != day.isoformat()) or (
+                original.lesson_no is not None and original.lesson_no != lesson.lesson_no
+            )
+            if same_lesson and moved:
+                result["kind"] = "moved"
+            elif same_lesson and lesson.room_changed:
+                result["kind"] = "room_change"
+    return result
 
 
 def state_store_key(entry_id: str) -> str:
@@ -519,6 +561,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Agenda entry id -> its last seen fields (see
         # _fire_agenda_change_events); None until the first sync.
         self._known_agenda: dict[str, dict[str, Any]] | None = None
+        # Justification id -> its last seen status (None until first sync).
+        self._known_justifications: dict[str, str] | None = None
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
         # to raise a repair issue only once a supplementary endpoint has
@@ -568,6 +612,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._change_tracker = ChangeTracker(SeenIds.from_dict(seen))
         if isinstance(agenda := stored.get("agenda"), dict):
             self._known_agenda = agenda
+        if isinstance(statuses := stored.get("justifications"), dict):
+            self._known_justifications = statuses
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(keys := stored.get("achievements"), list):
@@ -594,6 +640,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return {
             "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
             "agenda": self._known_agenda,
+            "justifications": self._known_justifications,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -1008,7 +1055,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             {label: self._last_good.get(label, {}) for label in REFERENCE_DATA_ENDPOINT_LABELS}
         )
         try:
-            return self._build_data(tuple(core), None, _NO_MESSAGES, self._saved_point_grades())
+            return self._build_data(
+                tuple(core),
+                None,
+                _NO_MESSAGES,
+                self._saved_point_grades(),
+                parse_justifications(self._last_good.get("Justifications") or {}),
+            )
         except Exception:  # noqa: BLE001 - a bad saved file must not block setup
             _LOGGER.warning("Could not rebuild data from the saved responses", exc_info=True)
             return None
@@ -1091,18 +1144,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         messages_result = await self._async_get_messages()
         point_grades = await self._async_get_point_grades()
+        justifications = await self._async_get_justifications()
         core_payloads = (
             *core_payloads[:6],
             timetable_this_week,
             timetable_next_week,
             *core_payloads[8:],
         )
-        data = self._build_data(core_payloads, lucky_number, messages_result, point_grades)
+        data = self._build_data(
+            core_payloads, lucky_number, messages_result, point_grades, justifications
+        )
         me, grades, notes = data.me, data.grades, data.notes
         attendances, attendance_types = data.attendances, data.attendance_types
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
+        self._fire_justification_events(data)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
         self._fire_forecast_events(data, today)
         return data
@@ -1113,6 +1170,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         lucky_number: LuckyNumberData | None,
         messages_result: tuple[Any, ...],
         point_grades: list[PointGradeData] | None = None,
+        justifications: list[JustificationData] | None = None,
     ) -> LibrusData:
         """Parse one cycle's responses (in `_CORE_PAYLOAD_LABELS` order)
         together with the cached reference lookups."""
@@ -1186,6 +1244,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             behaviour_grade_categories=self._cached_behaviour_grade_categories,
             descriptive_grades=parse_descriptive_grades(descriptive_grades_payload),
             point_grades=point_grades or [],
+            justifications=justifications or [],
             parent_teacher_conferences=parse_parent_teacher_conferences(
                 parent_teacher_conferences_payload
             ),
@@ -1707,6 +1766,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         return parse_point_grades(grades_payload, parse_point_grade_categories(categories_payload))
 
+    async def _async_get_justifications(self) -> list[JustificationData]:
+        """The parent's submitted absence justifications. A failure keeps
+        the last good copy, like any optional endpoint."""
+        try:
+            result: dict[str, Any] | BaseException = await self._client.async_get_justifications()
+        except LibrusError as err:
+            result = err
+        return parse_justifications(self._degrade_optional_payload("Justifications", result))
+
     def _saved_point_grades(self) -> list[PointGradeData]:
         grades_label, categories_label = _POINT_GRADE_LABELS
         return parse_point_grades(
@@ -2062,6 +2130,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "subject_id": lesson.subject_id,
                     "subject": subject_name(lesson.subject_id),
                     "hour_from": lesson.hour_from,
+                    "teacher": _teacher_name(data, lesson.teacher_id),
+                    # What the substitution changes: `change` is
+                    # substitution / room_change / moved (canceled for a
+                    # cancelled lesson), plus the original subject,
+                    # teacher, room, date and lesson number.
+                    **{
+                        ("change" if key == "kind" else key): value
+                        for key, value in lesson_change(change.date, lesson, data).items()
+                    },
+                },
+            )
+
+    def _fire_justification_events(self, data: LibrusData) -> None:
+        """EVENT_JUSTIFICATION_STATUS when a submitted justification's
+        status changes (the school accepted or rejected it)."""
+        current = {str(j.id): j.status for j in data.justifications}
+        known = self._known_justifications
+        self._known_justifications = {**(known or {}), **current}
+        if known is None or "Justifications" in self.fallback_sections:
+            return
+        for item in data.justifications:
+            before = known.get(str(item.id))
+            if before is None or before == item.status:
+                continue
+            self.hass.bus.async_fire(
+                EVENT_JUSTIFICATION_STATUS,
+                {
+                    "entry_id": self.config_entry.entry_id if self.config_entry else None,
+                    "student": data.me.display_name,
+                    "id": item.id,
+                    "status": item.status,
+                    "previous_status": before,
+                    "accepted": item.is_accepted,
+                    "rejected": item.is_rejected,
+                    "date_from": item.date_from,
+                    "date_to": item.date_to,
+                    "justified_absences": item.justified_absences,
+                    "message": item.message[:300],
+                    "teachers": item.teachers,
                 },
             )
 

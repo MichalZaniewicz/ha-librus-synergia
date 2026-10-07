@@ -2,15 +2,23 @@ blueprint:
   name: "Librus: Lesson Change Notification"
   description: >
     Runs an action - typically "Send a notification" to your phone -
-    whenever a lesson on today or a later date newly turns up cancelled or
-    as a substitution, via the `librus_synergia_timetable_changed` event.
+    whenever a lesson on today or a later date newly turns up cancelled,
+    as a substitution, in another room or moved, via the
+    `librus_synergia_timetable_changed` event.
 
 
     Inside your chosen action, use `{{ change_summary }}` for a ready-made
     one-liner, or the individual fields:
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.date }}`,
     `{{ trigger.event.data.lesson_no }}`, `{{ trigger.event.data.kind }}`
-    (`canceled` or `substitution`), `{{ trigger.event.data.hour_from }}`.
+    (`canceled` or `substitution`), `{{ trigger.event.data.hour_from }}`,
+    and what a substitution changes: `{{ trigger.event.data.change }}`
+    (`substitution`, `room_change` or `moved`),
+    `{{ trigger.event.data.original_subject }}`,
+    `{{ trigger.event.data.original_teacher }}`,
+    `{{ trigger.event.data.teacher }}`,
+    `{{ trigger.event.data.original_classroom }}` and
+    `{{ trigger.event.data.classroom }}`.
     If you use this blueprint for more than one child, `change_summary` is
     already prefixed with `{{ trigger.event.data.student }}` (the child's
     name) so one shared notification still says whose lesson changed.
@@ -30,9 +38,12 @@ triggers:
 actions:
   - variables:
       change_summary: >-
-        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ 'Odwołana lekcja' if trigger.event.data.kind == 'canceled' else 'Zastępstwo' }}:
-        {{ trigger.event.data.subject or ('lekcja ' ~ trigger.event.data.lesson_no) }}
-        ({{ trigger.event.data.date }}{{ ', ' ~ trigger.event.data.hour_from if trigger.event.data.hour_from else '' }})
+        {% set d = trigger.event.data %}
+        {% set change = d.get('change') or d.kind %}
+        {% set labels = {'canceled': 'Odwołana lekcja', 'room_change': 'Zmiana sali', 'moved': 'Przeniesiona lekcja'} %}
+        {{ (d.student ~ ': ') if d.student else '' }}{{ labels.get(change, 'Zastępstwo') }}:
+        {{ d.subject or ('lekcja ' ~ d.lesson_no) }}
+        ({{ d.date }}{{ ', ' ~ d.hour_from if d.hour_from else '' }}){% if change == 'room_change' %} - sala {{ d.get('original_classroom') or '?' }} → {{ d.get('classroom') or '?' }}{% elif change == 'substitution' and (d.get('original_subject') or d.get('teacher')) %} -{{ (' za ' ~ d.original_subject) if d.get('original_subject') and d.original_subject != d.subject else '' }}{{ (', prowadzi ' ~ d.teacher) if d.get('teacher') else '' }}{% endif %}
   - !input notify_action
 
 mode: queued

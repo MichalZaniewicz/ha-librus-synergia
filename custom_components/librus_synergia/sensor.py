@@ -28,7 +28,7 @@ from librus_synergia.models import (
     MessageData,
     PointGradeData,
 )
-from librus_synergia.parsers import point_grades_percentage
+from librus_synergia.parsers import justified_dates, point_grades_percentage
 
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
@@ -57,6 +57,7 @@ from .coordinator import (
     good_grade_streak,
     grade_improvements,
     infer_subject_id,
+    lesson_change,
     teacher_subject_ids,
 )
 from .coordinator import (
@@ -172,6 +173,20 @@ def _lesson_attrs(
         ),
         "is_substitution": lesson.is_substitution,
         "has_parallel_group": _has_parallel_group(day, lesson, data),
+        **_lesson_change_attrs(day, lesson, data),
+    }
+
+
+def _lesson_change_attrs(day: date, lesson: LessonData, data: LibrusData) -> dict[str, Any]:
+    """`change` (substitution / room_change / moved) and the original
+    subject, teacher and room of a substituted lesson."""
+    change = lesson_change(day, lesson, data)
+    return {
+        "change": change["kind"],
+        "room_changed": change["room_changed"],
+        "original_classroom": change["original_classroom"],
+        "original_subject": change["original_subject"],
+        "original_teacher": change["original_teacher"],
     }
 
 
@@ -281,6 +296,7 @@ async def async_setup_entry(
             LibrusGradeForecastSensor(coordinator, entry),
             LibrusAttendanceSensor(coordinator, entry),
             LibrusUnexcusedAbsencesSensor(coordinator, entry),
+            LibrusJustificationsSensor(coordinator, entry),
             LibrusSubjectAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
@@ -893,10 +909,14 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
     number a parent actually needs to act on (the Attendance sensor blends
     excused and unexcused into its state). Pairs with the
     `librus_synergia_new_absence` event. `recent_dates` in attributes
-    lists the days still needing a justification."""
+    lists the days still needing a justification; `awaiting_justification`
+    leaves out the days a justification was already sent for (and not
+    rejected), `justification_sent` lists those."""
 
     _attr_translation_key = "unexcused_absences"
-    _unrecorded_attributes = frozenset({"recent_dates"})
+    _unrecorded_attributes = frozenset(
+        {"recent_dates", "awaiting_justification", "justification_sent"}
+    )
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:account-alert-outline"
 
@@ -926,7 +946,60 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
             },
             reverse=True,
         )[:10]
-        return {"excused_count": excused, "recent_dates": recent_dates}
+        covered = justified_dates(data.justifications)
+        return {
+            "excused_count": excused,
+            "recent_dates": recent_dates,
+            "awaiting_justification": [d for d in recent_dates if d[:10] not in covered],
+            "justification_sent": [d for d in recent_dates if d[:10] in covered],
+        }
+
+
+class LibrusJustificationsSensor(LibrusSensorBase):
+    """Absence justifications the parent submitted: the state is how many
+    are still waiting for the school's decision. `recent` lists them
+    (newest first) with their status; `accepted`/`rejected`/`pending` are
+    the counts. Pairs with `librus_synergia_justification_status`."""
+
+    _attr_translation_key = "justifications"
+    _unrecorded_attributes = frozenset({"recent"})
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:file-document-check-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "justifications")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return sum(1 for j in self.coordinator.data.justifications if j.is_pending)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        items = self.coordinator.data.justifications
+        return {
+            "accepted": sum(1 for j in items if j.is_accepted),
+            "rejected": sum(1 for j in items if j.is_rejected),
+            "pending": sum(1 for j in items if j.is_pending),
+            "recent": [
+                {
+                    "id": j.id,
+                    "status": j.status,
+                    "posted": j.posted,
+                    "date_from": j.date_from,
+                    "date_to": j.date_to,
+                    "lessons": [{"date": day, "lesson_no": number} for day, number in j.lessons],
+                    "justified_absences": j.justified_absences,
+                    "message": j.message[:300],
+                    "teachers": j.teachers,
+                    "has_attachment": j.has_attachment,
+                }
+                for j in items[:10]
+            ],
+        }
 
 
 # Below this share of attended lessons a student can be left unclassified
