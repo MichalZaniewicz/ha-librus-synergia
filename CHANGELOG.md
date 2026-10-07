@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1-beta.3
 
 ### Fixed
 - Behaviour grade `recent[].comments` kept Librus's padding spaces; now trimmed like the `comment` attribute.
