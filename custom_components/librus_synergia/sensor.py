@@ -784,8 +784,9 @@ class LibrusAttendanceSensor(LibrusSensorBase):
                 by_date[a.date] = status
 
         # Attendance percentage computed here rather than relying on
-        # Librus's own UI showing it (some schools disable theirs). AttendanceData.semester was already parsed but never
-        # actually used until now.
+        # Librus's own UI showing it (some schools disable theirs).
+        # AttendanceData.semester was already parsed but never actually
+        # used until now.
         total_records = len(data.attendances)
         presence_records = sum(
             1
