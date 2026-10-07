@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1-beta.2
 
 ### Added
 - **Works through Librus outages.** The last good response of every part of
