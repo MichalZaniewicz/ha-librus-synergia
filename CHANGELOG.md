@@ -1,68 +1,41 @@
 # Changelog
 
-## 0.10.1-beta.4
+## 0.11.0
 
 ### Added
+- **Ask Assist about school.** A "Librus Synergia" tool set (LLM API) that
+  a conversation agent turns on next to *Assist*: seven read-only tools for
+  the timetable, grades and averages, what's coming up, attendance,
+  behaviour, school/class info and messages. Answers come from data already
+  fetched, so questions add no Librus requests.
 - **Event entities** for new grades, behaviour notes (positive / negative /
   neutral), absences (excused / unexcused), timetable changes (cancelled /
   substitution), homework, agenda entries, announcements, messages and
   achievements - automations from the UI, entries in the logbook. The bus
   events are unchanged.
-- **Smart polling** option (off by default): the poll interval on school
-  days 06:00-22:00, at most hourly on days without lessons, at most every
-  3 hours at night. `librus_synergia.refresh` always fetches.
-- **Hide subjects without grades** option: no average sensor for a subject
-  until its first grade; existing ones are removed when switched on.
-
-## 0.10.1-beta.3
-
-### Fixed
-- Behaviour grade `recent[].comments` kept Librus's padding spaces; now trimmed like the `comment` attribute.
-
-### Added
 - **School day sensors.** Binary sensors *School day today*, *School day
-  tomorrow* (lessons that aren't cancelled, not a free day) and *At school*
-  (first lesson's start to last lesson's end, breaks included), re-checked
-  every minute.
-- **School start / School end** timestamp sensors: the next first-lesson
-  start and last-lesson end, for automations with an offset.
-- Blueprints **School Wake-Up** (alarm before the first lesson) and
-  **School Pick-Up Reminder** (before the last lesson ends).
+  tomorrow* and *At school*; timestamp sensors *School start* and *School
+  end* for automations with an offset. Re-checked every minute.
+- Blueprints **School Wake-Up** and **School Pick-Up Reminder** (22 now).
 - **Homework to-do list** (`todo` entity) with due dates; ticks are stored
   in Home Assistant.
 - **Grade-average history in long-term statistics**: overall and
-  per-subject averages for every day since the first grade, for a
-  Statistics graph covering the whole school year.
+  per-subject averages for every day since the first grade.
+- **Class register number read from Librus** (Synergia's *Informacje*
+  page): the Lucky number sensor's `is_yours` works without setup, a number
+  entered under **Configure** still wins (`student_number_source`). The
+  Class sensor carries `student_number` too.
+- **Grade corrections ("poprawy")**: `improves` / `improved` in the subject
+  `grades` attribute and `get_grades`, `improves` in the new-grade event.
+- Options **Smart polling** (off by default: the poll interval on school
+  days 06:00-22:00, at most hourly on days without lessons, at most every
+  3 hours at night) and **Hide subjects without grades**.
 
-## 0.10.1-beta.2
+### Fixed
+- Behaviour grade `recent[].comments` kept Librus's padding spaces.
 
-### Added
-- **Ask Assist about school.** The integration registers a "Librus
-  Synergia" tool set (LLM API) that a conversation agent can turn on next
-  to *Assist*: seven read-only tools for the timetable, grades and
-  averages, what's coming up, attendance, behaviour, school/class info and
-  messages. Answers come from data already fetched, so questions add no
-  Librus requests.
-- The Class sensor also carries `student_number` (class register number),
-  so a card can show it next to the class without depending on the Lucky
-  number sensor, which has no attributes while no number is published.
-
-## 0.10.1-beta.1
-
-### Added
-- **Class register number read from Librus.** The Lucky number sensor's
-  `is_yours` now works without typing anything in: the number ("Nr w
-  dzienniku") is read once a day from Synergia's *Informacje* web page,
-  the only place Librus shows it. A number entered under **Configure**
-  still wins. New attribute `student_number_source` (`librus` /
-  `options`). The "Your Lucky Number" blueprint works out of the box.
-- **Grade corrections ("poprawy").** A correction now says which grade it
-  improves: subject average sensors' `grades` attribute and the
-  `get_grades` service gained `improves` (the earlier grade's value, e.g.
-  "1") and `improved` (true on the earlier grade), and the
-  `librus_synergia_new_grade` event carries `improves`. Averages are
-  unchanged - both grades count the way Librus reports them. Requires
-  librus-synergia 0.3.2.
+### Changed
+- Requires librus-synergia 0.3.2.
 
 ## 0.10.0
 
