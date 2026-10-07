@@ -97,7 +97,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 if entry.state is ConfigEntryState.LOADED
             ]
         for coordinator in coordinators:
-            await coordinator.async_request_refresh()
+            await coordinator.async_force_refresh()
 
     hass.services.async_register(
         DOMAIN, SERVICE_REFRESH, _async_handle_refresh, schema=_REFRESH_SCHEMA

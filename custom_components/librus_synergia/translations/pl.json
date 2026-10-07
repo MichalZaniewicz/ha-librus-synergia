@@ -79,6 +79,8 @@
           "free_days_enabled": "Pobieraj kalendarz dni wolnych",
           "average_mode": "Średnia pokazywana jako stan sensora",
           "student_number": "Numer ucznia w dzienniku",
+          "hide_empty_subjects": "Ukryj przedmioty bez ocen",
+          "smart_polling": "Sprytne odświeżanie",
           "quiet_hours_enabled": "Włącz ciszę nocną (bez odpytywania w nocy)",
           "quiet_hours_start": "Początek ciszy nocnej",
           "quiet_hours_end": "Koniec ciszy nocnej"
@@ -92,6 +94,8 @@
           "free_days_enabled": "Gdy wyłączone, kalendarz Dni wolne nie jest tworzony i nie są wykonywane żadne zapytania o dni wolne.",
           "average_mode": "Ważona uwzględnia wagi kategorii ocen (tak liczy sam Librus). Arytmetyczna to zwykła średnia tych samych ocen. Obie są zawsze dostępne w atrybutach.",
           "student_number": "Opcjonalne - numer jest pobierany z Librusa automatycznie (strona Informacje). Wpisz go tylko, jeśli chcesz go nadpisać. Sensor Szczęśliwy numerek pokazuje na jego podstawie, czy to Twój numerek.",
+          "hide_empty_subjects": "Średnia z przedmiotu pojawia się dopiero po jego pierwszej ocenie (np. Religia na początku roku). Istniejące sensory takich przedmiotów zostaną usunięte i wrócą z pierwszą oceną.",
+          "smart_polling": "Oszczędza zapytania, kiedy nic się nie dzieje. W dni szkolne od 6:00 do 22:00 dane odświeżają się co interwał ustawiony wyżej. W dzień bez lekcji (weekend, ferie) najwyżej raz na godzinę, a w nocy (22:00-6:00) najwyżej co 3 godziny. Akcja Odśwież (librus_synergia.refresh) zawsze pobiera od razu. Godziny ciszy poniżej, jeśli włączone, nadal działają.",
           "quiet_hours_enabled": "Gdy włączone, w oknie poniżej nie są pobierane żadne dane z Librusa - encje po prostu zachowują ostatni znany stan przez noc.",
           "quiet_hours_start": "Używane tylko, gdy cisza nocna jest włączona powyżej.",
           "quiet_hours_end": "Używane tylko, gdy cisza nocna jest włączona powyżej. Może być wcześniejsze niż godzina początku (np. 23:00 -> 06:00), aby obejmować północ."
@@ -145,6 +149,17 @@
     }
   },
   "entity": {
+    "event": {
+      "grade_event": { "name": "Nowa ocena", "state_attributes": { "event_type": { "state": { "new_grade": "Nowa ocena" } } } },
+      "note_event": { "name": "Nowa uwaga", "state_attributes": { "event_type": { "state": { "positive": "Pozytywna", "negative": "Negatywna", "neutral": "Neutralna" } } } },
+      "absence_event": { "name": "Nowa nieobecność", "state_attributes": { "event_type": { "state": { "unexcused": "Nieusprawiedliwiona", "excused": "Usprawiedliwiona" } } } },
+      "timetable_change_event": { "name": "Zmiana w planie", "state_attributes": { "event_type": { "state": { "canceled": "Lekcja odwołana", "substitution": "Zastępstwo" } } } },
+      "homework_event": { "name": "Nowe zadanie domowe", "state_attributes": { "event_type": { "state": { "new_homework": "Nowe zadanie domowe" } } } },
+      "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
+      "announcement_event": { "name": "Nowe ogłoszenie", "state_attributes": { "event_type": { "state": { "new_announcement": "Nowe ogłoszenie" } } } },
+      "message_event": { "name": "Nowa wiadomość", "state_attributes": { "event_type": { "state": { "new_message": "Nowa wiadomość" } } } },
+      "achievement_event": { "name": "Nowe osiągnięcie", "state_attributes": { "event_type": { "state": { "unlocked": "Odblokowane" } } } }
+    },
     "binary_sensor": {
       "school_day_today": { "name": "Dzień szkolny dziś" },
       "school_day_tomorrow": { "name": "Dzień szkolny jutro" },

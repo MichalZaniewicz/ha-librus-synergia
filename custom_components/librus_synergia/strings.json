@@ -79,6 +79,8 @@
           "free_days_enabled": "Fetch free days calendar",
           "average_mode": "Grade average shown as the sensor state",
           "student_number": "Student's number in the class register",
+          "hide_empty_subjects": "Hide subjects without grades",
+          "smart_polling": "Smart polling",
           "quiet_hours_enabled": "Enable quiet hours (skip polling overnight)",
           "quiet_hours_start": "Quiet hours start",
           "quiet_hours_end": "Quiet hours end"
@@ -92,6 +94,8 @@
           "free_days_enabled": "When off, the Free days calendar entity is not created and no free-days calls are made.",
           "average_mode": "Weighted uses each grade category's weight (what Librus itself shows). Arithmetic is a plain mean of the same grades. Both stay available as attributes either way.",
           "student_number": "Optional - the number is read from Librus automatically (its Informacje page). Fill this in only to override it. The Lucky number sensor uses it to show whether it's your number.",
+          "hide_empty_subjects": "No average sensor for a subject until it gets its first grade (e.g. Religia early in the year). Existing sensors of such subjects are removed; they come back with the first grade.",
+          "smart_polling": "Saves requests when nothing is happening. On school days between 06:00 and 22:00 data is refreshed at the poll interval above. On a day without lessons (weekend, holidays) at most once an hour, and at night (22:00-06:00) at most every 3 hours. The Refresh action (librus_synergia.refresh) always fetches straight away. Quiet hours below, if on, still apply.",
           "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
           "quiet_hours_start": "Only used while quiet hours are enabled above.",
           "quiet_hours_end": "Only used while quiet hours are enabled above. Can be earlier than the start time (e.g. 23:00 -> 06:00) to span midnight."
@@ -145,6 +149,17 @@
     }
   },
   "entity": {
+    "event": {
+      "grade_event": { "name": "New grade", "state_attributes": { "event_type": { "state": { "new_grade": "New grade" } } } },
+      "note_event": { "name": "New behaviour note", "state_attributes": { "event_type": { "state": { "positive": "Positive", "negative": "Negative", "neutral": "Neutral" } } } },
+      "absence_event": { "name": "New absence", "state_attributes": { "event_type": { "state": { "unexcused": "Unexcused", "excused": "Excused" } } } },
+      "timetable_change_event": { "name": "Timetable change", "state_attributes": { "event_type": { "state": { "canceled": "Lesson cancelled", "substitution": "Substitution" } } } },
+      "homework_event": { "name": "New homework", "state_attributes": { "event_type": { "state": { "new_homework": "New homework" } } } },
+      "agenda_event": { "name": "New agenda entry", "state_attributes": { "event_type": { "state": { "new_entry": "New entry" } } } },
+      "announcement_event": { "name": "New announcement", "state_attributes": { "event_type": { "state": { "new_announcement": "New announcement" } } } },
+      "message_event": { "name": "New message", "state_attributes": { "event_type": { "state": { "new_message": "New message" } } } },
+      "achievement_event": { "name": "Achievement unlocked", "state_attributes": { "event_type": { "state": { "unlocked": "Unlocked" } } } }
+    },
     "binary_sensor": {
       "school_day_today": { "name": "School day today" },
       "school_day_tomorrow": { "name": "School day tomorrow" },

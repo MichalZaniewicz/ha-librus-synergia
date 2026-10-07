@@ -13,6 +13,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
     Platform.SWITCH,
     Platform.TODO,
+    Platform.EVENT,
 ]
 
 # The session (see librus_synergia.LibrusSessionData) is cookie-based with a
@@ -40,6 +41,22 @@ CONF_QUIET_HOURS_START = "quiet_hours_start"
 DEFAULT_QUIET_HOURS_START = "23:00:00"
 CONF_QUIET_HOURS_END = "quiet_hours_end"
 DEFAULT_QUIET_HOURS_END = "06:00:00"
+
+# Smart polling (off by default): the poll interval above applies on school
+# days 06:00-22:00; on a day without lessons at most hourly, and at night
+# (22:00-06:00) at most every 3 hours. A manual refresh always fetches.
+CONF_SMART_POLLING = "smart_polling"
+DEFAULT_SMART_POLLING = False
+SMART_POLLING_DAY_OFF = 60  # minutes
+SMART_POLLING_NIGHT = 180  # minutes
+SMART_POLLING_NIGHT_START = 22
+SMART_POLLING_NIGHT_END = 6
+
+# Hide subject average sensors for subjects without a single grade yet
+# (e.g. Religia early in the year). Off by default; the sensor appears as
+# soon as the subject gets its first grade.
+CONF_HIDE_EMPTY_SUBJECTS = "hide_empty_subjects"
+DEFAULT_HIDE_EMPTY_SUBJECTS = False
 
 # When False (set via the options flow), the coordinator skips the whole
 # Wiadomości (private messages) subsystem - its separate wiadomosci.librus.pl

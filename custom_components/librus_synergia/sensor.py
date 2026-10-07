@@ -21,7 +21,6 @@ from homeassistant.util import dt as dt_util
 from librus_synergia.models import (
     AttendanceTypeData,
     BehaviourGradeData,
-    GradeCategoryData,
     GradeData,
     HomeworkEventData,
     LessonData,
@@ -39,11 +38,13 @@ from .const import (
     CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
+    CONF_HIDE_EMPTY_SUBJECTS,
     CONF_STUDENT_NUMBER,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
+    DEFAULT_HIDE_EMPTY_SUBJECTS,
     DOMAIN,
 )
 from .coordinator import (
@@ -53,7 +54,6 @@ from .coordinator import (
     good_grade_streak,
     grade_improvements,
     infer_subject_id,
-    parse_grade_value,
     teacher_subject_ids,
 )
 from .coordinator import (
@@ -273,16 +273,17 @@ async def async_setup_entry(
     # Subjects are only known from live account data - discover new ones as
     # the coordinator sees them and add an average sensor per subject.
     known_subject_ids: set[int] = set()
+    hide_empty = bool(entry.options.get(CONF_HIDE_EMPTY_SUBJECTS, DEFAULT_HIDE_EMPTY_SUBJECTS))
 
     def _add_new_subjects() -> None:
         data = coordinator.data
         if data is None:
             return
+        graded_ids = {g.subject_id for g in data.grades if g.subject_id is not None}
         # Fall back to subject ids seen on grades even if the (unverified)
-        # Subjects lookup hasn't resolved a name for it yet.
-        seen_ids = set(data.subjects) | {
-            g.subject_id for g in data.grades if g.subject_id is not None
-        }
+        # Subjects lookup hasn't resolved a name for it yet. With "hide
+        # subjects without grades" on, only subjects that have a grade.
+        seen_ids = graded_ids if hide_empty else set(data.subjects) | graded_ids
         new_ids = seen_ids - known_subject_ids
         if not new_ids:
             return
@@ -290,6 +291,18 @@ async def async_setup_entry(
         async_add_entities(
             LibrusSubjectAverageSensor(coordinator, entry, subject_id) for subject_id in new_ids
         )
+
+    if hide_empty and coordinator.data is not None:
+        # Turning the option on removes the existing sensors of subjects
+        # that still have no grade (the options change reloads the entry).
+        graded = {str(g.subject_id) for g in coordinator.data.grades if g.subject_id is not None}
+        registry = er.async_get(hass)
+        prefix, suffix = f"{entry.entry_id}_subject_", "_average"
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            uid = reg_entry.unique_id
+            if uid.startswith(prefix) and uid.endswith(suffix):
+                if uid[len(prefix) : -len(suffix)] not in graded:
+                    registry.async_remove(reg_entry.entity_id)
 
     _add_new_subjects()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_subjects))

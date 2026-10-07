@@ -80,8 +80,8 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_notes,
     parse_parent_teacher_conferences,
     parse_school,
-    parse_student_number,
     parse_school_notices,
+    parse_student_number,
     resolve_sender_name,
 )
 
@@ -94,6 +94,7 @@ from .const import (
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
+    CONF_SMART_POLLING,
     CORE_ENDPOINT_LABELS,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
@@ -103,6 +104,7 @@ from .const import (
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
+    DEFAULT_SMART_POLLING,
     DOMAIN,
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_NEW_ABSENCE,
@@ -118,6 +120,10 @@ from .const import (
     LUCKY_NUMBER_PUBLISH_HOUR,
     OPTIONAL_ENDPOINT_LABELS,
     REFERENCE_DATA_ENDPOINT_LABELS,
+    SMART_POLLING_DAY_OFF,
+    SMART_POLLING_NIGHT,
+    SMART_POLLING_NIGHT_END,
+    SMART_POLLING_NIGHT_START,
 )
 
 if TYPE_CHECKING:
@@ -407,6 +413,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Subjects/teachers/classrooms are near-static reference data -
         # refetched at most once a day rather than every cycle.
         self._reference_data_fetched_at: datetime | None = None
+        # Smart polling (see _smart_polling_skip): when the last real fetch
+        # happened, and a one-shot override for a manual refresh.
+        self._last_fetch_at: datetime | None = None
+        self._force_next_fetch = False
         self._cached_subjects: dict[int | str, str] = {}
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
@@ -753,6 +763,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # entirely, not just the parsing - see _in_quiet_hours.
         if self.data is not None and self._in_quiet_hours():
             return self.data
+        force = self._force_next_fetch
+        self._force_next_fetch = False
+        if self.data is not None and not force and self._smart_polling_skip():
+            return self.data
         try:
             await self._client.async_ensure_session_valid(self.config_entry.data[CONF_PASSWORD])
         except LibrusAuthError as err:
@@ -902,6 +916,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._fire_change_events(self._change_tracker.update(data, today=today), data)
         self._fire_new_homework_assignment_events(data)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
+        self._last_fetch_at = dt_util.utcnow()
         return data
 
     def _feature_enabled(self, key: str, default: bool) -> bool:
@@ -911,6 +926,34 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         if self.config_entry is None:
             return default
         return bool(self.config_entry.options.get(key, default))
+
+    async def async_force_refresh(self) -> None:
+        """A refresh that skips the smart-polling throttle (the manual
+        refresh button/service). Quiet hours still apply."""
+        self._force_next_fetch = True
+        await self.async_request_refresh()
+
+    def smart_polling_interval(self, now: datetime | None = None) -> timedelta | None:
+        """How fresh data has to be right now with smart polling on: None
+        means every cycle (school day, 06:00-22:00), otherwise the minimum
+        gap between fetches (a day without lessons, or the night)."""
+        # Imported here: school_day -> ai_summary -> coordinator.
+        from .school_day import school_days  # noqa: PLC0415
+
+        now = dt_util.as_local(now or dt_util.now())
+        if now.hour >= SMART_POLLING_NIGHT_START or now.hour < SMART_POLLING_NIGHT_END:
+            return timedelta(minutes=SMART_POLLING_NIGHT)
+        if now.date() not in school_days(self.data):
+            return timedelta(minutes=SMART_POLLING_DAY_OFF)
+        return None
+
+    def _smart_polling_skip(self) -> bool:
+        if not self._feature_enabled(CONF_SMART_POLLING, DEFAULT_SMART_POLLING):
+            return False
+        gap = self.smart_polling_interval()
+        if gap is None or self._last_fetch_at is None:
+            return False
+        return dt_util.utcnow() - self._last_fetch_at < gap
 
     def _in_quiet_hours(self) -> bool:
         """Whether `dt_util.now()` currently falls inside the configured

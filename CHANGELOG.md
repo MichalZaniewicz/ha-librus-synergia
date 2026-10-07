@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Event entities** for new grades, behaviour notes (positive / negative /
+  neutral), absences (excused / unexcused), timetable changes (cancelled /
+  substitution), homework, agenda entries, announcements, messages and
+  achievements - automations from the UI, entries in the logbook. The bus
+  events are unchanged.
+- **Smart polling** option (off by default): the poll interval on school
+  days 06:00-22:00, at most hourly on days without lessons, at most every
+  3 hours at night. `librus_synergia.refresh` always fetches.
+- **Hide subjects without grades** option: no average sensor for a subject
+  until its first grade; existing ones are removed when switched on.
+
 ## 0.10.1-beta.3
 
 ### Fixed

@@ -70,11 +70,13 @@ from .const import (
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
+    CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MESSAGES_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
     CONF_SESSION_LOGGED_IN_AT,
+    CONF_SMART_POLLING,
     CONF_STUDENT_NUMBER,
     DEFAULT_AI_AUDIENCE,
     DEFAULT_AI_INCLUDE_MESSAGES,
@@ -85,11 +87,13 @@ from .const import (
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
+    DEFAULT_HIDE_EMPTY_SUBJECTS,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
     DEFAULT_SCAN_INTERVAL_MINUTES,
+    DEFAULT_SMART_POLLING,
     DOMAIN,
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
@@ -389,17 +393,23 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         translation_key=CONF_AVERAGE_MODE,
                     )
                 ),
-                # Genuinely optional, no default - Librus's API doesn't expose
-                # this anywhere (CONFIRMED via szkolny-android's own reference
-                # source), so it's a fact the user types in once, not fetched
-                # data. Left blank, the Lucky number sensor's `is_yours`
-                # attribute stays `None` instead of falsely reporting `False`.
+                # Optional override: the number is read from Synergia's
+                # informacja page (coordinator.student_number_from_librus);
+                # a value here wins over it.
                 vol.Optional(
                     CONF_STUDENT_NUMBER,
                     description={"suggested_value": options.get(CONF_STUDENT_NUMBER)},
                 ): NumberSelector(
                     NumberSelectorConfig(min=1, max=99, step=1, mode=NumberSelectorMode.BOX)
                 ),
+                vol.Required(
+                    CONF_HIDE_EMPTY_SUBJECTS,
+                    default=options.get(CONF_HIDE_EMPTY_SUBJECTS, DEFAULT_HIDE_EMPTY_SUBJECTS),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_SMART_POLLING,
+                    default=options.get(CONF_SMART_POLLING, DEFAULT_SMART_POLLING),
+                ): BooleanSelector(),
                 vol.Required(
                     CONF_QUIET_HOURS_ENABLED,
                     default=options.get(CONF_QUIET_HOURS_ENABLED, DEFAULT_QUIET_HOURS_ENABLED),
