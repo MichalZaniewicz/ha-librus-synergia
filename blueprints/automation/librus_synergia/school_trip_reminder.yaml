@@ -1,0 +1,59 @@
+blueprint:
+  name: "Librus: School Trip Tomorrow"
+  description: >
+    At a set time, checks the Next school trip sensor and runs your action -
+    typically "Send a notification" - when a trip starts tomorrow, with the
+    destination, how the class travels and the route.
+
+
+    Use `{{ trip_summary }}` in your action for a ready-made message such as
+    "Kacper: jutro wycieczka - Muzeum Narodowe (autokar). Trasa: szkoła -
+    muzeum.", or `{{ trip_destination }}`, `{{ trip_transport }}`,
+    `{{ trip_route }}` and `{{ trip_coordinator }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_trip_reminder.yaml
+  input:
+    trips_entity:
+      name: Next school trip sensor
+      description: The Librus "Next school trip" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    check_time:
+      name: Time
+      description: When to check the day before.
+      default: "18:00:00"
+      selector:
+        time: {}
+    notify_action:
+      name: Notification action
+      description: The action to run when a trip starts tomorrow.
+      selector:
+        action: {}
+
+variables:
+  trips_entity: !input trips_entity
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: "{{ state_attr(trips_entity, 'days_until') == 1 }}"
+
+actions:
+  - variables:
+      trip_destination: "{{ state_attr(trips_entity, 'destination') or '' }}"
+      trip_transport: "{{ state_attr(trips_entity, 'transport') or '' }}"
+      trip_route: "{{ state_attr(trips_entity, 'route') or '' }}"
+      trip_coordinator: "{{ state_attr(trips_entity, 'coordinator') or '' }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(trips_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      trip_summary: >-
+        {{ (student_name ~ ': ') if student_name else '' }}jutro wycieczka - {{ trip_destination }}{{ (' (' ~ trip_transport ~ ')') if trip_transport else '' }}.{{ (' Trasa: ' ~ trip_route ~ '.') if trip_route else '' }}
+  - !input notify_action
+
+mode: single

@@ -33,6 +33,8 @@ from .const import (
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
+    EVENT_NEW_SCHOOL_DOCUMENT,
+    EVENT_NEW_SCHOOL_TRIP,
     EVENT_TIMETABLE_CHANGED,
 )
 
@@ -96,6 +98,20 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
         ("accepted", "rejected", "changed"),
         "mdi:file-document-check-outline",
         lambda d: "accepted" if d.get("accepted") else "rejected" if d.get("rejected") else "changed",
+    ),
+    LibrusEventDescription(
+        "school_trip",
+        EVENT_NEW_SCHOOL_TRIP,
+        ("new_trip",),
+        "mdi:bus-school",
+        lambda d: "new_trip",
+    ),
+    LibrusEventDescription(
+        "school_document",
+        EVENT_NEW_SCHOOL_DOCUMENT,
+        ("new_document",),
+        "mdi:file-document-plus-outline",
+        lambda d: "new_document",
     ),
     LibrusEventDescription(
         "announcement",

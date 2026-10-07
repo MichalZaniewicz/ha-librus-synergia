@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Text grades.** Grades a teacher enters as text never showed up anywhere -
+  they live in a separate place in Librus. Subject average sensors now carry
+  them (`text_grades`), `get_grades` returns them, and a new one fires
+  `librus_synergia_new_grade` with `kind: text`.
+- **Lesson topics.** Sensor *Lesson topics* (today's and the last 14 days'
+  topics with subject and lesson number); past lessons in the Timetable
+  calendar get a "Temat: ..." line.
+- **School trips.** Sensor *Next school trip* (date, destination, route,
+  transport, coordinator), event `librus_synergia_new_school_trip` + event
+  entity, and the blueprint **School Trip Tomorrow**.
+- **School documents.** Sensor *School documents* (with links), event
+  `librus_synergia_new_school_document` + event entity, and the blueprint
+  **New School Document** (28 blueprints).
+- **Message attachments.** Action `librus_synergia.download_attachment`
+  saves an attachment to the media folder without opening the message.
+- Homework assignments carry their category name (`category`).
+
+### Changed
+- **Fewer logins.** The session is renewed through Librus's own refresh
+  (`refreshToken`) once it's two hours old, instead of a password login every
+  day (librus-synergia 0.3.5).
+- The class register number is read from Librus's JSON (the student's own
+  user record), with the web page only as a fallback.
+- Requires `librus-synergia` 0.3.5.
+
 ## 0.11.1-beta.3
 
 ### Added

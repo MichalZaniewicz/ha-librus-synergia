@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -58,6 +58,7 @@ from .coordinator import (
     grade_improvements,
     infer_subject_id,
     lesson_change,
+    school_file_url,
     teacher_subject_ids,
 )
 from .coordinator import (
@@ -271,6 +272,25 @@ def _point_grade_log(data: LibrusData, grades: list[PointGradeData]) -> list[dic
     ]
 
 
+def _text_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
+    """A subject's text grades (free text instead of a number) - only when
+    it has any."""
+    grades = [g for g in data.text_grades if g.subject_id == subject_id]
+    if not grades:
+        return {}
+    return {
+        "text_grades": [
+            {
+                "value": g.value,
+                "category": g.category,
+                "date": g.date,
+                "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+            }
+            for g in grades
+        ]
+    }
+
+
 def _point_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
     """A subject's point grades and their percentage - only when it has any,
     so 1-6 schools see no extra attributes."""
@@ -297,6 +317,9 @@ async def async_setup_entry(
             LibrusAttendanceSensor(coordinator, entry),
             LibrusUnexcusedAbsencesSensor(coordinator, entry),
             LibrusJustificationsSensor(coordinator, entry),
+            LibrusLessonTopicsSensor(coordinator, entry),
+            LibrusSchoolTripsSensor(coordinator, entry),
+            LibrusSchoolDocumentsSensor(coordinator, entry),
             LibrusSubjectAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
@@ -346,7 +369,9 @@ async def async_setup_entry(
         if data is None:
             return
         graded_ids = {
-            g.subject_id for g in (*data.grades, *data.point_grades) if g.subject_id is not None
+            g.subject_id
+            for g in (*data.grades, *data.point_grades, *data.text_grades)
+            if g.subject_id is not None
         }
         # Fall back to subject ids seen on grades even if the (unverified)
         # Subjects lookup hasn't resolved a name for it yet. With "hide
@@ -365,7 +390,11 @@ async def async_setup_entry(
         # that still have no grade (the options change reloads the entry).
         graded = {
             str(g.subject_id)
-            for g in (*coordinator.data.grades, *coordinator.data.point_grades)
+            for g in (
+                *coordinator.data.grades,
+                *coordinator.data.point_grades,
+                *coordinator.data.text_grades,
+            )
             if g.subject_id is not None
         }
         registry = er.async_get(hass)
@@ -567,6 +596,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             ),
             **self._forecast_attrs(),
             **_point_grade_attrs(self.coordinator.data, self._subject_id),
+            **_text_grade_attrs(self.coordinator.data, self._subject_id),
         }
 
     def _forecast_attrs(self) -> dict[str, Any]:
@@ -1437,6 +1467,9 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
                         else None
                     ),
                     "topic": a.topic,
+                    "category": data.homework_assignment_categories.get(a.category_id)
+                    if a.category_id is not None
+                    else None,
                     # Long instructions (projects, lapbooks) are common -
                     # 200 chars cut real ones mid-sentence.
                     "text": a.text[:1000],
@@ -2017,6 +2050,143 @@ class LibrusPointGradesSensor(LibrusSensorBase):
             "count": len(data.point_grades),
             "subjects": dict(sorted(subjects.items())),
             "recent": _point_grade_log(data, data.point_grades),
+        }
+
+
+class LibrusLessonTopicsSensor(LibrusSensorBase):
+    """What was taught: lessons held with their topics (Librus's
+    `Realizations`). The state is how many lessons today have a topic;
+    `today` and `recent` (the last 14 days, newest first) list them."""
+
+    _attr_translation_key = "lesson_topics"
+    _unrecorded_attributes = frozenset({"today", "recent"})
+    _attr_icon = "mdi:book-open-page-variant-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "lesson_topics")
+
+    def _rows(self, since: str | None = None, only: str | None = None) -> list[dict[str, Any]]:
+        data = self.coordinator.data
+        rows = []
+        for t in data.lesson_topics:
+            day = (t.date or "")[:10]
+            if (only and day != only) or (since and day < since):
+                continue
+            rows.append(
+                {
+                    "date": day,
+                    "lesson_no": t.lesson_no,
+                    "subject": data.subjects.get(t.subject_id) if t.subject_id is not None else None,
+                    "topic": t.topic,
+                    "is_trip": t.is_trip,
+                }
+            )
+        return rows
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return len(self._rows(only=dt_util.now().date().isoformat()))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        today = dt_util.now().date()
+        return {
+            "today": sorted(self._rows(only=today.isoformat()), key=lambda r: r["lesson_no"] or 0),
+            "recent": self._rows(since=(today - timedelta(days=14)).isoformat())[:80],
+        }
+
+
+class LibrusSchoolTripsSensor(LibrusSensorBase):
+    """School trips: the state is the date of the next one; destination,
+    route, transport and coordinator in attributes, plus `upcoming` and
+    `past` lists."""
+
+    _attr_translation_key = "school_trips"
+    _attr_device_class = SensorDeviceClass.DATE
+    _unrecorded_attributes = frozenset({"upcoming", "past"})
+    _attr_icon = "mdi:bus-school"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school_trips")
+
+    def _split(self) -> tuple[list[Any], list[Any]]:
+        today = dt_util.now().date().isoformat()
+        trips = self.coordinator.data.school_trips
+        upcoming = [t for t in trips if (t.date_to or t.date_from or "")[:10] >= today]
+        past = [t for t in trips if (t.date_to or t.date_from or "")[:10] < today]
+        return upcoming, past
+
+    @property
+    def native_value(self) -> date | None:
+        if self.coordinator.data is None:
+            return None
+        upcoming, _ = self._split()
+        if not upcoming or not upcoming[0].date_from:
+            return None
+        try:
+            return date.fromisoformat(upcoming[0].date_from[:10])
+        except ValueError:
+            return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        upcoming, past = self._split()
+
+        def row(t: Any) -> dict[str, Any]:
+            return {
+                "destination": t.destination,
+                "route": t.route,
+                "transport": t.transport,
+                "date_from": t.date_from,
+                "date_to": t.date_to,
+                "coordinator": t.coordinator,
+            }
+
+        nxt = row(upcoming[0]) if upcoming else {}
+        days_until = None
+        if self.native_value is not None:
+            days_until = (self.native_value - dt_util.now().date()).days
+        return {
+            **nxt,
+            "days_until": days_until,
+            "upcoming": [row(t) for t in upcoming],
+            "past": [row(t) for t in reversed(past[-5:])],
+        }
+
+
+class LibrusSchoolDocumentsSensor(LibrusSensorBase):
+    """Documents the school shares with parents (forms, regulations): the
+    state is how many there are; `recent` lists them with a link (opens in
+    Synergia, where you are logged in)."""
+
+    _attr_translation_key = "school_documents"
+    _unrecorded_attributes = frozenset({"recent"})
+    _attr_icon = "mdi:file-document-multiple-outline"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "school_documents")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return len(self.coordinator.data.school_files)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        return {
+            "recent": [
+                {"id": f.id, "name": f.name, "added": f.added, "url": school_file_url(f.download_path)}
+                for f in self.coordinator.data.school_files[:20]
+            ]
         }
 
 

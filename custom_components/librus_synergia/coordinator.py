@@ -83,6 +83,12 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_notes,
     parse_parent_teacher_conferences,
     parse_justifications,
+    parse_realizations,
+    parse_school_files,
+    parse_school_trips,
+    parse_text_grade_categories,
+    parse_text_grades,
+    parse_user_class_register_number,
     parse_point_grade_categories,
     parse_point_grades,
     parse_school,
@@ -121,6 +127,8 @@ from .const import (
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
+    EVENT_NEW_SCHOOL_DOCUMENT,
+    EVENT_NEW_SCHOOL_TRIP,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
@@ -166,6 +174,19 @@ _KINDERGARTEN_MAX_CANDIDATES = 6
 
 # The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
 _CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
+# Optional endpoints parsed in _build_data from their raw payloads.
+_EXTRA_LABELS = ("BaseTextGrades", "Realizations", "SchoolTrips", "SchoolFiles")
+# Lesson topics, trips and school documents change a few times a day.
+_HOURLY = timedelta(hours=1)
+
+
+def school_file_url(path: str | None) -> str | None:
+    """Absolute Synergia URL of a school document's download path."""
+    if not path:
+        return None
+    return path if path.startswith("http") else f"https://synergia.librus.pl{path}"
+
+
 # Labels of the two point-grade requests (const.MISC_DEGRADABLE_ENDPOINT_LABELS).
 _POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
 # `_async_get_messages`' result when nothing was fetched.
@@ -563,6 +584,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_agenda: dict[str, dict[str, Any]] | None = None
         # Justification id -> its last seen status (None until first sync).
         self._known_justifications: dict[str, str] | None = None
+        # Ids already announced per kind (text grades, school trips, school
+        # documents); None until the first sync, which only seeds them.
+        self._known_items: dict[str, set[Any] | None] = {
+            "text_grades": None,
+            "school_trips": None,
+            "school_files": None,
+        }
+        # When each throttled optional endpoint last answered (see
+        # _async_optional).
+        self._fetched_at: dict[str, datetime] = {}
+        self._cached_text_grade_categories: dict[int, tuple[str, bool]] = {}
+        self._cached_homework_assignment_categories: dict[int | str, str] = {}
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
         # to raise a repair issue only once a supplementary endpoint has
@@ -614,6 +647,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_agenda = agenda
         if isinstance(statuses := stored.get("justifications"), dict):
             self._known_justifications = statuses
+        if isinstance(items := stored.get("known_items"), dict):
+            for kind in self._known_items:
+                if isinstance(ids := items.get(kind), list):
+                    self._known_items[kind] = set(ids)
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(keys := stored.get("achievements"), list):
@@ -641,6 +678,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
             "agenda": self._known_agenda,
             "justifications": self._known_justifications,
+            "known_items": {
+                kind: sorted(ids, key=str) if ids is not None else None
+                for kind, ids in self._known_items.items()
+            },
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -1061,6 +1102,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 _NO_MESSAGES,
                 self._saved_point_grades(),
                 parse_justifications(self._last_good.get("Justifications") or {}),
+                {label: self._last_good.get(label) or {} for label in _EXTRA_LABELS},
             )
         except Exception:  # noqa: BLE001 - a bad saved file must not block setup
             _LOGGER.warning("Could not rebuild data from the saved responses", exc_info=True)
@@ -1145,6 +1187,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         messages_result = await self._async_get_messages()
         point_grades = await self._async_get_point_grades()
         justifications = await self._async_get_justifications()
+        extras = {
+            "BaseTextGrades": await self._async_optional(
+                "BaseTextGrades", self._client.async_get_base_text_grades
+            ),
+            "Realizations": await self._async_optional(
+                "Realizations", self._client.async_get_realizations, every=_HOURLY
+            ),
+            "SchoolTrips": await self._async_optional(
+                "SchoolTrips", self._client.async_get_school_trips, every=_HOURLY
+            ),
+            "SchoolFiles": await self._async_optional(
+                "SchoolFiles", self._client.async_get_school_files, every=_HOURLY
+            ),
+        }
         core_payloads = (
             *core_payloads[:6],
             timetable_this_week,
@@ -1152,7 +1208,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             *core_payloads[8:],
         )
         data = self._build_data(
-            core_payloads, lucky_number, messages_result, point_grades, justifications
+            core_payloads, lucky_number, messages_result, point_grades, justifications, extras
         )
         me, grades, notes = data.me, data.grades, data.notes
         attendances, attendance_types = data.attendances, data.attendance_types
@@ -1160,6 +1216,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
         self._fire_justification_events(data)
+        self._fire_extra_item_events(data)
         self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
         self._fire_forecast_events(data, today)
         return data
@@ -1171,6 +1228,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         messages_result: tuple[Any, ...],
         point_grades: list[PointGradeData] | None = None,
         justifications: list[JustificationData] | None = None,
+        extras: dict[str, Any] | None = None,
     ) -> LibrusData:
         """Parse one cycle's responses (in `_CORE_PAYLOAD_LABELS` order)
         together with the cached reference lookups."""
@@ -1245,6 +1303,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             descriptive_grades=parse_descriptive_grades(descriptive_grades_payload),
             point_grades=point_grades or [],
             justifications=justifications or [],
+            text_grades=parse_text_grades(
+                (extras or {}).get("BaseTextGrades") or {}, self._cached_text_grade_categories
+            ),
+            lesson_topics=parse_realizations(
+                (extras or {}).get("Realizations") or {}, self._cached_lesson_subjects
+            ),
+            school_trips=parse_school_trips((extras or {}).get("SchoolTrips") or {}),
+            school_files=parse_school_files((extras or {}).get("SchoolFiles") or {}),
+            homework_assignment_categories=self._cached_homework_assignment_categories,
             parent_teacher_conferences=parse_parent_teacher_conferences(
                 parent_teacher_conferences_payload
             ),
@@ -1704,6 +1771,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_categories
             ),
             self._client.async_get_lessons(),
+            self._client.async_get_text_grade_categories(),
+            self._client.async_get_homework_assignment_categories(),
             self._client.async_get_units(),
             return_exceptions=True,
         )
@@ -1748,6 +1817,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         if "Units" in payloads:
             self.point_grades_enabled = point_grades_enabled(payload("Units"))
+        self._cached_text_grade_categories = parse_text_grade_categories(
+            payload("TextGradeCategories")
+        )
+        self._cached_homework_assignment_categories = parse_id_name_map(
+            payload("HomeworkAssignmentCategories"), ("Categories",)
+        )
 
     async def _async_get_point_grades(self) -> list[PointGradeData]:
         """Point grades with their categories (maximum, weight). Skipped
@@ -1765,6 +1840,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for label, result in zip(_POINT_GRADE_LABELS, results)
         )
         return parse_point_grades(grades_payload, parse_point_grade_categories(categories_payload))
+
+    async def _async_optional(
+        self, label: str, factory: Any, *, every: timedelta | None = None
+    ) -> dict[str, Any]:
+        """One optional endpoint's payload: the last good copy on failure,
+        and with `every`, the cached copy until it's that old (endpoints
+        that change a few times a day, not every cycle)."""
+        fetched = self._fetched_at.get(label)
+        if (
+            every is not None
+            and fetched is not None
+            and label in self._last_good
+            and dt_util.utcnow() - fetched < every
+        ):
+            return self._last_good[label]
+        try:
+            result: dict[str, Any] | BaseException = await factory()
+        except LibrusError as err:
+            result = err
+        payload = self._degrade_optional_payload(label, result)
+        if not isinstance(result, BaseException):
+            self._fetched_at[label] = dt_util.utcnow()
+        return payload
+
+    async def async_download_attachment(self, attachment_id: str, message_id: str) -> Any:
+        """Download one message attachment for the `download_attachment`
+        service, with the same one-retry Wiadomości recovery as
+        `async_fetch_message`. Doesn't open (mark read) the message."""
+        assert self.config_entry is not None
+        try:
+            return await self._client.async_download_message_attachment(attachment_id, message_id)
+        except LibrusSessionExpiredError:
+            await self._client.async_ensure_session_valid(
+                self.config_entry.data[CONF_PASSWORD], force=True
+            )
+            self._messages_bootstrapped = False
+            self._messages_available = await self._client.async_bootstrap_messages()
+            self._messages_bootstrapped = True
+            return await self._client.async_download_message_attachment(attachment_id, message_id)
 
     async def _async_get_justifications(self) -> list[JustificationData]:
         """The parent's submitted absence justifications. A failure keeps
@@ -1789,6 +1903,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         optional endpoint."""
         if self._kindergarten_lid is not None:
             return
+        # The student's own Users record carries ClassRegisterNumber in JSON
+        # (confirmed live 2026-10-07); the web page is the fallback.
+        user_id = ((self._last_good.get("Me") or {}).get("Me") or {}).get("Account", {}).get("UserId")
+        if user_id:
+            try:
+                number = parse_user_class_register_number(await self._client.async_get_user(user_id))
+            except LibrusError as err:
+                _LOGGER.debug("Student Users record fetch failed (non-fatal): %s", err)
+                number = None
+            if number is not None:
+                self.student_number_from_librus = number
+                self._note_optional_endpoint_recovery(STUDENT_INFO_LABEL)
+                return
         try:
             page = await self._client.async_get_student_info_page()
         except LibrusError as err:
@@ -2140,6 +2267,54 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                         for key, value in lesson_change(change.date, lesson, data).items()
                     },
                 },
+            )
+
+    def _fire_extra_item_events(self, data: LibrusData) -> None:
+        """New text grades (as EVENT_NEW_GRADE with `kind: text`), school
+        trips and school documents - seeded silently on the first sync."""
+        entry_id = self.config_entry.entry_id if self.config_entry else None
+        student = data.me.display_name
+        text_grades = {
+            grade.id: {
+                "subject_id": grade.subject_id,
+                "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
+                "value": grade.value,
+                "teacher": _teacher_name(data, grade.teacher_id),
+                "category": grade.category,
+                "weight": None,
+                "counts_to_average": grade.counts_to_average,
+                "comments": [],
+                "date": grade.date,
+                "semester": grade.semester,
+                "kind": "text",
+                "improves": None,
+            }
+            for grade in data.text_grades
+        }
+        trips = {
+            trip.id: {
+                "destination": trip.destination,
+                "route": trip.route,
+                "transport": trip.transport,
+                "date_from": trip.date_from,
+                "date_to": trip.date_to,
+                "coordinator": trip.coordinator,
+            }
+            for trip in data.school_trips
+        }
+        files = {
+            item.id: {"name": item.name, "added": item.added, "url": school_file_url(item.download_path)}
+            for item in data.school_files
+        }
+        for kind, event, items in (
+            ("text_grades", EVENT_NEW_GRADE, text_grades),
+            ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
+            ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
+        ):
+            if kind == "text_grades" and "BaseTextGrades" in self.fallback_sections:
+                continue
+            self._known_items[kind] = self._fire_for_new_ids(
+                event, entry_id, self._known_items[kind], items, student=student
             )
 
     def _fire_justification_events(self, data: LibrusData) -> None:

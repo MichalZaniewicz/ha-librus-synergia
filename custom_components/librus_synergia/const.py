@@ -244,6 +244,9 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     "NoteCategories",
     "BehaviourGradeCategories",
     "Lessons",
+    # Text-grade and homework-assignment category names.
+    "TextGradeCategories",
+    "HomeworkAssignmentCategories",
     # School configuration - only `GradesSettings.PointGradesEnabled` is
     # read, to skip the point-grade requests at schools without them.
     "Units",
@@ -273,6 +276,11 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     "PointGrades/Categories",
     # Absence justifications the parent submitted.
     "Justifications",
+    # Text grades, lesson topics, school trips and documents.
+    "BaseTextGrades",
+    "Realizations",
+    "SchoolTrips",
+    "SchoolFiles",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and
@@ -306,6 +314,10 @@ EVENT_AGENDA_CHANGED = f"{DOMAIN}_agenda_changed"
 # Fires when the school decides on a submitted absence justification (its
 # status changes, e.g. to accepted or rejected). Seeded silently.
 EVENT_JUSTIFICATION_STATUS = f"{DOMAIN}_justification_status"
+# A new school trip / a new document the school shared with parents.
+# Seeded silently on the first sync.
+EVENT_NEW_SCHOOL_TRIP = f"{DOMAIN}_new_school_trip"
+EVENT_NEW_SCHOOL_DOCUMENT = f"{DOMAIN}_new_school_document"
 # Fires for a new real homework assignment ("zadanie domowe", the
 # `HomeWorkAssignments` endpoint) - distinct from EVENT_NEW_HOMEWORK, which
 # despite its name covers the Agenda feed. Carries topic/text/due date, the

@@ -160,6 +160,8 @@
       "agenda_event": { "name": "New agenda entry", "state_attributes": { "event_type": { "state": { "new_entry": "New entry" } } } },
       "agenda_change_event": { "name": "Agenda entry changed", "state_attributes": { "event_type": { "state": { "changed": "Changed", "removed": "Removed" } } } },
       "justification_event": { "name": "Absence justification decided", "state_attributes": { "event_type": { "state": { "accepted": "Accepted", "rejected": "Rejected", "changed": "Status changed" } } } },
+      "school_trip_event": { "name": "New school trip", "state_attributes": { "event_type": { "state": { "new_trip": "New trip" } } } },
+      "school_document_event": { "name": "New school document", "state_attributes": { "event_type": { "state": { "new_document": "New document" } } } },
       "announcement_event": { "name": "New announcement", "state_attributes": { "event_type": { "state": { "new_announcement": "New announcement" } } } },
       "message_event": { "name": "New message", "state_attributes": { "event_type": { "state": { "new_message": "New message" } } } },
       "forecast_event": { "name": "Grade forecast changed", "state_attributes": { "event_type": { "state": { "up": "Up", "down": "Down" } } } },
@@ -175,6 +177,9 @@
       "homework": { "name": "Homework" }
     },
     "sensor": {
+      "lesson_topics": { "name": "Lesson topics" },
+      "school_trips": { "name": "Next school trip" },
+      "school_documents": { "name": "School documents" },
       "justifications": { "name": "Absence justifications" },
       "point_grades": { "name": "Point grades" },
       "status": { "name": "Connection status", "state": { "ok": "OK", "degraded": "Partly from saved data", "stale": "Librus not responding", "error": "Error" } },
@@ -252,6 +257,15 @@
           "name": "Mailbox",
           "description": "Which mailbox the message is in. Defaults to \"inbox\" - use \"substitutions\" or \"alerts\" for a message from the Unread messages sensor's \"substitutions_recent\" or \"alerts_recent\" attribute."
         }
+      }
+    },
+    "download_attachment": {
+      "name": "Download message attachment",
+      "description": "Saves one attachment of a Librus message to Home Assistant's media folder (librus_synergia/<message id>/), without opening the message in Librus. Returns where it was saved.",
+      "fields": {
+        "device_id": { "name": "Device", "description": "The Librus Synergia device (student) the message belongs to." },
+        "message_id": { "name": "Message ID", "description": "The message's id." },
+        "attachment_id": { "name": "Attachment ID", "description": "The attachment's id, from the get_message response's \"attachments\"." }
       }
     },
     "get_grades": {

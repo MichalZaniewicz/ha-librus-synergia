@@ -160,6 +160,8 @@
       "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
       "agenda_change_event": { "name": "Zmiana w terminarzu", "state_attributes": { "event_type": { "state": { "changed": "Zmieniony", "removed": "Usunięty" } } } },
       "justification_event": { "name": "Decyzja w usprawiedliwieniu", "state_attributes": { "event_type": { "state": { "accepted": "Przyjęte", "rejected": "Odrzucone", "changed": "Zmiana statusu" } } } },
+      "school_trip_event": { "name": "Nowa wycieczka", "state_attributes": { "event_type": { "state": { "new_trip": "Nowa wycieczka" } } } },
+      "school_document_event": { "name": "Nowy dokument szkoły", "state_attributes": { "event_type": { "state": { "new_document": "Nowy dokument" } } } },
       "announcement_event": { "name": "Nowe ogłoszenie", "state_attributes": { "event_type": { "state": { "new_announcement": "Nowe ogłoszenie" } } } },
       "message_event": { "name": "Nowa wiadomość", "state_attributes": { "event_type": { "state": { "new_message": "Nowa wiadomość" } } } },
       "forecast_event": { "name": "Zmiana prognozy oceny", "state_attributes": { "event_type": { "state": { "up": "W górę", "down": "W dół" } } } },
@@ -175,6 +177,9 @@
       "homework": { "name": "Zadania domowe" }
     },
     "sensor": {
+      "lesson_topics": { "name": "Tematy lekcji" },
+      "school_trips": { "name": "Najbliższa wycieczka" },
+      "school_documents": { "name": "Dokumenty szkoły" },
       "justifications": { "name": "Usprawiedliwienia" },
       "point_grades": { "name": "Oceny punktowe" },
       "status": { "name": "Status połączenia", "state": { "ok": "OK", "degraded": "Częściowo z zapisanych danych", "stale": "Librus nie odpowiada", "error": "Błąd" } },
@@ -252,6 +257,15 @@
           "name": "Skrzynka",
           "description": "W której skrzynce jest wiadomość. Domyślnie \"inbox\" - użyj \"substitutions\" lub \"alerts\" dla wiadomości z atrybutu \"substitutions_recent\" lub \"alerts_recent\" sensora Nieprzeczytane wiadomości."
         }
+      }
+    },
+    "download_attachment": {
+      "name": "Pobierz załącznik wiadomości",
+      "description": "Zapisuje jeden załącznik wiadomości z Librusa w folderze multimediów Home Assistanta (librus_synergia/<id wiadomości>/), bez otwierania wiadomości w Librusie. Zwraca, gdzie zapisano plik.",
+      "fields": {
+        "device_id": { "name": "Urządzenie", "description": "Urządzenie Librus Synergia (uczeń), do którego należy wiadomość." },
+        "message_id": { "name": "ID wiadomości", "description": "Identyfikator wiadomości." },
+        "attachment_id": { "name": "ID załącznika", "description": "Identyfikator załącznika, z pola \"attachments\" odpowiedzi get_message." }
       }
     },
     "get_grades": {

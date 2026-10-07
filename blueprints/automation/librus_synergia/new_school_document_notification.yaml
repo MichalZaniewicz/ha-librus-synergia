@@ -1,0 +1,35 @@
+blueprint:
+  name: "Librus: New School Document"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - when the
+    school shares a new document with parents in Librus (a form, regulations,
+    a consent to sign), via the `librus_synergia_new_school_document` event.
+
+
+    Use `{{ document_summary }}` in your action for a ready-made message such
+    as "Kacper: szkoła udostępniła dokument „Regulamin wycieczek”", or
+    `{{ trigger.event.data.name }}`, `{{ trigger.event.data.added }}` and
+    `{{ trigger.event.data.url }}` (opens in Synergia, where you have to be
+    logged in) directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_school_document_notification.yaml
+  input:
+    notify_action:
+      name: Notification action
+      description: The action to run for each new document.
+      selector:
+        action: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_school_document
+
+actions:
+  - variables:
+      document_summary: >-
+        {% set d = trigger.event.data %}
+        {{ (d.student ~ ': ') if d.student else '' }}szkoła udostępniła dokument „{{ d.name }}”
+  - !input notify_action
+
+mode: queued
+max: 10

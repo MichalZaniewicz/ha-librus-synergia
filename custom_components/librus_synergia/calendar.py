@@ -85,6 +85,21 @@ def _inclusive_end_date(end_date: datetime) -> date:
     return (end_date - timedelta(microseconds=1)).date()
 
 
+_TOPIC_INDEX: dict[int, dict[tuple[str, int | None], str]] = {}
+
+
+def _lesson_topic(day: date, lesson: LessonData, data: LibrusData) -> str | None:
+    """The topic Librus has for this lesson (same date and lesson number;
+    `Realizations`), if it has been held and filled in."""
+    key = id(data.lesson_topics)
+    index = _TOPIC_INDEX.get(key)
+    if index is None:
+        index = {((t.date or "")[:10], t.lesson_no): t.topic for t in data.lesson_topics if t.topic}
+        _TOPIC_INDEX.clear()
+        _TOPIC_INDEX[key] = index
+    return index.get((day.isoformat(), lesson.lesson_no))
+
+
 def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> CalendarEvent | None:
     if lesson.hour_from is None or lesson.hour_to is None:
         return None
@@ -126,6 +141,9 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
         lines.append(f"Zastępstwo za: {replaced}")
     if change["room_changed"]:
         lines.append(f"Zmiana sali: {change['original_classroom'] or '?'} → {classroom_name or '?'}")
+    topic = _lesson_topic(day, lesson, data)
+    if topic:
+        lines.append(f"Temat: {topic}")
     if change["kind"] == "moved":
         when = change["original_date"] or ""
         when = f"{when[8:10]}.{when[5:7]}" if len(when) >= 10 else when
