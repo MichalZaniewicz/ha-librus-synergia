@@ -26,7 +26,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." src="https://my.home-assistant.io/badges/hacs_repository.svg"></a>
 </p>
 
-**Contents:** [Why this exists](#why-this-exists) · [Credential model](#credential-model-read-this-before-installing) · [Installation](#installation) · [Weekly AI summary](#weekly-ai-summary) · [Cards](#custom-lovelace-cards) · [Entities](#entities) · [Blueprints](#automation-blueprints) · [Services](#services) · [Known limitations](#known-limitations--unverified-details) · [Related projects](#related-projects)
+**Contents:** [Why this exists](#why-this-exists) · [Credential model](#credential-model-read-this-before-installing) · [Installation](#installation) · [Weekly AI summary](#weekly-ai-summary) · [Ask Assist](#ask-assist-about-school) · [Cards](#custom-lovelace-cards) · [Entities](#entities) · [Blueprints](#automation-blueprints) · [Services](#services) · [Known limitations](#known-limitations--unverified-details) · [Related projects](#related-projects)
 
 ## Why this exists
 
