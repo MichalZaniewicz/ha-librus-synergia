@@ -998,6 +998,21 @@ class LibrusRankSensor(LibrusSensorBase):
         }
 
 
+def _student_number(
+    coordinator: LibrusDataUpdateCoordinator,
+) -> tuple[int | None, str | None]:
+    """The class register number and where it came from: the number typed
+    in Configure wins (`"options"`), otherwise the one Librus shows on its
+    informacja page (`"librus"`)."""
+    entry = coordinator.config_entry
+    raw = entry.options.get(CONF_STUDENT_NUMBER) if entry else None
+    if raw is not None:
+        return int(raw), "options"
+    if coordinator.student_number_from_librus is not None:
+        return coordinator.student_number_from_librus, "librus"
+    return None, None
+
+
 class LibrusLuckyNumberSensor(LibrusSensorBase):
     """The most recently published "szczęśliwy numerek" (lucky number).
 
@@ -1031,15 +1046,7 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         if self.coordinator.data is None or self.coordinator.data.lucky_number is None:
             return None
         day = self.coordinator.data.lucky_number.day
-        entry = self.coordinator.config_entry
-        raw_student_number = entry.options.get(CONF_STUDENT_NUMBER) if entry else None
-        # The number typed in Configure wins; otherwise the one Librus shows
-        # on its informacja page.
-        student_number = (
-            int(raw_student_number)
-            if raw_student_number is not None
-            else self.coordinator.student_number_from_librus
-        )
+        student_number, source = _student_number(self.coordinator)
         is_yours = (
             student_number == self.coordinator.data.lucky_number.number
             if student_number is not None
@@ -1049,11 +1056,7 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
             "day": day,
             "is_today": day == dt_util.now().date().isoformat() if day else None,
             "student_number": student_number,
-            "student_number_source": (
-                None
-                if student_number is None
-                else "options" if raw_student_number is not None else "librus"
-            ),
+            "student_number_source": source,
             "is_yours": is_yours,
         }
 
@@ -1466,6 +1469,9 @@ class LibrusClassSensor(LibrusSensorBase):
         tutor = data.teachers.get(cls.tutor_id) if cls.tutor_id is not None else None
         return {
             "homeroom_teacher": tutor,
+            # Class register number ("nr w dzienniku") - same value and
+            # precedence as the Lucky number sensor's attribute.
+            "student_number": _student_number(self.coordinator)[0],
             "school_year_start": cls.begin_school_year,
             "first_semester_end": cls.end_first_semester,
             "school_year_end": cls.end_school_year,

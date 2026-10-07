@@ -715,6 +715,7 @@ async def test_school_and_class_sensors(hass) -> None:
         async_get_teachers={
             "Users": [{"Id": 1823984, "FirstName": "Amelia", "LastName": "Marciszak"}]
         },
+        async_get_student_info_page=_INFO_PAGE,
     )
     entry = await setup_integration(hass, client)
 
@@ -728,6 +729,7 @@ async def test_school_and_class_sensors(hass) -> None:
     assert class_state.state == "7d"
     assert class_state.attributes["homeroom_teacher"] == "Amelia Marciszak"
     assert class_state.attributes["first_semester_end"] == "2027-01-31"
+    assert class_state.attributes["student_number"] == 25
 
 
 async def test_homework_assignments_sensor(hass) -> None:

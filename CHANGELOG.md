@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- The Class sensor also carries `student_number` (class register number),
+  so a card can show it next to the class without depending on the Lucky
+  number sensor, which has no attributes while no number is published.
+
 ## 0.10.1-beta.1
 
 ### Added
