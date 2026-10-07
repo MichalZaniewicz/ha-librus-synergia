@@ -66,7 +66,7 @@ async def test_user_flow_success(hass) -> None:
 
 
 async def test_user_flow_duplicate_aborts(hass) -> None:
-    MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT).add_to_hass(hass)
+    MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT).add_to_hass(hass)
     client = build_mock_client()
     with patch(
         "custom_components.librus_synergia.config_flow.LibrusApiClient", return_value=client
@@ -105,7 +105,7 @@ async def test_user_flow_error_mapping(hass, exception, error_key) -> None:
 
 
 async def test_reauth_flow_success(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT)
     entry.add_to_hass(hass)
     client = build_mock_client()
 
@@ -134,7 +134,7 @@ async def test_reauth_flow_success(hass) -> None:
 async def test_reauth_flow_still_captcha_gated(hass) -> None:
     """A reauth attempt that hits captcha again must show that specific
     reason, not a generic "wrong password" message."""
-    entry = MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT)
     entry.add_to_hass(hass)
     client = build_mock_client()
     client.async_login.side_effect = LibrusCaptchaRequiredError("still blocked")
@@ -160,7 +160,7 @@ async def test_reauth_flow_still_captcha_gated(hass) -> None:
 
 
 async def test_reconfigure_flow_updates_password(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT)
     entry.add_to_hass(hass)
     client = build_mock_client()
 
@@ -191,7 +191,7 @@ async def test_reconfigure_flow_updates_password(hass) -> None:
 async def test_reconfigure_flow_fixes_login_typo(hass) -> None:
     """The login field is editable here (unlike reauth) - the whole point
     is also covering "I mistyped the login when I first set this up"."""
-    entry = MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT)
     entry.add_to_hass(hass)
     client = build_mock_client()
 
@@ -218,12 +218,12 @@ async def test_reconfigure_flow_fixes_login_typo(hass) -> None:
 
 
 async def test_reconfigure_flow_aborts_on_different_account(hass) -> None:
-    """The unique_id (`Me.Account.Id`, "3461991" for the mocked account) is
+    """The unique_id (`Me.Account.Id`, "1234567" for the mocked account) is
     the safety net - reconfiguring must not be a backdoor way to silently
     repoint one entry at a genuinely different Librus account."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="some-other-account", data=USER_INPUT)
     entry.add_to_hass(hass)
-    client = build_mock_client()  # ME_PAYLOAD's account id is always 3461991
+    client = build_mock_client()  # ME_PAYLOAD's account id is always 1234567
 
     with patch(
         "custom_components.librus_synergia.config_flow.LibrusApiClient", return_value=client
@@ -248,7 +248,7 @@ async def test_reconfigure_flow_aborts_on_different_account(hass) -> None:
 
 
 async def test_reconfigure_flow_error_mapping(hass) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, unique_id="3461991", data=USER_INPUT)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1234567", data=USER_INPUT)
     entry.add_to_hass(hass)
     client = build_mock_client()
     client.async_login.side_effect = LibrusInvalidCredentialsError("bad")

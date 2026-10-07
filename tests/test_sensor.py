@@ -700,7 +700,7 @@ async def test_school_and_class_sensors(hass) -> None:
                 "Name": "Szkoła Podstawowa nr 1",
                 "Town": "Przykładowo",
                 "Street": "ul. Szkolna",
-                "NameHeadTeacher": "Edyta",
+                "NameHeadTeacher": "Ewa",
                 "SurnameHeadTeacher": "Wiśniewska",
             }
         },

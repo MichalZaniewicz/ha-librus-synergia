@@ -160,7 +160,7 @@ async def test_forbidden_discovery_probes_never_fail_the_update(hass) -> None:
     client = build_mock_client()
     client.async_get_timetable.side_effect = _forbidden("Timetables")
     client.async_get_token_info.side_effect = _forbidden("Auth/TokenInfo")
-    client.async_get_user.side_effect = _forbidden("Users/3461991")
+    client.async_get_user.side_effect = _forbidden("Users/1234567")
     coordinator = _make_coordinator(hass, client)
 
     data = await coordinator._async_update_data()

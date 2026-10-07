@@ -477,7 +477,7 @@ async def test_message_sender_name_falls_back_to_first_and_last_name(hass) -> No
         "data": [
             {
                 "messageId": "42",
-                "senderFirstName": "Amelia",
+                "senderFirstName": "Anna",
                 "senderLastName": "Nowak",
                 "topic": "Zebranie",
                 "content": "",

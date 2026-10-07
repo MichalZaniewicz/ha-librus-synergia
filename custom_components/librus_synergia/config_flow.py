@@ -173,7 +173,7 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
                 account = me.get("Account", {})
                 # `Account` is the LOGIN's own identity - for a child's login
                 # under a parent-managed portal this is the PARENT's name
-                # (confirmed live: Account was "Michał Zaniewicz", the parent,
+                # (confirmed live: Account was the parent,
                 # while `User` below was "Ola Kowalska", the actual
                 # student) - the student ("User") is what the title/device name
                 # should show, not whoever's name is on the login itself.

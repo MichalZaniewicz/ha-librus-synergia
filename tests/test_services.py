@@ -126,7 +126,7 @@ async def test_get_message_service_falls_back_to_first_and_last_name(hass) -> No
     client = build_mock_client()
     client.async_get_message.return_value = {
         "data": {
-            "senderFirstName": "Amelia",
+            "senderFirstName": "Anna",
             "senderLastName": "Nowak",
             "topic": "Zebranie z rodzicami",
             "Message": GOOD_MESSAGE_PAYLOAD["data"]["Message"],
