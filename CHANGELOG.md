@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.1-beta.1
 
 ### Added
 - **Grade forecast.** A *Grade forecast* sensor: what each subject's
