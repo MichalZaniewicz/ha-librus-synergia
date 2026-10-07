@@ -351,7 +351,7 @@ Returns `grades` (a list of `subject`, `subject_id`, `value`, `category`,
 Almost everything this integration reads has been checked against a real account. The open points below are data the test account simply hasn't had yet. For some of them, the field names come from other open-source Librus clients' documentation of the API (see [Acknowledgments](#acknowledgments)); no code was copied from those projects.
 
 **Waiting for real data:**
-- **Final semester and year grades** (as opposed to the *proposed* ones, which are confirmed) are left out of averages and streaks. None exist yet, because the first semester ends on 2027-01-31.
+- **Semester and year grades, proposed and final:** the fields are in Librus's grade data and these grades are left out of averages and streaks, but none have been issued yet. The first semester ends on 2027-01-31.
 - **Descriptive grades:** the sensor is in place, but the endpoint has been empty on every check so far.
 - **Behaviour grade on a points scale:** the classic scale (wz, bdb, db, popr, ndp, ng) is confirmed on a real account; the points variant some schools use has not been seen yet.
 - **Grade corrections ("poprawy"):** the link from a correction to the grade it replaces comes from another client's reading of the API; no correction has appeared on the test account yet.
