@@ -64,6 +64,7 @@ from .coordinator import (
 from .coordinator import (
     calculate_average as _calculate_average,
 )
+from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, upcoming_exams
 from .forecast import (
     HONOURS_AVERAGE,
     SubjectForecast,
@@ -189,28 +190,6 @@ def _lesson_change_attrs(day: date, lesson: LessonData, data: LibrusData) -> dic
         "original_subject": change["original_subject"],
         "original_teacher": change["original_teacher"],
     }
-
-
-# Agenda ("HomeWorks") category names that mark a graded assessment worth
-# counting down to. `Sprawdzian` and `Diagnoza` are confirmed-live real
-# category names for this account; "praca klasowa"/"kartkówka"/"egzamin"
-# are the other standard Polish assessment names. Best-effort by design -
-# a school naming a test category something else just won't be picked up
-# (no false positives is the priority over catching every one).
-#
-# CONFIRMED real-world gap (GitHub issue #1, "Kartkowki w inne"): some
-# teachers file a "kartkówka" under the generic `Inne` (Other) category
-# and only name it in the free-text description instead - a category-only
-# match misses these entirely. `_upcoming()` below therefore also tests
-# `item.content` against this same regex as a fallback whenever the
-# category itself doesn't match, rather than requiring a second, separate
-# keyword list to stay in sync with this one.
-#
-# "quiz" added on user request (same issue thread) - another word some
-# teachers use for a short/informal test, same as "kartkówka".
-_EXAM_CATEGORY_RE = re.compile(
-    r"sprawdzian|praca\s+klasowa|kartków|egzamin|diagnoz|quiz", re.IGNORECASE
-)
 
 
 def _bell_schedule(timetable: dict[date, list[LessonData]]) -> list[dict[str, Any]]:
@@ -1922,85 +1901,60 @@ class LibrusSchoolEndSensor(_LibrusSchoolTimeSensor):
 class LibrusNextExamSensor(LibrusSensorBase):
     """Date of the next graded assessment ("sprawdzian" and friends) from
     the Agenda feed. State is a date (`device_class: date`); attributes
-    carry `days_until`, the subject, the category name, the description and
-    an `upcoming` list. `unknown` when nothing assessment-like is on the
-    agenda. Exam detection is by the Agenda category name, falling back to
-    the free-text description when the category itself doesn't match (see
-    `_EXAM_CATEGORY_RE`) - deliberately conservative."""
+    carry `days_until`, the subject, the category name, the description,
+    the topics to revise (lessons held in that subject since the previous
+    test - see exam_prep.py) and an `upcoming` list with the same for each
+    test. `unknown` when nothing assessment-like is on the agenda. Exam
+    detection is by the Agenda category name, falling back to the free-text
+    description (see `exam_prep.EXAM_RE`) - deliberately conservative."""
 
     _attr_translation_key = "next_exam"
-    _unrecorded_attributes = frozenset({"upcoming"})
+    _unrecorded_attributes = frozenset({"upcoming", "topics"})
     _attr_device_class = SensorDeviceClass.DATE
     _attr_icon = "mdi:file-document-alert-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "next_exam")
 
-    def _upcoming(self) -> list[tuple[date, HomeworkEventData]]:
+    def _prep(self) -> list[ExamPrep]:
         if self.coordinator.data is None:
             return []
-        data = self.coordinator.data
-        today = dt_util.now().date()
-        out: list[tuple[date, HomeworkEventData]] = []
-        for item in data.homeworks:
-            if not item.date:
-                continue
-            category = (
-                data.homework_categories.get(item.category_id)
-                if item.category_id is not None
-                else None
-            )
-            category_match = category is not None and _EXAM_CATEGORY_RE.search(category)
-            content_match = item.content and _EXAM_CATEGORY_RE.search(item.content)
-            if not category_match and not content_match:
-                continue
-            try:
-                day = date.fromisoformat(item.date[:10])
-            except ValueError:
-                continue
-            if day < today:
-                continue
-            out.append((day, item))
-        out.sort(key=lambda pair: pair[0])
-        return out
+        return exam_prep(self.coordinator.data, dt_util.now().date(), limit=10)
 
     @property
     def native_value(self) -> date | None:
-        upcoming = self._upcoming()
+        upcoming = upcoming_exams(self.coordinator.data, dt_util.now().date()) if self.coordinator.data else []
         return upcoming[0][0] if upcoming else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        upcoming = self._upcoming()
-        if not upcoming:
+        preps = self._prep()
+        if not preps:
             return None
-        data = self.coordinator.data
         today = dt_util.now().date()
-        day, item = upcoming[0]
-
-        def _subject(it: HomeworkEventData) -> str | None:
-            return data.subjects.get(it.subject_id) if it.subject_id is not None else None
-
-        def _category(it: HomeworkEventData) -> str | None:
-            return (
-                data.homework_categories.get(it.category_id)
-                if it.category_id is not None
-                else None
-            )
-
+        first = preps[0]
         return {
-            "days_until": (day - today).days,
-            "subject": _subject(item),
-            "category": _category(item),
-            "content": item.content,
+            "days_until": (first.day - today).days,
+            "subject": first.subject,
+            "category": first.category,
+            "content": first.item.content,
+            "topics": topics_as_dicts(first),
+            "topics_since": first.since.isoformat() if first.since else None,
+            "missed_topics": first.missed,
             "upcoming": [
                 {
-                    "date": d.isoformat(),
-                    "subject": _subject(it),
-                    "category": _category(it),
-                    "content": it.content[:200],
+                    "id": prep.item.id,
+                    "date": prep.day.isoformat(),
+                    "days_until": (prep.day - today).days,
+                    "subject": prep.subject,
+                    "category": prep.category,
+                    "content": prep.item.content[:200],
+                    "topics": topics_as_dicts(prep),
+                    "topics_since": prep.since.isoformat() if prep.since else None,
+                    "missed_topics": prep.missed,
+                    "more_topics": prep.more_topics,
                 }
-                for d, it in upcoming[:10]
+                for prep in preps
             ],
         }
 

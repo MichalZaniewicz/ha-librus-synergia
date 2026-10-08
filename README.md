@@ -40,13 +40,25 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 - 🛟 **Keeps working when Librus doesn't.** The last good data stays up through an outage, the session renews itself, and a normal login needs no captcha.
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
 
+<p align="center">
+  <img src="docs/ai-summary-banner.svg" alt="Weekly AI summary">
+</p>
+
+## Weekly AI summary
+
+Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Claude, or a local Ollama) sums up the school week: the grades and how the averages moved, attendance, behaviour, what's coming next week and, if you want, the important points from the school's messages. You get a one-line headline, a status per section, a warning only when something needs attention, and 2-4 concrete to-dos. No API key in this integration and no extra Librus requests.
+
+![Weekly AI summary card](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-ai-summary-card-wide.png)
+
+Read it on the dashboard, get it as a phone notification with a blueprint, or press *Generate* any time. **[Setting it up](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary)**
+
 ## A dashboard in minutes
 
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 61 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-report-card.png" alt="Report card forecast card" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-ai-summary-card-dark.png" alt="Weekly AI summary card" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-school-trips.png" alt="School trips card" width="32%">
   <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-lesson-topics.png" alt="What was taught card" width="32%">
 </p>
 
