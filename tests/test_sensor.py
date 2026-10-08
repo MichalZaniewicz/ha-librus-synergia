@@ -1193,6 +1193,96 @@ async def test_next_exam_sensor_matches_quiz_keyword(hass) -> None:
     assert state.attributes["subject"] == "Angielski"
 
 
+async def test_next_exam_sensor_lists_topics_since_previous_test(hass) -> None:
+    """The topics to revise are the subject's lessons held after the
+    previous test in that subject and before this one; a missed lesson is
+    marked, other subjects and the previous test day itself are left out."""
+    today = dt_util.now().date()
+
+    def day(offset: int) -> str:
+        return (today + timedelta(days=offset)).isoformat()
+
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}, {"Id": 200, "Name": "Biologia"}]},
+        async_get_lessons={"Lessons": [{"Id": 501, "Subject": {"Id": 100}}, {"Id": 502, "Subject": {"Id": 200}}]},
+        async_get_homework_categories={"Categories": [{"Id": 1, "Name": "Sprawdzian"}]},
+        async_get_homeworks={
+            "HomeWorks": [
+                {"Id": 1, "Content": "Dział 1", "Date": day(-10), "Category": {"Id": 1}, "Subject": {"Id": 100}},
+                {"Id": 2, "Content": "Dział 2", "Date": day(3), "Category": {"Id": 1}, "Subject": {"Id": 100}},
+            ]
+        },
+        async_get_realizations={
+            "Realizations": [
+                {"Id": "t1", "Lesson": {"Id": 501}, "LessonNo": 2, "Date": day(-12), "Topic": "Stary dział"},
+                {"Id": "t2", "Lesson": {"Id": 501}, "LessonNo": 2, "Date": day(-10), "Topic": "Sprawdzian"},
+                {"Id": "t3", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": day(-5), "Topic": "Ułamki"},
+                {"Id": "t4", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": day(-1), "Topic": "Procenty"},
+                {"Id": "t5", "Lesson": {"Id": 502}, "LessonNo": 4, "Date": day(-2), "Topic": "Komórka"},
+            ]
+        },
+        async_get_attendances={
+            "Attendances": [{"Id": 1, "Date": day(-1), "LessonNo": "3", "Semester": 1, "Type": {"Id": 1}}]
+        },
+        async_get_attendance_types={"Types": [{"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "next_exam"))
+    assert state.state == day(3)
+    assert state.attributes["topics_since"] == day(-10)
+    assert [(t["topic"], t["absent"]) for t in state.attributes["topics"]] == [
+        ("Ułamki", False),
+        ("Procenty", True),
+    ]
+    assert state.attributes["missed_topics"] == 1
+    upcoming = state.attributes["upcoming"][0]
+    assert upcoming["days_until"] == 3
+    assert [t["topic"] for t in upcoming["topics"]] == ["Ułamki", "Procenty"]
+
+
+async def test_plan_changes_sensor(hass, freezer) -> None:
+    """Today's real lessons against the standing plan: a cancelled lesson,
+    another subject than planned, and a planned lesson that isn't there."""
+    freezer.move_to(_FROZEN)
+    today = dt_util.now().date()
+    payload = {
+        "Timetable": {
+            today.isoformat(): [
+                [_tt_lesson(1, "08:00", "08:45", 100, canceled=True)],
+                [_tt_lesson(2, "08:55", "09:40", 300)],
+            ]
+        }
+    }
+    entries = {
+        "TimetableEntries": [
+            {"Id": i, "Lesson": {"Id": lesson}, "DayOfTheWeek": today.isoweekday(), "LessonNo": no,
+             "DateFrom": "2026-09-01", "DateTo": "2027-06-25", "Classroom": {"Id": 12, "Name": "12"}}
+            for i, (no, lesson) in enumerate(((1, 501), (2, 502), (3, 501)), start=1)
+        ]
+    }
+    client = build_mock_client(
+        async_get_timetable=payload,
+        async_get_subjects=_LESSON_SUBJECTS,
+        async_get_lessons={"Lessons": [{"Id": 501, "Subject": {"Id": 100}}, {"Id": 502, "Subject": {"Id": 200}}]},
+        async_get_timetable_entries=entries,
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "plan_changes"))
+    assert state.state == "3"
+    assert [(c["lesson_no"], c["kind"], c["subject"], c["planned_subject"]) for c in state.attributes["changes"]] == [
+        (1, "cancelled", "Matematyka", "Matematyka"),
+        (2, "subject", "Historia", "Polski"),
+        (3, "missing", None, "Matematyka"),
+    ]
+
+
+async def test_plan_changes_sensor_unknown_without_plan(hass) -> None:
+    entry = await setup_integration(hass, build_mock_client())
+    assert hass.states.get(_entity_id(hass, entry, "plan_changes")).state == "unknown"
+
+
 async def test_school_sensor_exposes_bell_schedule(hass) -> None:
     """bell_schedule just echoes back whatever HourFrom/HourTo strings the
     timetable carries, so fixed clock times are fine here (no dependency on

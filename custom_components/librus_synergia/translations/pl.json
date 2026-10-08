@@ -178,6 +178,7 @@
     },
     "sensor": {
       "lesson_topics": { "name": "Tematy lekcji" },
+      "plan_changes": { "name": "Zmiany względem stałego planu" },
       "school_trips": { "name": "Najbliższa wycieczka" },
       "school_documents": { "name": "Dokumenty szkoły" },
       "justifications": { "name": "Usprawiedliwienia" },

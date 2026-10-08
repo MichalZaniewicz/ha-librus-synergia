@@ -178,6 +178,7 @@
     },
     "sensor": {
       "lesson_topics": { "name": "Lesson topics" },
+      "plan_changes": { "name": "Changes to the usual timetable" },
       "school_trips": { "name": "Next school trip" },
       "school_documents": { "name": "School documents" },
       "justifications": { "name": "Absence justifications" },

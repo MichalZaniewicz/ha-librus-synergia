@@ -87,6 +87,8 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_school_files,
     parse_school_trips,
     parse_text_grade_categories,
+    parse_timetable_entries,
+    plan_differences,
     parse_text_grades,
     parse_user_class_register_number,
     parse_point_grade_categories,
@@ -175,9 +177,11 @@ _KINDERGARTEN_MAX_CANDIDATES = 6
 # The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
 _CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
 # Optional endpoints parsed in _build_data from their raw payloads.
-_EXTRA_LABELS = ("BaseTextGrades", "Realizations", "SchoolTrips", "SchoolFiles")
+_EXTRA_LABELS = ("BaseTextGrades", "Realizations", "SchoolTrips", "SchoolFiles", "TimetableEntries")
 # Lesson topics, trips and school documents change a few times a day.
 _HOURLY = timedelta(hours=1)
+# The standing weekly plan changes a few times a year.
+_DAILY = timedelta(days=1)
 
 
 def school_file_url(path: str | None) -> str | None:
@@ -1200,6 +1204,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "SchoolFiles": await self._async_optional(
                 "SchoolFiles", self._client.async_get_school_files, every=_HOURLY
             ),
+            "TimetableEntries": await self._async_optional(
+                "TimetableEntries", self._client.async_get_timetable_entries, every=_DAILY
+            ),
         }
         core_payloads = (
             *core_payloads[:6],
@@ -1311,6 +1318,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
             school_trips=parse_school_trips((extras or {}).get("SchoolTrips") or {}),
             school_files=parse_school_files((extras or {}).get("SchoolFiles") or {}),
+            standing_timetable=parse_timetable_entries(
+                (extras or {}).get("TimetableEntries") or {}, self._cached_lesson_subjects
+            ),
             homework_assignment_categories=self._cached_homework_assignment_categories,
             parent_teacher_conferences=parse_parent_teacher_conferences(
                 parent_teacher_conferences_payload

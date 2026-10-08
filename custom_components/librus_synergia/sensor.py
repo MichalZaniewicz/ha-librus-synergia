@@ -28,7 +28,7 @@ from librus_synergia.models import (
     MessageData,
     PointGradeData,
 )
-from librus_synergia.parsers import justified_dates, point_grades_percentage
+from librus_synergia.parsers import justified_dates, plan_differences, point_grades_percentage
 
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
@@ -297,6 +297,7 @@ async def async_setup_entry(
             LibrusUnexcusedAbsencesSensor(coordinator, entry),
             LibrusJustificationsSensor(coordinator, entry),
             LibrusLessonTopicsSensor(coordinator, entry),
+            LibrusPlanChangesSensor(coordinator, entry),
             LibrusSchoolTripsSensor(coordinator, entry),
             LibrusSchoolDocumentsSensor(coordinator, entry),
             LibrusSubjectAttendanceSensor(coordinator, entry),
@@ -2066,6 +2067,60 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
             "today": sorted(self._rows(only=today.isoformat()), key=lambda r: r["lesson_no"] or 0),
             "recent": self._rows(since=(today - timedelta(days=14)).isoformat())[:80],
         }
+
+
+class LibrusPlanChangesSensor(LibrusSensorBase):
+    """How this week and next differ from the standing weekly plan
+    (`TimetableEntries`): the state is how many lesson slots from today on
+    differ; `changes` lists them (cancelled, missing, extra, another
+    subject, another room, a weekday without lessons). `unknown` until the
+    standing plan has been read."""
+
+    _attr_translation_key = "plan_changes"
+    _unrecorded_attributes = frozenset({"changes"})
+    _attr_icon = "mdi:calendar-alert"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "plan_changes")
+
+    def _changes(self) -> list[dict[str, Any]] | None:
+        data = self.coordinator.data
+        if data is None or not data.standing_timetable:
+            return None
+        today = dt_util.now().date()
+
+        def name(table: dict[Any, str], key: Any) -> str | None:
+            # Timetable ids can come as strings ("41999"), lookups use ints.
+            if key is None:
+                return None
+            return table.get(key) or table.get(_as_lesson_no(key)) or str(key)
+
+        return [
+            {
+                "date": diff.date.isoformat(),
+                "lesson_no": diff.lesson_no,
+                "kind": diff.kind,
+                "subject": name(data.subjects, diff.subject_id),
+                "planned_subject": name(data.subjects, diff.planned_subject_id),
+                "classroom": name(data.classrooms, diff.classroom_id),
+                "planned_classroom": diff.planned_classroom,
+                "free_day": diff.free_day,
+            }
+            for diff in plan_differences(data.timetable, data.standing_timetable, data.free_days)
+            if diff.date >= today
+        ]
+
+    @property
+    def native_value(self) -> int | None:
+        changes = self._changes()
+        return len(changes) if changes is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        changes = self._changes()
+        if changes is None:
+            return None
+        return {"changes": changes}
 
 
 class LibrusSchoolTripsSensor(LibrusSensorBase):
