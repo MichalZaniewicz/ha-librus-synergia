@@ -82,7 +82,10 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
    <p align="center"><a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open this repository in HACS" src="https://my.home-assistant.io/badges/hacs_repository.svg" height="28"></a></p>
 
 2. **Restart** Home Assistant.
-3. **Add the integration:** Settings → Devices & services → **Add integration** → **Librus Synergia**.
+3. **Add the integration:** click the button below (or Settings → Devices & services → **Add integration** → **Librus Synergia**).
+
+   <p align="center"><a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=librus_synergia"><img alt="Add the Librus Synergia integration to Home Assistant" src="https://my.home-assistant.io/badges/config_flow_start.svg" height="28"></a></p>
+
 4. **Log in** with your child's Librus login (e.g. `1234567u`) and password. One entry per child.
 
 Then pick the [blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) you want and add [the cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards). Full instructions, every option and every entity are in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)**.
