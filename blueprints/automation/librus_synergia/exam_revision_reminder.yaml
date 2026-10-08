@@ -1,0 +1,87 @@
+blueprint:
+  name: "Librus: What to Revise Before a Test"
+  description: >
+    A few days before a test, runs your action - typically "Send a
+    notification" - with what to revise: the topics taught in that subject
+    since the previous test (from the Next exam sensor), with the lessons
+    the student missed marked. Silent on days when no test is that many
+    days away.
+
+
+    Use `{{ revision_summary }}` in your action for a ready-made message, or
+    `{{ revision_lines }}` / `{{ exam_count }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/exam_revision_reminder.yaml
+  input:
+    next_exam_entity:
+      name: Next exam sensor
+      description: The Librus "Next exam" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    days_before:
+      name: Days before the test
+      description: How many days ahead to remind.
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 14
+          mode: box
+          unit_of_measurement: days
+    check_time:
+      name: Time
+      description: When to check each day.
+      default: "17:00:00"
+      selector:
+        time: {}
+    notify_action:
+      name: Notification action
+      description: The action to run when a test is that many days away.
+      selector:
+        action: {}
+
+variables:
+  next_exam_entity: !input next_exam_entity
+  days_before: !input days_before
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (state_attr(next_exam_entity, 'upcoming') or [])
+         | selectattr('days_until', 'eq', days_before | int) | list | count > 0 }}
+
+actions:
+  - variables:
+      # `upcoming` items carry date, subject, category, days_until and
+      # `topics` (date, lesson_no, topic, absent).
+      revision_lines: >-
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for e in (state_attr(next_exam_entity, 'upcoming') or []) if e.days_until == days_before | int -%}
+          {%- set head = (e.category ~ ' · ' if e.category else '') ~ (e.subject or 'lekcja') -%}
+          {%- set topics = e.topics or [] -%}
+          {%- if topics -%}
+            {%- set tns = namespace(items=[]) -%}
+            {%- for t in topics -%}
+              {%- set tns.items = tns.items + [t.topic ~ (' (nieobecny)' if t.absent else '')] -%}
+            {%- endfor -%}
+            {%- set ns.lines = ns.lines + [head ~ ' - do powtórki: ' ~ tns.items | join('; ')] -%}
+          {%- else -%}
+            {%- set ns.lines = ns.lines + [head ~ (': ' ~ e.content if e.content else '')] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      exam_count: >-
+        {{ (state_attr(next_exam_entity, 'upcoming') or []) | selectattr('days_until', 'eq', days_before | int) | list | count }}
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(next_exam_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      revision_summary: "{{ (student_name ~ ': ') if student_name else '' }}Za {{ days_before | int }} dni:\n{{ revision_lines }}"
+  - !input notify_action
+
+mode: single

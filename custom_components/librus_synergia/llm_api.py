@@ -32,6 +32,7 @@ from homeassistant.util import dt as dt_util
 
 from librus_synergia import LibrusError
 from librus_synergia.models import LibrusData
+from librus_synergia.parsers import plan_differences
 
 from .ai_summary import _compact, _cut, _dated, _day
 from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
@@ -45,6 +46,7 @@ from .coordinator import (
     merge_timetables,
     teacher_subject_ids,
 )
+from .exam_prep import exam_prep, is_exam, missed_lessons
 from .forecast import subject_forecasts
 
 _LOGGER = logging.getLogger(__name__)
@@ -277,7 +279,8 @@ class GradesTool(_LibrusTool):
         "'+' adds 0.5 and '-' takes 0.25; marks such as np, bz, + or - alone do not count "
         "towards the average. Also a forecast of the report-card grade per subject (from the "
         "average and the school's thresholds - the teacher decides the real grade) with how "
-        "many 6s lift it and how many 1s drop it. Filter by subject and by how many days back."
+        "many 6s lift it and how many 1s drop it. Also grades a teacher gave as text "
+        "(text_grades) and descriptive grades. Filter by subject and by how many days back."
     )
     parameters = _schema(
         {
@@ -370,6 +373,33 @@ class GradesTool(_LibrusTool):
                 ]
                 or None,
                 "grades": grades,
+                "text_grades": [
+                    _compact(
+                        {
+                            "date": _dated(t.date),
+                            "subject": _subject_name(data, t.subject_id),
+                            "value": _cut(t.value),
+                            "category": t.category,
+                            "teacher": _teacher_name(data, t.teacher_id),
+                        }
+                    )
+                    for t in sorted(data.text_grades, key=lambda t: t.date or "", reverse=True)
+                    if (subject_ids is None or t.subject_id in subject_ids)
+                    and (since is None or (_day(t.date) or date.min) >= since)
+                ][:20]
+                or None,
+                "descriptive_grades": [
+                    _compact(
+                        {
+                            "date": _dated(d.add_date),
+                            "subject": _subject_name(data, d.subject_id),
+                            "value": _cut(d.value),
+                        }
+                    )
+                    for d in sorted(data.descriptive_grades, key=lambda d: d.add_date or "", reverse=True)
+                    if subject_ids is None or d.subject_id in subject_ids
+                ][:10]
+                or None,
                 "more_grades_not_shown": len(picked) - MAX_GRADES if len(picked) > MAX_GRADES else None,
                 "no_grades": True if not picked else None,
             }
@@ -380,9 +410,12 @@ class UpcomingTool(_LibrusTool):
     name = "librus_get_upcoming"
     description = (
         "What is coming up: tests, quizzes, trips and other agenda entries (terminarz) with "
-        "their category, homework with its due date, cancelled or substituted lessons, and "
-        "days off. Use it for 'any tests this week', 'what homework is due', 'when is the "
-        "next maths test', 'is Friday a day off'."
+        "their category, homework with its due date, school trips, how the timetable differs "
+        "from the usual plan (cancelled lessons, substitutions, another room, extra or missing "
+        "lessons), and days off. For each test it lists the topics to revise: the lessons "
+        "taught in that subject since the previous test, marking the ones the student missed. "
+        "Use it for 'any tests this week', 'what should she revise for maths', 'what homework "
+        "is due', 'is Friday a day off', 'any changes in the timetable'."
     )
     parameters = _schema(
         {
@@ -401,21 +434,41 @@ class UpcomingTool(_LibrusTool):
             return day is not None and today <= day <= until
 
         by_teacher = teacher_subject_ids(data.timetable)
-        agenda = [
-            _compact(
-                {
-                    "date": _dated(item.date),
-                    "time": item.time_from,
-                    "subject": _subject_name(data, item.subject_id),
-                    "category": data.homework_categories.get(item.category_id)
-                    if item.category_id is not None
-                    else None,
-                    "content": _cut(item.content),
-                }
+        revision = {prep.item.id: prep for prep in exam_prep(data, today, until=until)}
+        agenda = []
+        for item in sorted(data.homeworks, key=lambda h: h.date or ""):
+            if not in_range(item.date) or (subject_ids is not None and item.subject_id not in subject_ids):
+                continue
+            prep = revision.get(item.id)
+            agenda.append(
+                _compact(
+                    {
+                        "date": _dated(item.date),
+                        "time": item.time_from,
+                        "subject": _subject_name(data, item.subject_id),
+                        "category": data.homework_categories.get(item.category_id)
+                        if item.category_id is not None
+                        else None,
+                        "content": _cut(item.content),
+                        "is_test": True if is_exam(data, item) else None,
+                        "topics_to_revise": [
+                            _compact(
+                                {
+                                    "date": _dated(t.date),
+                                    "topic": _cut(t.topic, 160),
+                                    "student_was_absent": True if t.absent else None,
+                                }
+                            )
+                            for t in prep.topics
+                        ]
+                        if prep and prep.topics
+                        else None,
+                        "revise_since_previous_test_on": _dated(prep.since)
+                        if prep and prep.since
+                        else None,
+                    }
+                )
             )
-            for item in sorted(data.homeworks, key=lambda h: h.date or "")
-            if in_range(item.date) and (subject_ids is None or item.subject_id in subject_ids)
-        ]
         homework = []
         for item in sorted(data.homework_assignments, key=lambda h: h.due_date or ""):
             if not in_range(item.due_date):
@@ -452,6 +505,37 @@ class UpcomingTool(_LibrusTool):
             if (lesson.is_canceled or lesson.is_substitution)
             and (subject_ids is None or lesson.subject_id in subject_ids)
         ]
+        # Against the standing weekly plan: also a lesson in another room,
+        # an extra or a missing lesson, a weekday without lessons.
+        plan = [
+            _compact(
+                {
+                    "date": _dated(diff.date),
+                    "no": diff.lesson_no,
+                    "difference": diff.kind,
+                    "subject": _subject_name(data, diff.subject_id),
+                    "usual_subject": _subject_name(data, diff.planned_subject_id),
+                    "room": data.classrooms.get(diff.classroom_id) if diff.classroom_id is not None else None,
+                    "usual_room": diff.planned_classroom,
+                    "day_off": diff.free_day,
+                }
+            )
+            for diff in plan_differences(data.timetable, data.standing_timetable, data.free_days)
+            if today <= diff.date <= until and diff.kind != "cancelled"
+        ]
+        trips = [
+            _compact(
+                {
+                    "from": _dated(trip.date_from),
+                    "to": _dated(trip.date_to) if trip.date_to != trip.date_from else None,
+                    "destination": _cut(trip.destination, 160),
+                    "transport": trip.transport or None,
+                    "coordinator": trip.coordinator,
+                }
+            )
+            for trip in data.school_trips
+            if (_day(trip.date_from) or date.max) <= until and (_day(trip.date_to) or date.min) >= today
+        ]
         free_days = [
             {"name": f.name, "from": _dated(f.date_from), "to": _dated(f.date_to)}
             for f in data.free_days
@@ -463,8 +547,12 @@ class UpcomingTool(_LibrusTool):
                 "agenda": agenda,
                 "homework_due": homework,
                 "timetable_changes": changes,
+                "differences_from_usual_plan": plan or None,
+                "school_trips": trips or None,
                 "days_off": free_days,
-                "nothing_planned": True if not (agenda or homework or changes or free_days) else None,
+                "nothing_planned": True
+                if not (agenda or homework or changes or plan or trips or free_days)
+                else None,
             }
         )
 
@@ -474,7 +562,8 @@ class AttendanceTool(_LibrusTool):
     description = (
         "Attendance: absences (excused and not yet excused), late arrivals, attendance "
         "percentage overall and per subject (below 50% in a subject risks not being "
-        "classified), and the dates of absences that still need an excuse."
+        "classified), the dates of absences that still need an excuse, and the "
+        "justifications the parent sent with the school's decision."
     )
     parameters = _schema(
         {
@@ -539,6 +628,23 @@ class AttendanceTool(_LibrusTool):
                 "days_without_absence": days_since_last_absence(
                     data.attendances, data.attendance_types, data.school_class, today
                 ),
+                "justifications_sent": [
+                    _compact(
+                        {
+                            "sent": _dated(j.posted),
+                            "from": _dated(j.date_from),
+                            "to": _dated(j.date_to),
+                            "status": "accepted"
+                            if j.is_accepted
+                            else "rejected"
+                            if j.is_rejected
+                            else "waiting for the school",
+                            "lessons": j.justified_absences or None,
+                        }
+                    )
+                    for j in data.justifications[:8]
+                ]
+                or None,
             }
         )
 
@@ -603,7 +709,8 @@ class SchoolInfoTool(_LibrusTool):
         "The student's school and class: class name, homeroom teacher, school name and "
         "address, the student's number in the class register, today's lucky number "
         "(szczęśliwy numerek: the student with that number is not asked to answer that "
-        "day) and whether it is theirs, and the semester and school-year end dates."
+        "day) and whether it is theirs, the semester and school-year end dates, and the "
+        "documents the school shares with parents (forms, regulations)."
     )
     parameters = _schema({"student": _STUDENT_FIELD})
 
@@ -641,6 +748,11 @@ class SchoolInfoTool(_LibrusTool):
                 else None,
                 "first_semester_ends": _dated(cls.end_first_semester) if cls else None,
                 "school_year_ends": _dated(cls.end_school_year) if cls else None,
+                "school_documents": [
+                    _compact({"name": _cut(f.name, 160), "added": _dated(f.added)})
+                    for f in data.school_files[:15]
+                ]
+                or None,
             }
         )
 
@@ -699,10 +811,61 @@ class MessagesTool(_LibrusTool):
         )
 
 
+class LessonTopicsTool(_LibrusTool):
+    name = "librus_get_lesson_topics"
+    description = (
+        "What was taught: the topic of every lesson held, by date and lesson number, with "
+        "whether the student missed it. Use it for 'what was in maths yesterday', 'what did "
+        "she miss while ill', 'what have they covered in history this month'."
+    )
+    parameters = _schema(
+        {
+            "date": (str, "Only this day, YYYY-MM-DD."),
+            "days": (int, "How many days back from today. Defaults to 7, at most 60."),
+            "subject": (str, "Only this subject (part of its name)."),
+            "student": _STUDENT_FIELD,
+        }
+    )
+
+    async def _async_for_student(self, coordinator, data, today, args):
+        only = _day(str(args.get("date") or ""))
+        since = today - timedelta(days=_int_arg(args, "days", 7, 1, MAX_DAYS))
+        subject_ids = _matching_subject_ids(data, args.get("subject"))
+        missed = missed_lessons(data)
+        lessons = []
+        for t in sorted(data.lesson_topics, key=lambda t: (t.date or "", t.lesson_no or 0)):
+            day = _day(t.date)
+            if day is None or (only is not None and day != only) or (only is None and day < since):
+                continue
+            if subject_ids is not None and t.subject_id not in subject_ids:
+                continue
+            absent = (day.isoformat(), t.lesson_no) in missed
+            lessons.append(
+                _compact(
+                    {
+                        "date": _dated(day),
+                        "no": t.lesson_no,
+                        "subject": _subject_name(data, t.subject_id),
+                        "topic": _cut(t.topic, 200),
+                        "trip": True if t.is_trip else None,
+                        "student_was_absent": True if absent else None,
+                    }
+                )
+            )
+        return _compact(
+            {
+                "lessons": lessons[-80:],
+                "missed_by_student": sum(1 for l in lessons if l.get("student_was_absent")) or None,
+                "no_topics": True if not lessons else None,
+            }
+        )
+
+
 TOOLS: tuple[type[_LibrusTool], ...] = (
     TimetableTool,
     GradesTool,
     UpcomingTool,
+    LessonTopicsTool,
     AttendanceTool,
     BehaviourTool,
     SchoolInfoTool,

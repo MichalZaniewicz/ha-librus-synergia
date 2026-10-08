@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.helpers import llm
 from homeassistant.util import dt as dt_util
 
@@ -45,6 +47,7 @@ async def test_api_registered_with_read_only_tools(hass) -> None:
         "librus_get_timetable",
         "librus_get_grades",
         "librus_get_upcoming",
+        "librus_get_lesson_topics",
         "librus_get_attendance",
         "librus_get_behaviour",
         "librus_get_school_info",
@@ -128,6 +131,60 @@ async def test_grades_tool_filters_by_subject_and_marks_corrections(hass) -> Non
             "ones_until_grade_drops": 3,
         }
     ]
+
+
+def _shifted(days: int) -> str:
+    return (dt_util.now().date() + timedelta(days=days)).isoformat()
+
+
+def _topics_client(**extra):
+    return build_mock_client(
+        async_get_subjects=_SUBJECTS,
+        async_get_lessons={"Lessons": [{"Id": 501, "Subject": {"Id": 100}}, {"Id": 502, "Subject": {"Id": 200}}]},
+        async_get_realizations={
+            "Realizations": [
+                {"Id": "t1", "Lesson": {"Id": 501}, "LessonNo": 1, "Date": _shifted(-3), "Topic": "Ułamki"},
+                {"Id": "t2", "Lesson": {"Id": 502}, "LessonNo": 2, "Date": _shifted(-2), "Topic": "Lektura"},
+                {"Id": "t3", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": _shifted(-1), "Topic": "Procenty"},
+            ]
+        },
+        async_get_attendances={
+            "Attendances": [{"Id": 1, "Date": _shifted(-1), "LessonNo": "3", "Semester": 1, "Type": {"Id": 1}}]
+        },
+        async_get_attendance_types={"Types": [{"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False}]},
+        **extra,
+    )
+
+
+async def test_lesson_topics_tool_marks_missed_lessons(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    await setup_integration(hass, _topics_client())
+
+    data = await _call(hass, "librus_get_lesson_topics", subject="matem")
+    assert [(l["topic"], l.get("student_was_absent")) for l in data["lessons"]] == [
+        ("Ułamki", None),
+        ("Procenty", True),
+    ]
+    assert data["missed_by_student"] == 1
+
+
+async def test_upcoming_tool_lists_topics_to_revise(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = _topics_client(
+        async_get_homework_categories={"Categories": [{"Id": 1, "Name": "Sprawdzian"}]},
+        async_get_homeworks={
+            "HomeWorks": [
+                {"Id": 7, "Content": "Dział 2", "Date": _shifted(4), "Category": {"Id": 1}, "Subject": {"Id": 100}}
+            ]
+        },
+    )
+    await setup_integration(hass, client)
+
+    data = await _call(hass, "librus_get_upcoming")
+    (test,) = data["agenda"]
+    assert test["is_test"] is True
+    assert [t["topic"] for t in test["topics_to_revise"]] == ["Ułamki", "Procenty"]
+    assert test["topics_to_revise"][1]["student_was_absent"] is True
 
 
 async def test_unknown_student_is_an_error(hass) -> None:

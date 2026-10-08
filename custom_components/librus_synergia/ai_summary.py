@@ -56,6 +56,7 @@ from .coordinator import (
     infer_subject_id,
     teacher_subject_ids,
 )
+from .exam_prep import exam_prep, missed_lessons
 from .forecast import subject_forecasts
 
 if TYPE_CHECKING:
@@ -204,8 +205,16 @@ report-card grade the averages point to (a forecast - the teacher decides), only
 subjects at risk of a 1, that fell recently, or where one 6 / one 1 moves the grade. attendance.this_week counts
 lesson records; open_unexcused is the whole school year. Streaks: good_grade_streak
 = grades 4 or better in a row, days_without_absence / days_without_negative_note
-are calendar days. attendance.absences lists this week's absences and lates. next_week.agenda holds tests, trips and other entries from the
-class calendar; homework_due is real homework with its due date.
+are calendar days. attendance.absences lists this week's absences and lates;
+attendance.missed_lessons_topics is what was taught in the lessons the student
+missed this week (worth catching up on); attendance.justifications counts
+justifications still waiting for the school's decision and recent rejected ones.
+A grade with kind "text" is a teacher's written grade, not a number.
+next_week.agenda holds tests, trips and other entries from the class calendar;
+next_week.tests_to_revise lists the topics taught since the previous test in that
+subject ("(missed)" = the student was absent) - a good source for concrete to-dos;
+homework_due is real homework with its due date. new_school_documents are forms or
+regulations the school shared this week.
 {extra}
 Data:
 {data}"""
@@ -338,6 +347,21 @@ def build_context(
                     "teacher": teacher(grade.teacher_id),
                     "comment": _cut("; ".join(grade.comments)),
                     "kind": kind,
+                }
+            )
+        )
+    for text_grade in sorted(data.text_grades, key=lambda t: t.date or ""):
+        if not _in(_day(text_grade.date or text_grade.add_date), week_from, today):
+            continue
+        grades.append(
+            _compact(
+                {
+                    "date": _dated(text_grade.date or text_grade.add_date),
+                    "subject": subject(text_grade.subject_id),
+                    "value": _cut(text_grade.value),
+                    "category": text_grade.category,
+                    "teacher": teacher(text_grade.teacher_id),
+                    "kind": "text",
                 }
             )
         )
@@ -481,6 +505,68 @@ def build_context(
         and (_day(free.date_to) or date.min) >= week_from
     ]
 
+    # Lessons the student missed this week, with what was taught - what to
+    # catch up on.
+    missed = missed_lessons(data)
+    missed_topics = [
+        _compact(
+            {
+                "date": _dated(lesson.date),
+                "lesson_no": lesson.lesson_no,
+                "subject": subject(lesson.subject_id),
+                "topic": _cut(lesson.topic, 160),
+            }
+        )
+        for lesson in sorted(data.lesson_topics, key=lambda t: (t.date or "", t.lesson_no or 0))
+        if _in(_day(lesson.date), week_from, today)
+        and ((lesson.date or "")[:10], lesson.lesson_no) in missed
+    ]
+    # Tests next week with the topics to revise for each.
+    tests_to_revise = [
+        _compact(
+            {
+                "date": _dated(prep.day),
+                "subject": prep.subject,
+                "category": prep.category,
+                "topics": [
+                    _cut(t.topic, 120) + (" (missed)" if t.absent else "") for t in prep.topics[-10:]
+                ],
+                "missed_lessons": prep.missed or None,
+            }
+        )
+        for prep in exam_prep(data, today, until=next_to)
+        if next_from <= prep.day and prep.topics
+    ]
+    trips = [
+        _compact(
+            {
+                "from": _dated(trip.date_from),
+                "to": _dated(trip.date_to) if trip.date_to != trip.date_from else None,
+                "destination": _cut(trip.destination, 160),
+                "transport": trip.transport or None,
+            }
+        )
+        for trip in data.school_trips
+        if (_day(trip.date_from) or date.max) <= next_to
+        and (_day(trip.date_to) or date.min) >= week_from
+    ]
+    documents = [
+        _cut(item.name, 120)
+        for item in data.school_files
+        if _in(_day(item.added), week_from, today)
+    ]
+    justifications = _compact(
+        {
+            "waiting_for_school": sum(1 for j in data.justifications if j.is_pending) or None,
+            "rejected_recently": [
+                _compact({"from": _dated(j.date_from), "to": _dated(j.date_to)})
+                for j in data.justifications
+                if j.is_rejected and _in(_day(j.posted), today - timedelta(days=30), today)
+            ]
+            or None,
+        }
+    )
+
     school_class = data.school_class
     context: dict[str, Any] = {
         "student": student,
@@ -523,8 +609,11 @@ def build_context(
                 "absences": absences,
                 "open_unexcused": len(open_unexcused),
                 "open_unexcused_dates": sorted(set(open_unexcused))[-10:],
+                "missed_lessons_topics": missed_topics[:20],
+                "justifications": justifications,
             }
         ),
+        "new_school_documents": documents,
         "notes": notes,
         "behaviour_grade": behaviour_grade,
         "streaks": _compact(
@@ -545,6 +634,8 @@ def build_context(
                 "agenda": agenda,
                 "homework_due": homework_due,
                 "timetable_changes": timetable_changes[:20],
+                "tests_to_revise": tests_to_revise,
+                "school_trips": trips,
                 "free_days": free_days,
             }
         ),

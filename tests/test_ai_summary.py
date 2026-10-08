@@ -160,6 +160,34 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
     assert not is_empty_week(context)
 
 
+async def test_build_context_has_revision_topics_and_missed_lessons(hass) -> None:
+    client = _client()
+    client.async_get_lessons.return_value = {"Lessons": [{"Id": 501, "Subject": {"Id": 42005}}]}
+    client.async_get_realizations.return_value = {
+        "Realizations": [
+            {"Id": "t1", "Lesson": {"Id": 501}, "LessonNo": 2, "Date": "2026-09-29", "Topic": "Ułamki"},
+            {"Id": "t2", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": "2026-09-30", "Topic": "Procenty"},
+        ]
+    }
+    client.async_get_attendances.return_value = {
+        "Attendances": [
+            {"Id": 1, "Date": "2026-09-30", "LessonNo": "3", "Semester": 1, "Type": {"Id": 1}},
+        ]
+    }
+    client.async_get_school_files.return_value = {
+        "Data": [{"id": "f1", "displayName": "Regulamin wycieczek", "addedOnDate": "2026-10-02 10:00:00"}]
+    }
+    entry = await setup_integration(hass, client)
+
+    context = build_context(entry.runtime_data.data, _TODAY, weighted=True, include_news=False, student=None)
+
+    (test,) = context["next_week"]["tests_to_revise"]
+    assert test["subject"] == "Matematyka"
+    assert test["topics"] == ["Ułamki", "Procenty (missed)"]
+    assert [t["topic"] for t in context["attendance"]["missed_lessons_topics"]] == ["Procenty"]
+    assert context["new_school_documents"] == ["Regulamin wycieczek"]
+
+
 async def test_empty_week_is_detected(hass) -> None:
     entry = await setup_integration(hass, build_mock_client())
     context = build_context(
