@@ -60,13 +60,7 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 65 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-report-card.png" alt="Report card forecast card" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-school-trips.png" alt="School trips card" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-lesson-topics.png" alt="What was taught card" width="32%">
-</p>
-
-![Timetable cards with a substitution and room changes](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-room-changes.png)
+![Report card forecast, school trips, lesson topics, catch-up, behaviour, exam prep, school documents and attendance by subject cards](docs/cards-showcase.png)
 
 <details>
 <summary><b>All 65 cards</b></summary>
