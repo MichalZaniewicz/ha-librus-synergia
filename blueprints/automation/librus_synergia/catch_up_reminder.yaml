@@ -1,0 +1,82 @@
+blueprint:
+  name: "Librus: What to Catch Up After an Absence"
+  description: >
+    On the day your child is back at school after an absence, at a set time,
+    runs your action - typically "Send a notification" - with what was missed:
+    the topics of the lessons missed, per subject, and the homework given in
+    the meantime. Read from the Lesson topics sensor (`catch_up`). Silent on
+    every other day.
+
+
+    Use `{{ catch_up_summary }}` in your action for a ready-made message, or
+    `{{ catch_up_lines }}` / `{{ homework_lines }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/catch_up_reminder.yaml
+  input:
+    lesson_topics_entity:
+      name: Lesson topics sensor
+      description: The Librus "Lesson topics" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    check_time:
+      name: Time
+      description: When to send it on the day back at school (after the lessons, when attendance is in).
+      default: "16:00:00"
+      selector:
+        time: {}
+    notify_action:
+      name: Notification action
+      description: The action to run.
+      selector:
+        action: {}
+
+variables:
+  lesson_topics_entity: !input lesson_topics_entity
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (state_attr(lesson_topics_entity, 'catch_up') or {}).get('back_today', false) }}
+
+actions:
+  - variables:
+      # `catch_up` = {from, to, days, back_on, back_today, lessons: [{date,
+      # lesson_no, subject, topic}], homework: [{date, due_date, subject, topic}]}.
+      catch_up_lines: >-
+        {%- set cu = state_attr(lesson_topics_entity, 'catch_up') or {} -%}
+        {%- set lessons = cu.get('lessons', []) -%}
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for subject in lessons | map(attribute='subject') | map('default', 'Lekcja', true) | unique | list -%}
+          {%- set tns = namespace(items=[]) -%}
+          {%- for l in lessons if (l.subject or 'Lekcja') == subject -%}
+            {%- set tns.items = tns.items + [(l.topic or 'brak tematu') ~ ' (' ~ as_timestamp(l.date) | timestamp_custom('%d.%m') ~ ')'] -%}
+          {%- endfor -%}
+          {%- set ns.lines = ns.lines + ['- ' ~ subject ~ ': ' ~ tns.items | join('; ')] -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      homework_lines: >-
+        {%- set cu = state_attr(lesson_topics_entity, 'catch_up') or {} -%}
+        {%- set ns = namespace(lines=[]) -%}
+        {%- for h in cu.get('homework', []) -%}
+          {%- set ns.lines = ns.lines + ['- ' ~ ((h.subject ~ ': ') if h.subject else '') ~ h.topic ~ (' (na ' ~ as_timestamp(h.due_date) | timestamp_custom('%d.%m') ~ ')' if h.due_date else '')] -%}
+        {%- endfor -%}
+        {{ ns.lines | join('\n') }}
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(lesson_topics_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      catch_up_summary: >-
+        {%- set cu = state_attr(lesson_topics_entity, 'catch_up') or {} -%}
+        {%- set period = (as_timestamp(cu.get('from')) | timestamp_custom('%d.%m')) if cu.get('from') else '' -%}
+        {%- if cu.get('to') and cu.get('to') != cu.get('from') -%}
+          {%- set period = period ~ '-' ~ (as_timestamp(cu.get('to')) | timestamp_custom('%d.%m')) -%}
+        {%- endif -%}
+        {{ (student_name ~ ': ') if student_name else '' }}do nadrobienia po nieobecności {{ period }}:{{ '\n' ~ catch_up_lines }}{{ ('\nZadania:\n' ~ homework_lines) if homework_lines else '' }}
+  - !input notify_action
+
+mode: single

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **What to catch up after an absence.** The *Lesson topics* sensor has a
+  `catch_up` attribute for the latest absence (within three weeks): the
+  period (`from`, `to`, `days`), the day the student was back (`back_on`,
+  `back_today`), the lessons missed with their topics and the homework given
+  meanwhile. New blueprint **What to Catch Up After an Absence** sends it on
+  the day back at school (30 blueprints).
+
+### Fixed
+- New-item events: when a part of Librus is missing on the very first
+  refresh (Wiadomości not answering, homework, trips, documents or text
+  grades failing), or when messages or announcements are switched on later,
+  or a timetable is published later, the items that show up then are
+  recorded silently instead of arriving as a batch of "new" notifications.
+
 ## 0.12.1
 
 Everything from 0.12.1-beta.1.

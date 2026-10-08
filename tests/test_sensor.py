@@ -1287,6 +1287,55 @@ async def test_plan_changes_sensor_unknown_without_plan(hass) -> None:
     assert hass.states.get(_entity_id(hass, entry, "plan_changes")).state == "unknown"
 
 
+async def test_lesson_topics_catch_up_after_absence(hass) -> None:
+    """`catch_up`: the latest absence period with the lessons missed (topic
+    when there is one), homework given meanwhile and the day back."""
+    today = dt_util.now().date()
+
+    def day(offset: int) -> str:
+        return (today + timedelta(days=offset)).isoformat()
+
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}, {"Id": 200, "Name": "Historia"}]},
+        async_get_lessons={"Lessons": [{"Id": 501, "Subject": {"Id": 100}}, {"Id": 502, "Subject": {"Id": 200}}]},
+        async_get_realizations={
+            "Realizations": [
+                {"Id": "t1", "Lesson": {"Id": 501}, "LessonNo": 1, "Date": day(-1), "Topic": "Ułamki"},
+            ]
+        },
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": day(-1), "LessonNo": "1", "Lesson": {"Id": 501}, "Semester": 1, "Type": {"Id": 1}},
+                {"Id": 2, "Date": day(-1), "LessonNo": "2", "Lesson": {"Id": 502}, "Semester": 1, "Type": {"Id": 1}},
+                {"Id": 3, "Date": day(0), "LessonNo": "1", "Lesson": {"Id": 501}, "Semester": 1, "Type": {"Id": 100}},
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+            ]
+        },
+        async_get_homework_assignments={
+            "HomeWorkAssignments": [
+                {"Id": 9, "Topic": "Zadania 1-5", "Text": "str. 42", "Teacher": {"Id": 300}, "Date": day(-1), "DueDate": day(2)},
+                {"Id": 8, "Topic": "Stare", "Text": "", "Teacher": {"Id": 300}, "Date": day(-10), "DueDate": day(-5)},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    cu = hass.states.get(_entity_id(hass, entry, "lesson_topics")).attributes["catch_up"]
+    assert cu["from"] == cu["to"] == day(-1)
+    assert cu["back_on"] == day(0)
+    assert cu["back_today"] is True
+    assert [(l["lesson_no"], l["subject"], l["topic"]) for l in cu["lessons"]] == [
+        (1, "Matematyka", "Ułamki"),
+        (2, "Historia", None),
+    ]
+    assert [h["id"] for h in cu["homework"]] == [9]
+
+
 async def test_school_sensor_exposes_bell_schedule(hass) -> None:
     """bell_schedule just echoes back whatever HourFrom/HourTo strings the
     timetable carries, so fixed clock times are fine here (no dependency on

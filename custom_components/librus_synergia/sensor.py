@@ -64,6 +64,7 @@ from .coordinator import (
 from .coordinator import (
     calculate_average as _calculate_average,
 )
+from .catch_up import catch_up
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, upcoming_exams
 from .forecast import (
     HONOURS_AVERAGE,
@@ -2024,10 +2025,13 @@ def _as_lesson_no(value: Any) -> int | None:
 class LibrusLessonTopicsSensor(LibrusSensorBase):
     """What was taught: lessons held with their topics (Librus's
     `Realizations`). The state is how many lessons today have a topic;
-    `today` and `recent` (the last 14 days, newest first) list them."""
+    `today` and `recent` (the last 14 days, newest first) list them.
+    `catch_up` is the latest absence: the lessons missed with their topics,
+    the homework given meanwhile and the day the student came back (see
+    catch_up.py)."""
 
     _attr_translation_key = "lesson_topics"
-    _unrecorded_attributes = frozenset({"today", "recent"})
+    _unrecorded_attributes = frozenset({"today", "recent", "catch_up"})
     _attr_icon = "mdi:book-open-page-variant-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -2073,6 +2077,7 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
         return {
             "today": sorted(self._rows(only=today.isoformat()), key=lambda r: r["lesson_no"] or 0),
             "recent": self._rows(since=(today - timedelta(days=14)).isoformat())[:80],
+            "catch_up": catch_up(self.coordinator.data, today),
         }
 
 
