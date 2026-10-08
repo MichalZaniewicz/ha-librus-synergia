@@ -46,6 +46,12 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 - 🛟 **Keeps working when Librus doesn't.** The last good data stays up through an outage, the session renews itself, and a normal login needs no captcha.
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
 
+
+
+https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
+
+
+
 <p align="center">
   <img src="docs/ai-summary-banner.svg" alt="Weekly AI summary">
 </p>
