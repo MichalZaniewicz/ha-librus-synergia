@@ -26,7 +26,9 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." src="https://my.home-assistant.io/badges/hacs_repository.svg"></a>
 </p>
 
-**[Documentation (wiki)](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)** · [Installation](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation) · [Configuration](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration) · [Entities](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities) · [Blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) · [Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)
+<p align="center">
+  <b><a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki">Documentation (wiki)</a></b> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation">Installation</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration">Configuration</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities">Entities</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints">Blueprints</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards">Cards</a>
+</p>
 
 ## What it does
 
