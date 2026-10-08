@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.2-beta.1
 
 ### Added
 - **What to catch up after an absence.** The *Lesson topics* sensor has a
