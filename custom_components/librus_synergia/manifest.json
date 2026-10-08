@@ -11,7 +11,7 @@
   "dependencies": [
     "http"
   ],
-  "documentation": "https://github.com/MichalZaniewicz/ha-librus-synergia",
+  "documentation": "https://github.com/MichalZaniewicz/ha-librus-synergia/wiki",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/MichalZaniewicz/ha-librus-synergia/issues",
