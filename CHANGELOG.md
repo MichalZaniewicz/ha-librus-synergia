@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1-beta.5
+
+### Fixed
+- Text grades no longer carry Librus's line breaks and indentation
+  ("diagnoza GWO - sesja I 80%"). Requires `librus-synergia` 0.3.6.
+
 ## 0.11.1-beta.4
 
 ### Added
