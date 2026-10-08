@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **What to revise for a test.** The *Next exam* sensor lists, for the next
+  test and for each one in `upcoming`, the topics taught in that subject since
+  the previous test in the same subject (or since the start of the school
+  year): `topics` (date, lesson number, topic, `absent`), `topics_since`,
+  `missed_topics`, `more_topics`. New blueprint **What to Revise Before a
+  Test** sends them a few days ahead (29 blueprints).
+- **Changes to the usual timetable.** A new sensor compares this week and
+  next with the standing weekly plan Librus keeps (`TimetableEntries`): the
+  state is how many lesson slots from today on differ, `changes` lists them
+  (cancelled, missing, extra, another subject, another room, a weekday
+  without lessons). The standing plan is read once a day.
+- **Ask Assist knows more.** A new tool, `librus_get_lesson_topics` (what was
+  taught, which lessons the student missed), and the existing tools now
+  cover the topics to revise for each test, school trips, differences from
+  the usual plan, text and descriptive grades, the justifications sent with
+  the school's decision, and the school's documents (eight tools).
+- **The weekly AI summary sees more:** the topics of the lessons missed this
+  week, the topics to revise for next week's tests, school trips, new school
+  documents, waiting or rejected justifications, and text grades.
+- Absence justifications: each entry in `recent` carries `decision`
+  (`accepted` / `rejected` / `pending`).
+
+### Changed
+- Requires `librus-synergia` 0.3.7.
+
 ## 0.12.0
 
 Everything from the 0.11.1 betas.

@@ -998,6 +998,13 @@ class LibrusJustificationsSensor(LibrusSensorBase):
                 {
                     "id": j.id,
                     "status": j.status,
+                    # The school's decision, from `status` (whose raw
+                    # values differ between Librus versions).
+                    "decision": "accepted"
+                    if j.is_accepted
+                    else "rejected"
+                    if j.is_rejected
+                    else "pending",
                     "posted": j.posted,
                     "date_from": j.date_from,
                     "date_to": j.date_to,

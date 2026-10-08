@@ -31,9 +31,10 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 ## What it does
 
 - 📚 **Everything from the e-register.** Grades with comments and categories, averages per subject, attendance, behaviour notes and grade, the timetable, tests and homework, messages, announcements, the lucky number - and what was actually taught in each lesson.
+- 📝 **Know what to revise.** For every upcoming test, the topics taught in that subject since the previous test, with the lessons your child missed marked - on a card, in a reminder a few days before, and in Assist's answers.
 - 🎯 **Know the report card before it's written.** A forecast of every subject's report-card grade from its average and your school's thresholds, how many 6s lift it and how many 1s drop it, and an alarm when a subject heads for a 1.
-- 🔔 **Notifications that matter.** A new grade, a cancelled lesson or a room change, a test tomorrow, a test moved to another day, a school trip, an unexcused absence - 28 ready-made blueprints, one click to import.
-- 🏠 **The school day in your home.** *School day today/tomorrow* and *At school* sensors, school start and end times: wake the house before the first lesson, skip the alarm on a day off, remind you when to leave for pick-up.
+- 🔔 **Notifications that matter.** A new grade, a cancelled lesson or a room change, a test tomorrow, a test moved to another day, a school trip, an unexcused absence - 29 ready-made blueprints, one click to import.
+- 🏠 **The school day in your home.** *School day today/tomorrow* and *At school* sensors, school start and end times: wake the house before the first lesson, skip the alarm on a day off, remind you when to leave for pick-up. A sensor shows how this week differs from the usual timetable.
 - 🤖 **A weekly summary written by AI.** Once a week, your own AI model in Home Assistant sums up grades, attendance, behaviour and the week ahead, with 2-4 concrete to-dos.
 - 🗣️ **Ask Assist.** *"What does Ola have tomorrow?"* *"When is the next maths test?"* - by voice or in the chat.
 - 📎 **Message attachments,** straight to your device, without marking the message read in Librus.
@@ -54,7 +55,7 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 
 ## A dashboard in minutes
 
-**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 61 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 64 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-report-card.png" alt="Report card forecast card" width="32%">
@@ -65,7 +66,7 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 ![Timetable cards with a substitution and room changes](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-room-changes.png)
 
 <details>
-<summary><b>All 61 cards</b></summary>
+<summary><b>All 64 cards</b></summary>
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
@@ -92,13 +93,13 @@ Then pick the [blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia
 Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)**:
 
 - **Getting started:** [Installation](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation) · [Configuration](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration) - setting it up, every option with its default.
-- **Features:** [Weekly AI summary](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary) · [Ask Assist](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Ask-Assist) · [Blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) (all 28, with import buttons).
+- **Features:** [Weekly AI summary](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary) · [Ask Assist](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Ask-Assist) · [Blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) (all 29, with import buttons).
 - **Reference:** [Entities](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities) · [Events](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Events) · [Services](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Services) - every sensor and its attributes, every event and its data, the actions.
 - **Background:** [How it works](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/How-it-works) · [Known limitations](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Known-limitations) - the login, outages, the year-long grade history, what's still unverified.
 
 ## Related projects
 
-- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 61 Lovelace cards for this integration.
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 64 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
