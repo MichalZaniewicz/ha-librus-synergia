@@ -134,9 +134,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
         sender_name = resolve_sender_name(data)
         # CONFIRMED live (2026-09-17): each entry is {"filename": ..., "id":
-        # ...}. The file itself still can't be downloaded through this
-        # integration (see BACKLOG.md) - only the name, so at least someone
-        # knows what to look for in the real Librus app/website.
+        # ...}. The file itself downloads through attachment_view.py.
         attachments = [
             {"id": str(a["id"]), "filename": a.get("filename")}
             for a in data.get("attachments") or []

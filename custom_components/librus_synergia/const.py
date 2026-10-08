@@ -120,9 +120,9 @@ DEFAULT_AVERAGE_MODE = AVERAGE_MODE_WEIGHTED
 CONF_GRADE_THRESHOLDS = "grade_thresholds"
 
 # The student's own number in the class register ("numer w dzienniku") -
-# CONFIRMED (via szkolny-android's reference source) that Librus's API does
-# not expose this anywhere at all; even that reference app just asks the
-# user to type it in once via a settings dialog rather than fetching it.
+# an optional manual override. The number is normally read from Librus
+# (`Users/{Me.Account.UserId}.ClassRegisterNumber`, with the `informacja`
+# web page as a fallback - see coordinator._async_refresh_student_number).
 # Genuinely optional and unset by default (no DEFAULT_* - absent means "not
 # configured", distinct from any real roster number) so the Lucky number
 # sensor's `is_yours` attribute can stay `None` ("unknown, not configured")
@@ -296,9 +296,9 @@ ISSUE_OPTIONAL_ENDPOINT_DEGRADED = "optional_endpoint_degraded"
 # second one.
 LUCKY_NUMBER_PUBLISH_HOUR = 15
 
-# New-item bus events. Seen-id bookkeeping is in-memory only (see
-# coordinator.py's `_fire_for_new_ids`) - a HA restart just re-seeds
-# quietly, so there's nothing to prune across restarts.
+# New-item bus events. What has been announced is saved in the entry's
+# state Store (see coordinator.async_restore_state), so items that arrive
+# while Home Assistant is off still fire after a restart.
 EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"

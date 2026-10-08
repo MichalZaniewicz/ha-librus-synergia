@@ -1428,9 +1428,7 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
 class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
     """Count of real homework assignments ("zadania domowe") - distinct
     from the Agenda calendar's general `HomeWorks` feed (tests/trips/etc.
-    too). Fields CONFIRMED via szkolny-android's reference parser
-    (2026-09-06), but never seen populated - the test account's
-    `HomeWorkAssignments` endpoint has always been empty."""
+    too). Fields confirmed live with real assignments (2026-09-17)."""
 
     _attr_translation_key = "homework_assignments"
     _unrecorded_attributes = frozenset({"recent"})
@@ -1628,7 +1626,7 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
     Reading this sensor never marks anything read in real Librus - the
     coordinator only ever calls the message LIST/count endpoints, never a
     single-message detail endpoint (see LibrusApiClient's Wiadomości
-    methods). `unknown` if this Librus install doesn't have the messages
+    methods). `unavailable` if this Librus install doesn't have the messages
     module enabled at all (`messages_available=False`), rather than 0 -
     those are different situations and shouldn't look the same.
     """
