@@ -1,13 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.12.1
 
-### Fixed
-- Topics to revise: a topic the teacher entered for several lessons is listed
-  once, with every date in `dates` and the count in `lessons` (it showed up
-  once per lesson).
-
-## 0.12.1-beta.1
+Everything from 0.12.1-beta.1.
 
 ### Added
 - **What to revise for a test.** The *Next exam* sensor lists, for the next
@@ -34,6 +29,11 @@
 
 ### Changed
 - Requires `librus-synergia` 0.3.7.
+
+### Fixed
+- Topics to revise: a topic the teacher entered for several lessons is listed
+  once, with every date in `dates` and the count in `lessons` (it showed up
+  once per lesson).
 
 ## 0.12.0
 
