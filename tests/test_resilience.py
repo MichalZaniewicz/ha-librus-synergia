@@ -364,11 +364,12 @@ async def test_messages_missing_at_first_poll_are_not_announced_later(hass) -> N
 
     events = async_capture_events(hass, EVENT_NEW_MESSAGE)
     client = build_mock_client()
-    client.async_bootstrap_messages.return_value = False
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.side_effect = LibrusConnectionError("down")
     coordinator = _coordinator(hass, client)
     await coordinator._async_update_data()
 
-    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.side_effect = None
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 2}}
     client.async_get_messages.return_value = {"data": [_message("1"), _message("2")]}
     await coordinator._async_update_data()
