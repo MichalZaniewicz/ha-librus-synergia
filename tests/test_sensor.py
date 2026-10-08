@@ -1218,6 +1218,8 @@ async def test_next_exam_sensor_lists_topics_since_previous_test(hass) -> None:
                 {"Id": "t2", "Lesson": {"Id": 501}, "LessonNo": 2, "Date": day(-10), "Topic": "Sprawdzian"},
                 {"Id": "t3", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": day(-5), "Topic": "Ułamki"},
                 {"Id": "t4", "Lesson": {"Id": 501}, "LessonNo": 3, "Date": day(-1), "Topic": "Procenty"},
+                # The same topic over two lessons is one entry to revise.
+                {"Id": "t6", "Lesson": {"Id": 501}, "LessonNo": 4, "Date": day(-2), "Topic": "Procenty "},
                 {"Id": "t5", "Lesson": {"Id": 502}, "LessonNo": 4, "Date": day(-2), "Topic": "Komórka"},
             ]
         },
@@ -1236,6 +1238,8 @@ async def test_next_exam_sensor_lists_topics_since_previous_test(hass) -> None:
         ("Procenty", True),
     ]
     assert state.attributes["missed_topics"] == 1
+    assert state.attributes["topics"][1]["dates"] == [day(-2), day(-1)]
+    assert state.attributes["topics"][1]["lessons"] == 2
     upcoming = state.attributes["upcoming"][0]
     assert upcoming["days_until"] == 3
     assert [t["topic"] for t in upcoming["topics"]] == ["Ułamki", "Procenty"]

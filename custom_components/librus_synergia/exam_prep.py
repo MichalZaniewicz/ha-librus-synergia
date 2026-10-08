@@ -37,6 +37,10 @@ class RevisionTopic:
     lesson_no: int | None
     topic: str
     absent: bool
+    # Every lesson with this same topic (a teacher often enters one topic
+    # for several lessons); `date` is the first of them, `absent` is true
+    # when the student missed any.
+    dates: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -174,6 +178,7 @@ def exam_prep(
                     )
                 )
             topics.sort(key=lambda t: (t.date, t.lesson_no or 0))
+            topics = _merge_repeated(topics)
             if len(topics) > MAX_TOPICS:
                 prep.more_topics = len(topics) - MAX_TOPICS
                 topics = topics[-MAX_TOPICS:]
@@ -182,8 +187,31 @@ def exam_prep(
     return result
 
 
+def _merge_repeated(topics: list[RevisionTopic]) -> list[RevisionTopic]:
+    """One entry per distinct topic (case and spacing ignored), in the order
+    the topic first came up."""
+    merged: dict[str, RevisionTopic] = {}
+    for topic in topics:
+        key = " ".join(topic.topic.casefold().split())
+        first = merged.get(key)
+        if first is None:
+            topic.dates = [topic.date]
+            merged[key] = topic
+        else:
+            first.dates.append(topic.date)
+            first.absent = first.absent or topic.absent
+    return list(merged.values())
+
+
 def topics_as_dicts(prep: ExamPrep) -> list[dict[str, Any]]:
     return [
-        {"date": t.date, "lesson_no": t.lesson_no, "topic": t.topic, "absent": t.absent}
+        {
+            "date": t.date,
+            "lesson_no": t.lesson_no,
+            "topic": t.topic,
+            "absent": t.absent,
+            "dates": t.dates,
+            "lessons": len(t.dates),
+        }
         for t in prep.topics
     ]

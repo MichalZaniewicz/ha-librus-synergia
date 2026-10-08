@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Topics to revise: a topic the teacher entered for several lessons is listed
+  once, with every date in `dates` and the count in `lessons` (it showed up
+  once per lesson).
+
 ## 0.12.1-beta.1
 
 ### Added
