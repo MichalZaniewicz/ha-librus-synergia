@@ -34,6 +34,8 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 Setup, the school day, grades and the report card forecast, attendance, notifications, the weekly AI summary, Assist and the companion cards. English voice-over, Polish subtitles.
 
+🔊 The player starts muted, so click the speaker icon for the voice-over.
+
 https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
 
 ## What it does
