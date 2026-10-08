@@ -30,6 +30,8 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 ## What it does
 
+![Librus Synergia for Home Assistant - trailer](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/trailer.webp)
+
 - 📚 **Everything from the e-register.** Grades with comments and categories, averages per subject, attendance, behaviour notes and grade, the timetable, tests and homework, messages, announcements, the lucky number - and what was actually taught in each lesson.
 - 📝 **Know what to revise.** For every upcoming test, the topics taught in that subject since the previous test, with the lessons your child missed marked - on a card, in a reminder a few days before, and in Assist's answers.
 - 📚 **Catch up after an absence.** On the day your child is back, the topics of the missed lessons and the homework given meanwhile, per subject - as a notification and a card to tick off.
