@@ -69,98 +69,18 @@ Each child/student is a separate login and a separate integration entry.
 
 ## Weekly AI summary
 
-Once a week, an AI model of your choice writes a summary of the school week,
-split into sections:
-
-| Section | What it covers |
-|---|---|
-| **Grades** | Every grade from the week (subject, category, weight, teacher's comment), what went well and what didn't, and how the averages moved compared with a week earlier |
-| **Attendance** | Absences and lates, which subjects were missed, what still needs to be excused |
-| **Behaviour** | Notes from the week, the behaviour grade, streaks |
-| **Next week** | Tests and other agenda entries, homework due, cancelled lessons and substitutions, free days |
-| **From the school** (optional) | The important points of the week's messages and announcements: meetings, trips, payments, deadlines |
-
-On top: a one-line headline and an overall status (*good* / *OK* / *needs
-attention*). At the bottom: 2-4 concrete to-dos for the coming week, and a
-warning only when something really needs attention. Each section has its own
-status too, so a dashboard card or a notification can show at a glance what
-to look at.
+Once a week, an AI model of your choice (Gemini, OpenAI, Claude, or a local
+Ollama) writes a summary of the school week: grades, attendance, behaviour,
+the week ahead and, if you want, the important points from the school's
+messages. A headline, a status per section, and 2-4 to-dos for the coming
+week. It goes through Home Assistant's own AI Task (2025.8+), with no API key
+in this integration and no extra Librus requests.
 
 ![Weekly AI summary card](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-ai-summary-card-dark.png)
 
-*Shown in the [Weekly AI summary card](https://github.com/MichalZaniewicz/ha-librus-synergia-cards) (example text).*
-
-### How to set it up
-
-You need Home Assistant **2025.8 or newer** (it uses the built-in
-[AI Task](https://www.home-assistant.io/integrations/ai_task/) feature).
-There is no API key in this integration: the summary goes through whatever AI
-provider you already use in Home Assistant.
-
-1. **Add an AI provider to Home Assistant**, if you don't have one yet:
-   *Settings → Devices & services → Add integration*, then pick e.g.
-   **Google Generative AI** (Gemini), **OpenAI**, **Anthropic** or
-   **Ollama** (runs locally, nothing leaves your network). Follow its own
-   setup (usually an API key from the provider). It creates an **AI Task**
-   entity such as `ai_task.google_ai_task`.
-2. **Turn the summary on:** *Settings → Devices & services → Librus Synergia →
-   Configure → Weekly AI summary*, and fill in:
-
-   | Field | What to choose |
-   |---|---|
-   | **AI model** | The AI Task entity from step 1. Leave it empty to turn the feature off |
-   | **Written to** | **Parent**: third person, with what you can do. **Student**: written to your child directly, encouraging |
-   | **Day** and **Time** | When the weekly summary is written (default Sunday 18:00). It covers the 7 days up to that day and previews the 7 days after |
-   | **Include messages and announcements** | Off by default. On adds the *From the school* section, but then private messages and school announcements are sent to the AI provider |
-   | **Your notes for the AI** | Optional context, e.g. *"Eighth-grade exam this year, chemistry is the weaker subject"* |
-
-   Save. Three new entities appear on the student's device:
-   - **Weekly summary** sensor: the headline is its state; sections, to-dos and warning are attributes.
-   - **Generate weekly summary** button.
-   - **Automatic weekly summary** switch.
-3. **Write the first one now:** press **Generate weekly summary**. It takes
-   a few seconds; then the **Weekly summary** sensor shows the headline.
-4. **Show it on a dashboard** with the **Weekly AI summary** card from
-   [Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)
-   (`type: custom:librus-ai-summary-card`, no other configuration needed). It
-   has tabs for the sections and its own **Generate now** button.
-5. **Get it on your phone** with the
-   [Weekly AI Summary Report](#automation-blueprints) blueprint. It sends a
-   short report (headline, section statuses, to-dos) or the full text. You
-   choose the sections, and can limit it to weeks that need attention.
-
-With more than one child, set it up on each child's entry. Each one gets its
-own summary, and the blueprint's title says whose it is.
-
-### What gets sent, and when
-
-- Only data the integration already has: no extra Librus requests. The AI
-  provider receives the student's name and class, the week's grades (with
-  teachers' names and comments), the averages and the grade forecast, the
-  week's attendance, behaviour notes and the behaviour grade, streaks, how
-  many absences are still unexcused, and the coming week's agenda, homework
-  due, timetable changes and days off, plus your own notes for the AI. Messages and announcements are included only if you
-  turned that on. Use a local model (Ollama) if nothing should leave your
-  network.
-- **One request a week**, plus any time you press the button. A run missed
-  because Home Assistant was off is made up within 2 days. A week with no
-  lessons and nothing coming up (holidays) is skipped, so it costs nothing.
-- The **Automatic weekly summary** switch pauses the schedule; the button
-  still works.
-- The result is stored, so a restart does not pay for the same summary twice.
-  A new summary fires the `librus_synergia_weekly_summary` event.
-
-### If something doesn't work
-
-- **"The AI Task integration is not available"** when opening *Weekly AI
-  summary*: update Home Assistant to 2025.8+ and add an AI provider first
-  (step 1).
-- **The sensor stays empty after pressing the button:** look at its `error`
-  attribute. It holds the provider's message, e.g. an exhausted quota or a
-  wrong API key.
-- The text is written by an AI model. It is told to stick to the data it
-  gets, but it can still make mistakes, so check anything important in
-  Librus itself.
+**Setup in short:** add an AI provider to Home Assistant, then *Librus
+Synergia → Configure → Weekly AI summary* and pick its AI Task entity.
+**[How to set it up, what gets sent, troubleshooting](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary)**
 
 <p align="center">
   <img src="docs/assist-banner.svg" alt="Ask Assist about school">
@@ -168,31 +88,14 @@ own summary, and the blueprint's title says whose it is.
 
 ## Ask Assist about school
 
-Turn Librus on as a tool set for your Assist conversation agent (Gemini,
-OpenAI, Claude, Ollama...) and ask about school in plain words (in any language your agent speaks), by voice or
-in the Assist chat:
+Ask your Assist conversation agent about school in plain words, by voice or in
+the chat: *"What does Ola have tomorrow?"*, *"When is the next maths test?"*,
+*"How many absences still need an excuse?"*. Seven read-only tools, answered
+from data the integration already has.
 
-- "What does Ola have tomorrow, and when does school start?"
-- "What grades did she get this week?"
-- "When is the next maths test?"
-- "How many absences still need an excuse?"
-
-**Setup:** Settings → Devices & services → your AI integration (e.g. Google
-Generative AI) → the conversation agent's **Configure** → under *Control
-Home Assistant* tick **Librus Synergia** (you can keep *Assist* ticked too).
-Then pick that agent in Settings → Voice assistants.
-
-The agent gets seven read-only tools: timetable for any day, grades and
-averages, what's coming up (tests, homework, days off, timetable changes),
-attendance, behaviour, school and class info (incl. the lucky number), and
-recent messages and announcements. They answer from data the integration
-already holds, so a question adds no Librus request (a timetable date
-outside the current and next week fetches that one week). Nothing is
-changed or sent to Librus. With more than one child, name the child in the
-question; otherwise the agent gets every child.
-
-What you ask, and the tool results it needs, go to the AI provider behind
-that agent. Use a local model (Ollama) if nothing should leave your network.
+**Setup in short:** your AI integration → the conversation agent's
+**Configure** → under *Control Home Assistant* tick **Librus Synergia**.
+**[Setup, the tools, what gets sent](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Ask-Assist)**
 
 <p align="center">
   <img src="docs/cards-banner.svg" alt="Custom Lovelace cards">
