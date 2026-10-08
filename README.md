@@ -65,9 +65,10 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 ## Get started
 
-1. Click **Open in HACS** above (or add this repository in HACS as an *Integration*), install **Librus Synergia (unofficial)** and restart Home Assistant.
-2. Settings → Devices & services → **Add integration** → **Librus Synergia**.
-3. Log in with your child's Librus login (e.g. `1234567u`) and password. One entry per child.
+1. **HACS:** click the HACS button above (or add this repository in HACS as an *Integration*) and download **Librus Synergia (unofficial)**.
+2. **Restart** Home Assistant.
+3. **Add the integration:** Settings → Devices & services → **Add integration** → **Librus Synergia**.
+4. **Log in** with your child's Librus login (e.g. `1234567u`) and password. One entry per child.
 
 Then pick the [blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) you want and add [the cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards). Full instructions, every option and every entity are in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)**.
 
@@ -76,13 +77,12 @@ Then pick the [blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia
 
 ## Documentation
 
-| | |
-|---|---|
-| [Installation](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation) · [Configuration](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration) | Setting it up, every option with its default |
-| [Weekly AI summary](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary) · [Ask Assist](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Ask-Assist) | The AI features: setup, what gets sent |
-| [Blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) | All 28, with import buttons |
-| [Entities](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities) · [Events](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Events) · [Services](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Services) | Every sensor and its attributes, every event and its data, the actions |
-| [How it works](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/How-it-works) · [Known limitations](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Known-limitations) | The login, outages, the year-long grade history, what's still unverified |
+Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)**:
+
+- **Getting started:** [Installation](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation) · [Configuration](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration) - setting it up, every option with its default.
+- **Features:** [Weekly AI summary](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary) · [Ask Assist](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Ask-Assist) · [Blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) (all 28, with import buttons).
+- **Reference:** [Entities](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities) · [Events](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Events) · [Services](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Services) - every sensor and its attributes, every event and its data, the actions.
+- **Background:** [How it works](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/How-it-works) · [Known limitations](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Known-limitations) - the login, outages, the year-long grade history, what's still unverified.
 
 ## Related projects
 
