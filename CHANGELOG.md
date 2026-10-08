@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1-beta.1
 
 ### Added
 - **What to revise for a test.** The *Next exam* sensor lists, for the next
