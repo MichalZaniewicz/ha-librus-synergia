@@ -331,3 +331,76 @@ async def test_agenda_change_survives_restart(hass, hass_storage, freezer) -> No
     await hass.async_block_till_done()
 
     assert [e.data["previous"] for e in events] == [{"date": "2026-10-12"}]
+
+
+def _message(message_id: str) -> dict:
+    return {
+        "messageId": message_id,
+        "senderName": "Anna Nowak",
+        "topic": f"Wiadomość {message_id}",
+        "content": "",
+        "sendDate": "2026-10-01T10:00:00",
+        "readDate": None,
+        "isAnyFileAttached": False,
+    }
+
+
+def _assignment(assignment_id: int) -> dict:
+    return {
+        "Id": assignment_id,
+        "Topic": f"Zadanie {assignment_id}",
+        "Text": "",
+        "Teacher": {"Id": 200},
+        "Date": "2026-10-01",
+        "DueDate": "2026-10-09",
+    }
+
+
+async def test_messages_missing_at_first_poll_are_not_announced_later(hass) -> None:
+    """Wiadomości didn't answer on the very first poll (the tracker was
+    seeded without them): the inbox that shows up later is recorded
+    silently, and only a message arriving after that is announced."""
+    from custom_components.librus_synergia.const import EVENT_NEW_MESSAGE  # noqa: PLC0415
+
+    events = async_capture_events(hass, EVENT_NEW_MESSAGE)
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = False
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 2}}
+    client.async_get_messages.return_value = {"data": [_message("1"), _message("2")]}
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+    assert events == []
+
+    client.async_get_messages.return_value = {"data": [_message("1"), _message("2"), _message("3")]}
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+    assert [e.data["id"] for e in events] == ["3"]
+
+
+async def test_failed_first_fetch_of_homework_does_not_flood_later(hass) -> None:
+    """Homework assignments failed on the first poll: nothing is recorded
+    until they arrive, and then only later additions are announced."""
+    from custom_components.librus_synergia.const import EVENT_NEW_HOMEWORK_ASSIGNMENT  # noqa: PLC0415
+
+    events = async_capture_events(hass, EVENT_NEW_HOMEWORK_ASSIGNMENT)
+    client = build_mock_client()
+    client.async_get_homework_assignments.side_effect = LibrusUnexpectedResponseError("HTTP 500")
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+
+    client.async_get_homework_assignments.side_effect = None
+    client.async_get_homework_assignments.return_value = {"HomeWorkAssignments": [_assignment(1), _assignment(2)]}
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+    assert events == []
+
+    client.async_get_homework_assignments.return_value = {
+        "HomeWorkAssignments": [_assignment(1), _assignment(2), _assignment(3)]
+    }
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+    assert [e.data["id"] for e in events] == [3]

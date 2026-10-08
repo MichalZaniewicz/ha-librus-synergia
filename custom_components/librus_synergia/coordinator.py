@@ -33,6 +33,8 @@ from librus_synergia import (
     LibrusSessionExpiredError,
 )
 from librus_synergia.changes import Changes, ChangeTracker, SeenIds
+from librus_synergia.changes import absences as tracked_absences
+from librus_synergia.changes import timetable_changes as tracked_timetable_changes
 from librus_synergia.models import (
     AttendanceData,
     AttendanceTypeData,
@@ -566,11 +568,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._messages_available = False
 
         # New-item bus events: the library's ChangeTracker remembers what
-        # has been seen and reports what's new. In-memory only - the first
-        # cycle just seeds it instead of replaying history as "new" on
-        # install, and a HA restart re-seeds quietly (same tradeoff
-        # ha-suunto makes for its EVENT_NEW_WORKOUT tracking).
+        # has been seen and reports what's new. The first cycle only seeds
+        # it instead of replaying history as "new" on install; what has been
+        # seen is saved across restarts (async_restore_state).
         self._change_tracker = ChangeTracker()
+        # Tracker kinds whose data wasn't there when the tracker was seeded
+        # (a failed fetch, a module switched off in the options, an
+        # unpublished timetable). The first time real data arrives for one
+        # of them it is recorded silently instead of being announced as a
+        # whole batch of "new" items.
+        self._unseeded_kinds: set[str] = set()
         # Achievement keys already unlocked (e.g. "good_grade_streak_10") -
         # same seed-silently-then-union pattern as the tracker above, for
         # a small fixed vocabulary of milestones (the library knows nothing
@@ -629,6 +636,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.data_source = "live"
         # Sections shown from their saved copy this cycle (they failed).
         self.fallback_sections: set[str] = set()
+        # Every endpoint label that failed this cycle, whether or not a saved
+        # copy stood in for it - their new-item tracking waits for real data.
+        self._failed_this_cycle: set[str] = set()
         # Whether the school grades in points (Units); None until known.
         self.point_grades_enabled: bool | None = None
 
@@ -647,6 +657,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return
         if isinstance(seen := stored.get("seen"), dict):
             self._change_tracker = ChangeTracker(SeenIds.from_dict(seen))
+            if isinstance(kinds := stored.get("unseeded_kinds"), list):
+                self._unseeded_kinds = {str(k) for k in kinds}
         if isinstance(agenda := stored.get("agenda"), dict):
             self._known_agenda = agenda
         if isinstance(statuses := stored.get("justifications"), dict):
@@ -680,6 +692,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         tracker = self._change_tracker
         return {
             "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
+            "unseeded_kinds": sorted(self._unseeded_kinds),
             "agenda": self._known_agenda,
             "justifications": self._known_justifications,
             "known_items": {
@@ -1033,6 +1046,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return self.data
         self.last_attempt_at = dt_util.utcnow()
         self.fallback_sections = set()
+        self._failed_this_cycle = set()
         try:
             data = await self._async_fetch_live()
         except UpdateFailed as err:
@@ -1219,7 +1233,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         me, grades, notes = data.me, data.grades, data.notes
         attendances, attendance_types = data.attendances, data.attendance_types
-        self._fire_change_events(self._change_tracker.update(data, today=today), data)
+        self._fire_change_events(self._update_change_tracker(data, today), data)
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
         self._fire_justification_events(data)
@@ -1643,6 +1657,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     _OPTIONAL_ENDPOINT_DEGRADED_AFTER = timedelta(days=7)
 
     def _note_optional_endpoint_failure(self, label: str) -> None:
+        self._failed_this_cycle.add(label)
         if self.config_entry is None:
             return
         now = dt_util.utcnow()
@@ -2321,10 +2336,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
             ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
         ):
-            if kind == "text_grades" and "BaseTextGrades" in self.fallback_sections:
-                continue
+            label = {"text_grades": "BaseTextGrades", "school_trips": "SchoolTrips", "school_files": "SchoolFiles"}[kind]
             self._known_items[kind] = self._fire_for_new_ids(
-                event, entry_id, self._known_items[kind], items, student=student
+                event,
+                entry_id,
+                self._known_items[kind],
+                items,
+                student=student,
+                available=label not in self._failed_this_cycle,
             )
 
     def _fire_justification_events(self, data: LibrusData) -> None:
@@ -2431,6 +2450,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_homework_assignment_ids,
             items,
             student=data.me.display_name,
+            available="HomeWorkAssignments" not in self._failed_this_cycle,
         )
 
     def _check_achievements(
@@ -2493,7 +2513,68 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_achievements,
             {key: {"title": _ACHIEVEMENT_TITLES[key]} for key in unlocked},
             student=student,
+            # Milestones come from grades, notes and attendance; a failed
+            # fetch of any of them says nothing about what's unlocked.
+            available=not (
+                {"Grades", "Notes", "Attendances", "Attendances/Types"} & self._failed_this_cycle
+            ),
         )
+
+    def _unavailable_kinds(self, data: LibrusData) -> set[str]:
+        """ChangeTracker kinds whose data this cycle can't be trusted to be
+        complete: the endpoint failed, or the module is switched off."""
+        failed = self._failed_this_cycle
+        options = self.config_entry.options if self.config_entry else {}
+        kinds = set()
+        if "Grades" in failed:
+            kinds.add("grades")
+        if "Notes" in failed:
+            kinds.add("notes")
+        if "SchoolNotices" in failed or not options.get(
+            CONF_ANNOUNCEMENTS_ENABLED, DEFAULT_ANNOUNCEMENTS_ENABLED
+        ):
+            kinds.add("announcements")
+        if (
+            "Messages" in failed
+            or not data.messages_available
+            or not options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED)
+        ):
+            kinds.add("messages")
+        if "HomeWorks" in failed:
+            kinds.add("agenda")
+        if {"Attendances", "Attendances/Types"} & failed:
+            kinds.add("absences")
+        if "Timetable" in failed:
+            kinds.add("timetable_changes")
+        return kinds
+
+    def _update_change_tracker(self, data: LibrusData, today: date) -> Changes:
+        """`ChangeTracker.update`, minus the batch of "new" items a kind would
+        otherwise produce the first time its data shows up after seeding (a
+        failed first fetch, messages or announcements switched on later, a
+        timetable published later): that first real data is recorded
+        silently."""
+        tracker = self._change_tracker
+        unavailable = self._unavailable_kinds(data)
+        if not tracker.is_seeded:
+            changes = tracker.update(data, today=today)
+            self._unseeded_kinds = unavailable
+            return changes
+        ready = self._unseeded_kinds - unavailable
+        if ready:
+            current = {
+                "grades": {str(g.id) for g in data.grades},
+                "notes": {str(n.id) for n in data.notes},
+                "announcements": {str(n.id) for n in data.school_notices},
+                "messages": {str(m.id) for m in data.messages},
+                "agenda": {str(h.id) for h in data.homeworks},
+                "absences": {str(a.id) for a in tracked_absences(data)},
+                "timetable_changes": set(tracked_timetable_changes(data, today)),
+            }
+            for kind in ready:
+                getattr(tracker.seen, kind).update(current.get(kind, set()))
+            self._unseeded_kinds -= ready
+        return tracker.update(data, today=today)
 
     def _fire_for_new_ids(
         self,
@@ -2503,7 +2584,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         items: dict[Any, dict[str, Any]],
         *,
         student: str | None = None,
-    ) -> set[Any]:
+        available: bool = True,
+    ) -> set[Any] | None:
+        if not available:
+            # The fetch failed this cycle: nothing to compare against, and
+            # seeding from an empty list would announce everything later.
+            return known
         current_ids = set(items)
         if known is None:
             # First-ever refresh for this entry: seed silently. Firing here
