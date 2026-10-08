@@ -1,52 +1,61 @@
 # Changelog
 
-## 0.11.1-beta.5
+## 0.12.0
 
-### Fixed
-- Text grades no longer carry Librus's line breaks and indentation
-  ("diagnoza GWO - sesja I 80%"). Requires `librus-synergia` 0.3.6.
-
-## 0.11.1-beta.4
+Everything from the 0.11.1 betas.
 
 ### Added
+- **Grade forecast.** A *Grade forecast* sensor: what each subject's
+  average gives on the report card (thresholds under Configure, default
+  1.75 / 2.75 / 3.75 / 4.75 / 5.50), how many 6s lift a grade and how many
+  1s drop it, subjects heading for a 1, subjects whose forecast fell in the
+  last two weeks, and the forecast report-card average. First semester's
+  grades until the semester ends, then the whole year. Subject average
+  sensors carry the same forecast in attributes. Binary sensor **Grade at
+  risk** (on while a subject points to a 1), event
+  `librus_synergia_forecast_changed` with an event entity, and the blueprint
+  **Grade Forecast Changed**. Ask Assist and the weekly AI summary see the
+  forecast too.
+- **Lesson topics.** Sensor *Lesson topics* (today's and the last 14 days'
+  topics with subject and lesson number; lessons the student missed are
+  marked `absent`); past lessons in the Timetable calendar get a
+  "Temat: ..." line.
 - **Text grades.** Grades a teacher enters as text never showed up anywhere -
   they live in a separate place in Librus. Subject average sensors now carry
-  them (`text_grades`), `get_grades` returns them, and a new one fires
-  `librus_synergia_new_grade` with `kind: text`.
-- **Lesson topics.** Sensor *Lesson topics* (today's and the last 14 days'
-  topics with subject and lesson number); past lessons in the Timetable
-  calendar get a "Temat: ..." line.
+  them (`text_grades`, on one line), `get_grades` returns them, and a new one
+  fires `librus_synergia_new_grade` with `kind: text`.
+- **Point grades** for schools grading in points or percent (e.g. 0-100):
+  a *Point grades* sensor (share of points earned, weighted by category,
+  per subject in attributes), `points_percentage`/`point_grades` on the
+  subject average sensors and `point_grades` in `get_grades`. Created only
+  where the school uses them; the requests are skipped where the school
+  configuration says they are off. A number outside the 1-6 scale in the
+  regular grades (e.g. "85") no longer counts towards the averages.
 - **School trips.** Sensor *Next school trip* (date, destination, route,
   transport, coordinator), event `librus_synergia_new_school_trip` + event
   entity, and the blueprint **School Trip Tomorrow**.
 - **School documents.** Sensor *School documents* (with links), event
   `librus_synergia_new_school_document` + event entity, and the blueprint
-  **New School Document** (28 blueprints).
+  **New School Document**.
 - **Message attachments.** A logged-in endpoint
   (`/api/librus_synergia/attachment/<device>/<message>/<attachment>`) passes a
   Wiadomości attachment straight from Librus to the browser, without saving
   it in Home Assistant and without opening the message in Librus. The
   companion Messages card uses it when a file name is tapped.
-- Homework assignments carry their category name (`category`).
-
-### Changed
-- **Fewer logins.** The session is renewed through Librus's own refresh
-  (`refreshToken`) once it's two hours old, instead of a password login every
-  day (librus-synergia 0.3.5).
-- The class register number is read from Librus's JSON (the student's own
-  user record), with the web page only as a fallback.
-- Requires `librus-synergia` 0.3.5.
-
-## 0.11.1-beta.3
-
-### Added
+- **Absence justifications.** Sensor *Absence justifications* (how many wait
+  for the school's decision, with the list and statuses), event
+  `librus_synergia_justification_status` when one is accepted or rejected,
+  event entity *Absence justification decided* and the blueprint **Absence
+  Justification Decided**. The Unexcused absences sensor gains
+  `awaiting_justification` and `justification_sent`, and the Absences To
+  Justify Reminder skips days a justification was already sent for.
 - **Agenda entry changed or removed.** Event `librus_synergia_agenda_changed`
   when an upcoming Agenda entry changes (`kind: changed`: date, time,
   description, subject or category, with `changed_fields` and the old
   values in `previous`) or disappears from Librus (`kind: removed`). Event
   entity *Agenda entry changed* (`changed` / `removed`) and the blueprint
-  **Agenda Entry Changed or Removed** (25 blueprints). Entries dated before
-  today are ignored; the first sync only records what's there.
+  **Agenda Entry Changed or Removed**. Entries dated before today are
+  ignored; the first sync only records what's there.
 - **What a substitution changes.** Librus marks room changes and moved
   lessons as substitutions too, with the original lesson attached. The
   Timetable calendar now titles them "(zmiana sali)" / "(przeniesiona)"
@@ -56,18 +65,6 @@
   `original_subject`, `original_teacher`, `classroom`, `original_classroom`,
   ...) and the Next/Current lesson attributes; the Lesson Change blueprint's
   message says what changed.
-- **Absence justifications.** Sensor *Absence justifications* (how many wait
-  for the school's decision, with the list and statuses), event
-  `librus_synergia_justification_status` when one is accepted or rejected,
-  event entity *Absence justification decided* and the blueprint **Absence
-  Justification Decided** (26 blueprints). The Unexcused absences sensor
-  gains `awaiting_justification` and `justification_sent`, and the Absences
-  To Justify Reminder skips days a justification was already sent for.
-- Requires `librus-synergia` 0.3.4.
-
-## 0.11.1-beta.2
-
-### Added
 - **Works through Librus outages.** The last good response of every part of
   Librus is saved. A part that fails (grades, timetable, subject names, ...)
   shows its last good copy instead of going empty; if Librus doesn't answer
@@ -78,18 +75,21 @@
 - **Retry backoff.** After two failed refreshes in a row the next attempts
   are spaced out (2x, 4x the poll interval, up to 2 hours) - no login
   attempt every cycle during an outage. The refresh action ignores it.
-- **Point grades** for schools grading in points or percent (e.g. 0-100):
-  a *Point grades* sensor (share of points earned, weighted by category,
-  per subject in attributes), `points_percentage`/`point_grades` on the
-  subject average sensors and `point_grades` in `get_grades`. Created only
-  where the school uses them; the requests are skipped where the school
-  configuration says they are off. A number outside the 1-6 scale in the
-  regular grades (e.g. "85") no longer counts towards the averages.
 - Diagnostic sensors **Connection status** (`ok` / `degraded` / `stale` /
   `error`, with the last error, failures and next attempt) and **Last
   successful update**. Diagnostics gained a `connection` section.
+- Blueprint **Copy School Events to a Calendar**: tests, quizzes, trips,
+  meetings and days off copied into a calendar of your choice (daily and on
+  a new Agenda entry), filtered by Agenda category, without duplicates.
+  28 blueprints in total.
+- Homework assignments carry their category name (`category`).
 
 ### Changed
+- **Fewer logins.** The session is renewed through Librus's own refresh
+  (`refreshToken`) once it's two hours old, instead of a password login every
+  day.
+- The class register number is read from Librus's JSON (the student's own
+  user record), with the web page only as a fallback.
 - What has already been announced is saved, so a grade, note, absence or
   message that arrives while Home Assistant is off still fires its event
   after the restart (it used to be swallowed as part of the silent first
@@ -97,24 +97,7 @@
 - Long attribute lists (grade logs, `recent` lists, attendance breakdowns,
   bell schedule, ...) are no longer written to the recorder's history -
   a smaller database; the live attributes are unchanged.
-
-## 0.11.1-beta.1
-
-### Added
-- **Grade forecast.** A *Grade forecast* sensor: what each subject's
-  average gives on the report card (thresholds under Configure, default
-  1.75 / 2.75 / 3.75 / 4.75 / 5.50), how many 6s lift a grade and how many
-  1s drop it, subjects heading for a 1, subjects whose forecast fell in the
-  last two weeks, and the forecast report-card average. First semester's
-  grades until the semester ends, then the whole year. Subject average
-  sensors carry the same forecast in attributes.
-- Binary sensor **Grade at risk** (on while a subject points to a 1), event
-  `librus_synergia_forecast_changed` with an event entity, and the blueprint
-  **Grade Forecast Changed** (24 now). Ask Assist and the weekly AI summary
-  see the forecast too.
-- Blueprint **Copy School Events to a Calendar**: tests, quizzes, trips,
-  meetings and days off copied into a calendar of your choice (daily and on
-  a new Agenda entry), filtered by Agenda category, without duplicates.
+- Requires `librus-synergia` 0.3.6.
 
 ## 0.11.0
 

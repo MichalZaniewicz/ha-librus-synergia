@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Librus Synergia (nieoficjalna)",
-        "description": "Zaloguj się swoim loginem Librus (np. \"1234567u\") i hasłem. Integracja korzysta z prywatnego API webowego Librusa i może naruszać regulamin Librusa - używasz własnego konta na własne ryzyko. Sesja zwykle wygasa po około dobie i nie da się jej cicho odnowić bez hasła, dlatego - inaczej niż w niektórych integracjach - hasło JEST zapisywane (razem z sesją), żeby umożliwić automatyczne, codzienne odnawianie logowania; nigdy nie opuszcza Twojej instancji Home Assistant.",
+        "description": "Zaloguj się swoim loginem Librus (np. \"1234567u\") i hasłem. Integracja korzysta z prywatnego API webowego Librusa i może naruszać regulamin Librusa - używasz własnego konta na własne ryzyko. Integracja podtrzymuje sesję przez odświeżanie Librusa, ale gdy to niemożliwe (np. po dłuższym wyłączeniu Home Assistanta) musi zalogować się od nowa, dlatego - inaczej niż w niektórych integracjach - hasło JEST zapisywane (razem z sesją), żeby zrobić to bez pytania Cię o nie; nigdy nie opuszcza Twojej instancji Home Assistant.",
         "data": {
           "username": "Login",
           "password": "Hasło"

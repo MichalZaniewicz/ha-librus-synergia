@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Librus Synergia (unofficial)",
-        "description": "Log in with your Librus login (e.g. \"1234567u\") and password. This uses Librus's private web API and may violate Librus's Terms of Service - use your own account at your own risk. Your session normally expires after about a day with no way to silently renew it without your password, so - unlike some integrations - your password IS stored (alongside the session) to allow unattended daily refresh; it never leaves your Home Assistant instance.",
+        "description": "Log in with your Librus login (e.g. \"1234567u\") and password. This uses Librus's private web API and may violate Librus's Terms of Service - use your own account at your own risk. The integration keeps its session alive through Librus's own refresh, but when that isn't possible (e.g. after Home Assistant was off for a while) it has to log in again, so - unlike some integrations - your password IS stored (alongside the session) to allow that without asking you; it never leaves your Home Assistant instance.",
         "data": {
           "username": "Login",
           "password": "Password"

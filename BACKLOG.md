@@ -131,7 +131,7 @@ these can't be built or verified against a real shape:
 - **Message coverage** — other mailboxes (`notes` / `absences` / `trash`)
   get unread *counts* only, not content; sent messages aren't fetched;
   a `mark_message_read` service (would just wrap `get_message`, low value).
-- ~~**Message attachment download**~~ — done (0.11.1-beta.4). The earlier
+- ~~**Message attachment download**~~ — done (0.12.0). The earlier
   "blocked" verdict (2026-09-17) was wrong: a 2026-10-07 live probe confirmed
   `wiadomosci.librus.pl/api/attachments/<file>/messages/<msg>` returns a
   `sandbox.librus.pl/GetFile/<key>` link that downloads with the same session

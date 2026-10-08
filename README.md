@@ -44,7 +44,7 @@ The Librus client itself lives in a separate library, [**librus-synergia**](http
 
 ## Credential model (read this before installing)
 
-Unlike some cloud-polling integrations, **your Librus password is stored** in Home Assistant's config storage, alongside the session. This is a deliberate tradeoff, not an oversight: the session cookie this flow obtains is only valid for about a day and there is no separate refresh grant, so silent, unattended daily renewal isn't possible without it. Your password never leaves your Home Assistant instance.
+Unlike some cloud-polling integrations, **your Librus password is stored** in Home Assistant's config storage, alongside the session. This is a deliberate tradeoff, not an oversight: the integration keeps its session alive through Librus's own session refresh (every couple of hours), but once a session has lapsed - Home Assistant was off for a while, Librus restarted its sessions - the only way back in is a fresh login, and doing that unattended needs the password. Your password never leaves your Home Assistant instance.
 
 A long-lived device-recognition cookie is also persisted and re-sent on every login - this is believed to be why a normal login skips any captcha/2FA challenge, so treat it as load-bearing, not just a convenience.
 

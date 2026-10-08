@@ -1,10 +1,11 @@
 """Config flow for the Librus Synergia (unofficial) integration.
 
 Credential model: unlike a bearer-token OAuth API, this integration's
-session (see librus_synergia.LibrusSessionData) is a cookie-based login
-with an observed ~24h lifetime and no separate refresh grant. Silent,
-unattended daily re-login therefore requires the password itself, not just
-a revocable token - so, unlike ha-suunto's "password used once then
+session (see librus_synergia.LibrusSessionData) is a cookie-based login.
+The library keeps it alive through Librus's /refreshToken, but a session
+that has already lapsed (Home Assistant off for a while, Librus dropping
+it early) can only be replaced by a fresh login, and doing that unattended
+requires the password itself, not just a revocable token - so, unlike ha-suunto's "password used once then
 discarded" model, the password IS persisted here (alongside the session
 cookies, which matter for staying recognized as a known device - see the
 librus-synergia library's docs/authentication.md). This is disclosed to the
