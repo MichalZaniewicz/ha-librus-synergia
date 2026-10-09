@@ -137,18 +137,20 @@ async def test_mailbox_that_appears_later_is_found_after_a_day(hass, freezer) ->
 
 
 def _lookup_client(**overrides):
-    return build_mock_client(
-        async_get_grades={"Grades": [_grade(1, 10)]},
-        async_get_grade_categories={
+    defaults = {
+        "async_get_grades": {"Grades": [_grade(1, 10)]},
+        "async_get_grade_categories": {
             "Categories": [{"Id": 10, "Name": "Sprawdzian", "Weight": 3}]
         },
-        async_get_attendances={
+        "async_get_attendances": {
             "Attendances": [{"Id": 1, "Date": "2026-10-01", "Type": {"Id": 1}}]
         },
-        async_get_attendance_types={
+        "async_get_attendance_types": {
             "Types": [{"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False}]
         },
-        **overrides,
+    }
+    return build_mock_client(
+        **{**defaults, **overrides},
     )
 
 
