@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.5
 
 ### Added
 - **The whole notice board.** The Unread announcements sensor has a new
