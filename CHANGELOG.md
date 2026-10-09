@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.4
 
 ### Fixed
 - **Messages stuck as "module not enabled" after a restart.** Right after a
