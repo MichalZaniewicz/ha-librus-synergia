@@ -31,6 +31,7 @@ from .const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
+    EVENT_MESSAGE_READ,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_NEW_SCHOOL_DOCUMENT,
@@ -122,6 +123,13 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
     ),
     LibrusEventDescription(
         "message", EVENT_NEW_MESSAGE, ("new_message",), "mdi:email-outline", lambda d: "new_message"
+    ),
+    LibrusEventDescription(
+        "message_read",
+        EVENT_MESSAGE_READ,
+        ("read",),
+        "mdi:email-check-outline",
+        lambda d: "read",
     ),
     LibrusEventDescription(
         "forecast",

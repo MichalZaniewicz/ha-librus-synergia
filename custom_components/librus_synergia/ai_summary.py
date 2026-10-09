@@ -376,7 +376,7 @@ def build_context(
                     "subject": subject(descriptive.subject_id),
                     "value": _cut(descriptive.value),
                     "category": descriptive.skill,
-                    "teacher": teacher(descriptive.teacher_id),
+                    "teacher": teacher(descriptive.teacher_id if descriptive.teacher_id is not None else descriptive.teacher_lid),
                     "comment": _cut("; ".join(descriptive.comments)) if descriptive.comments else None,
                     "kind": "descriptive",
                 }
@@ -387,7 +387,8 @@ def build_context(
         {g.subject_id for g in new_grades if g.subject_id is not None}, key=str
     ):
         now = calculate_average(
-            data.grades, data.grade_categories, subject_id=subject_id, weighted=weighted
+            data.grades, data.grade_categories, subject_id=subject_id, weighted=weighted,
+            grading=data.grading_system
         )
         if now is None:
             continue
@@ -396,7 +397,8 @@ def build_context(
                 "subject": subject(subject_id) or str(subject_id),
                 "now": now,
                 "week_ago": calculate_average(
-                    older, data.grade_categories, subject_id=subject_id, weighted=weighted
+                    older, data.grade_categories, subject_id=subject_id, weighted=weighted,
+                    grading=data.grading_system
                 ),
             }
         )
@@ -617,8 +619,10 @@ def build_context(
         else [],
         "overall_average": _compact(
             {
-                "now": calculate_average(data.grades, data.grade_categories, weighted=weighted),
-                "week_ago": calculate_average(older, data.grade_categories, weighted=weighted),
+                "now": calculate_average(data.grades, data.grade_categories, weighted=weighted,
+                    grading=data.grading_system),
+                "week_ago": calculate_average(older, data.grade_categories, weighted=weighted,
+                    grading=data.grading_system),
             }
         ),
         "attendance": _compact(

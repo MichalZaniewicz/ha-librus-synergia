@@ -341,14 +341,16 @@ class GradesTool(_LibrusTool):
         )
         averages = {}
         for sid in sorted(subjects_for_avg, key=lambda s: str(_subject_name(data, s))):
-            avg = calculate_average(data.grades, data.grade_categories, subject_id=sid, weighted=weighted)
+            avg = calculate_average(data.grades, data.grade_categories, subject_id=sid, weighted=weighted,
+                grading=data.grading_system)
             if avg is not None:
                 averages[_subject_name(data, sid) or str(sid)] = avg
         return _compact(
             {
                 "average_mode": "weighted" if weighted else "arithmetic",
                 "overall_average": calculate_average(
-                    data.grades, data.grade_categories, weighted=weighted
+                    data.grades, data.grade_categories, weighted=weighted,
+                    grading=data.grading_system
                 )
                 if subject_ids is None
                 else None,
@@ -396,7 +398,7 @@ class GradesTool(_LibrusTool):
                             "subject": _subject_name(data, d.subject_id),
                             "value": _cut(d.value),
                             "skill": d.skill,
-                            "teacher": _teacher_name(data, d.teacher_id),
+                            "teacher": _teacher_name(data, d.teacher_id if d.teacher_id is not None else d.teacher_lid),
                             "comment": _cut(" / ".join(d.comments)) if d.comments else None,
                         }
                     )

@@ -166,6 +166,7 @@
       "school_document_event": { "name": "New school document", "state_attributes": { "event_type": { "state": { "new_document": "New document" } } } },
       "announcement_event": { "name": "New announcement", "state_attributes": { "event_type": { "state": { "new_announcement": "New announcement" } } } },
       "message_event": { "name": "New message", "state_attributes": { "event_type": { "state": { "new_message": "New message" } } } },
+      "message_read_event": { "name": "Message read", "state_attributes": { "event_type": { "state": { "read": "Read" } } } },
       "forecast_event": { "name": "Grade forecast changed", "state_attributes": { "event_type": { "state": { "up": "Up", "down": "Down" } } } },
       "achievement_event": { "name": "Achievement unlocked", "state_attributes": { "event_type": { "state": { "unlocked": "Unlocked" } } } }
     },

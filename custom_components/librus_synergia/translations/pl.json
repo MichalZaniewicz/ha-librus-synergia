@@ -166,6 +166,7 @@
       "school_document_event": { "name": "Nowy dokument szkoły", "state_attributes": { "event_type": { "state": { "new_document": "Nowy dokument" } } } },
       "announcement_event": { "name": "Nowe ogłoszenie", "state_attributes": { "event_type": { "state": { "new_announcement": "Nowe ogłoszenie" } } } },
       "message_event": { "name": "Nowa wiadomość", "state_attributes": { "event_type": { "state": { "new_message": "Nowa wiadomość" } } } },
+      "message_read_event": { "name": "Wiadomość przeczytana", "state_attributes": { "event_type": { "state": { "read": "Przeczytana" } } } },
       "forecast_event": { "name": "Zmiana prognozy oceny", "state_attributes": { "event_type": { "state": { "up": "W górę", "down": "W dół" } } } },
       "achievement_event": { "name": "Nowe osiągnięcie", "state_attributes": { "event_type": { "state": { "unlocked": "Odblokowane" } } } }
     },

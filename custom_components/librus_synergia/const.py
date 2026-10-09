@@ -256,6 +256,8 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     # School configuration - only `GradesSettings.PointGradesEnabled` is
     # read, to skip the point-grade requests at schools without them.
     "Units",
+    # The school's grade scale: what "+" and "-" add or take away.
+    "GradingSystem",
 )
 
 # The handful of degradable fetches that don't belong to any of the three
@@ -291,6 +293,11 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     # student has descriptive grades.
     "DescriptiveGrades/Comments",
     "DescriptiveGrades/Skills",
+    # The new descriptive grading (grade 1 at some schools from 2026), the
+    # child's LID it needs and the LID -> subject lookup.
+    "PartialGrades",
+    "StudentIdentifier",
+    "Auth/Subjects",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and
@@ -312,6 +319,10 @@ EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
 EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"
+# Fires when a recipient reads a message you sent (Wiadomości read
+# receipts, `outbox/messages/<id>` -> `receivers[].readed`). Only for
+# messages sent in the last READ_RECEIPT_DAYS days.
+EVENT_MESSAGE_READ = f"{DOMAIN}_message_read"
 # Fires for a new entry in the Agenda ("HomeWorks") feed - tests, trips,
 # events. Carries the resolved subject + category name so an automation
 # can filter e.g. category == "Sprawdzian" without its own lookup.

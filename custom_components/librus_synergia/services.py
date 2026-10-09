@@ -23,7 +23,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from librus_synergia import LibrusError
-from librus_synergia.parsers import point_grades_percentage
+from librus_synergia.parsers import parse_message_receivers, point_grades_percentage
 
 from .const import DOMAIN
 from .coordinator import (
@@ -154,6 +154,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
             "read_date": data.get("readDate"),
             "has_attachment": bool(attachments),
             "attachments": attachments,
+            # A sent message: who it went to and when each one read it.
+            "receivers": [
+                {"name": r.name, "group": r.group, "read_date": r.read_date}
+                for r in parse_message_receivers(data)
+            ],
         }
 
     hass.services.async_register(
@@ -231,9 +236,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     "value": g.value,
                     "skill": g.skill,
                     "comments": list(g.comments),
+                    "requirements": list(g.requirements),
                     "date": g.date or g.add_date,
                     "semester": g.semester,
-                    "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                    "teacher": data.teachers.get(g.teacher_id if g.teacher_id is not None else g.teacher_lid),
                 }
                 for g in descriptive_grades
             ]

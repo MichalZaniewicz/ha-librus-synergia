@@ -24,7 +24,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
-from librus_synergia.models import GradeData, LibrusData
+from librus_synergia.models import GradeData, GradingSystemData, LibrusData
 
 from .ai_summary import _day
 from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
@@ -43,6 +43,7 @@ def daily_averages(
     *,
     subject_id: Any = None,
     weighted: bool = True,
+    grading: GradingSystemData | None = None,
 ) -> list[tuple[date, float]]:
     """(day, average of the grades added up to and including that day),
     from the first grade's day to `today`; days with no average yet are
@@ -68,7 +69,7 @@ def daily_averages(
             index += 1
             changed = True
         if changed:
-            average = calculate_average(included, categories, weighted=weighted)
+            average = calculate_average(included, categories, weighted=weighted, grading=grading)
         if average is not None:
             out.append((day, average))
         day += timedelta(days=1)
@@ -170,7 +171,8 @@ class LibrusAverageHistory:
             )
         for statistic_id, name, subject_id in series:
             points = daily_averages(
-                data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted
+                data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted,
+                grading=data.grading_system
             )
             if not points:
                 continue

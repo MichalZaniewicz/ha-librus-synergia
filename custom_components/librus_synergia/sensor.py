@@ -22,6 +22,7 @@ from librus_synergia.models import (
     AttendanceTypeData,
     BehaviourGradeData,
     GradeData,
+    GradingSystemData,
     HomeworkEventData,
     LessonData,
     LibrusData,
@@ -417,6 +418,11 @@ class LibrusSensorBase(CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEnt
         mode = self._entry.options.get(CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE)
         return mode != AVERAGE_MODE_ARITHMETIC
 
+    @property
+    def _grading(self) -> GradingSystemData | None:
+        """The school's grade scale ("+"/"-" values, whether 0 counts)."""
+        return self.coordinator.data.grading_system if self.coordinator.data else None
+
 
 class LibrusOverallAverageSensor(LibrusSensorBase):
     """Average across every subject - weighted unless the options flow's
@@ -436,7 +442,7 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
         return _calculate_average(
             self.coordinator.data.grades,
             self.coordinator.data.grade_categories,
-            weighted=self._weighted,
+            weighted=self._weighted, grading=self._grading,
         )
 
     @property
@@ -450,10 +456,13 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
             # Both figures regardless of which one the state shows; the
             # per-semester ones follow the selected mode, like the state.
             "average_mode": AVERAGE_MODE_WEIGHTED if weighted else AVERAGE_MODE_ARITHMETIC,
-            "average_weighted": _calculate_average(grades, cats),
-            "average_arithmetic": _calculate_average(grades, cats, weighted=False),
-            "average_semester_1": _calculate_average(grades, cats, semester=1, weighted=weighted),
-            "average_semester_2": _calculate_average(grades, cats, semester=2, weighted=weighted),
+            "average_weighted": _calculate_average(grades, cats, grading=self._grading),
+            "average_arithmetic": _calculate_average(grades, cats, weighted=False,
+                grading=self._grading),
+            "average_semester_1": _calculate_average(grades, cats, semester=1, weighted=weighted,
+                grading=self._grading),
+            "average_semester_2": _calculate_average(grades, cats, semester=2, weighted=weighted,
+                grading=self._grading),
         }
 
 
@@ -490,7 +499,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             self.coordinator.data.grades,
             self.coordinator.data.grade_categories,
             subject_id=self._subject_id,
-            weighted=self._weighted,
+            weighted=self._weighted, grading=self._grading,
         )
 
     @property
@@ -556,24 +565,25 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "proposed_semester_grade": proposed.value if proposed else None,
             "final_grade": final.value if final else None,
             "average_weighted": _calculate_average(
-                grades, categories, subject_id=self._subject_id
+                grades, categories, subject_id=self._subject_id, grading=self._grading
             ),
             "average_arithmetic": _calculate_average(
-                grades, categories, subject_id=self._subject_id, weighted=False
+                grades, categories, subject_id=self._subject_id, weighted=False,
+                grading=self._grading
             ),
             "average_semester_1": _calculate_average(
                 grades,
                 categories,
                 subject_id=self._subject_id,
                 semester=1,
-                weighted=self._weighted,
+                weighted=self._weighted, grading=self._grading,
             ),
             "average_semester_2": _calculate_average(
                 grades,
                 categories,
                 subject_id=self._subject_id,
                 semester=2,
-                weighted=self._weighted,
+                weighted=self._weighted, grading=self._grading,
             ),
             **self._forecast_attrs(),
             **_point_grade_attrs(self.coordinator.data, self._subject_id),
@@ -1222,7 +1232,7 @@ class LibrusRankSensor(LibrusSensorBase):
         return _calculate_average(
             self.coordinator.data.grades,
             self.coordinator.data.grade_categories,
-            weighted=self._weighted,
+            weighted=self._weighted, grading=self._grading,
         )
 
     @property
@@ -1580,8 +1590,10 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
                 "subject": data.subjects.get(g.subject_id) if g.subject_id else None,
                 "value": g.value,
                 "skill": g.skill,
-                "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                "teacher": data.teachers.get(g.teacher_id if g.teacher_id is not None else g.teacher_lid),
                 "comments": list(g.comments),
+                # New descriptive grading (grade 1): what the grade confirms.
+                "requirements": list(g.requirements),
                 # The lesson's date, as on the other grade lists.
                 "date": g.date or g.add_date,
                 "semester": g.semester,
@@ -1595,11 +1607,15 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
         return {"grades": grades, "recent": grades[:5]}
 
 
-def _message_list_attr(messages: list[MessageData]) -> list[dict[str, Any]]:
+def _message_list_attr(
+    messages: list[MessageData], receipts: dict[str, dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     """Same shape used for every mailbox's `*_recent` attribute - `id` +
     `mailbox` together are what a card needs to pass to the `get_message`
     service to load a specific message's full content. `receiver` is set
-    only for sent messages."""
+    only for sent messages; with `receipts`, a recently sent one also says
+    who has read it (`read_by`, `read_count`, `receivers_count`)."""
+    receipts = receipts or {}
     return [
         {
             "id": m.id,
@@ -1611,6 +1627,15 @@ def _message_list_attr(messages: list[MessageData]) -> list[dict[str, Any]]:
             "date": m.send_date,
             "unread": m.read_date is None,
             "has_attachment": m.has_attachment,
+            **(
+                {
+                    "read_by": [r["name"] for r in receipts[m.id]["receivers"] if r["read"]],
+                    "read_count": receipts[m.id]["read"],
+                    "receivers_count": receipts[m.id]["total"],
+                }
+                if m.id in receipts
+                else {}
+            ),
         }
         for m in messages[:10]
     ]
@@ -1678,7 +1703,7 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "justifications_recent": _message_list_attr(data.justification_messages),
             # Sent messages (with `receiver`) and the archive of past
             # school years.
-            "outbox_recent": _message_list_attr(data.sent_messages),
+            "outbox_recent": _message_list_attr(data.sent_messages, self.coordinator.read_receipts),
             "archive_recent": _message_list_attr(data.archived_messages),
             # Mailboxes this account doesn't have (Librus answers 404).
             "missing_mailboxes": sorted(self.coordinator.missing_mailboxes),

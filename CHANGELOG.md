@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Averages use the school's own `+` and `-` values.** Librus lets a school
+  set how much a `+` adds and a `-` takes away (and whether a `0` counts);
+  the integration now reads it once a day (`GradingSystem`) and the averages,
+  forecast, rank and AI summary follow it. Before, every school got +0.5 and
+  -0.25 - right for the tested school, not necessarily for others.
+- **The new descriptive grading for grade 1.** Some schools moved grade 1 to
+  a new descriptive grading in 2026, which the old descriptive grades
+  endpoint doesn't contain. Those grades now show up in the Descriptive
+  grades sensor (with `requirements`), `get_grades`, Assist, the AI summary
+  and the new-grade event. The child's identifier is looked up once a day.
+  The endpoint is confirmed, but no such grade has been seen yet, so the
+  field mapping may need a fix once one appears.
+- **Read receipts for messages you sent.** `outbox_recent` of the Unread
+  messages sensor says who has read a message sent in the last 30 days
+  (`read_by`, `read_count`, `receivers_count`), a new event
+  `librus_synergia_message_read` (and a *Message read* event entity) fires
+  when someone reads it, and `get_message` returns the `receivers` of a sent
+  message. Checking a sent message changes nothing in Librus.
+
 ## 0.12.4
 
 Everything from 0.12.3-beta.1 and beta.2 (released as 0.12.4, so HACS updates

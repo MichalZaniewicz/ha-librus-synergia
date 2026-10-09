@@ -43,6 +43,7 @@ from librus_synergia.models import (
     FreeDayData,
     GradeCategoryData,
     GradeData,
+    GradingSystemData,
     LessonData,
     LibrusData,
     LuckyNumberData,
@@ -59,6 +60,7 @@ from librus_synergia.models import (
 from librus_synergia.parsers import (  # noqa: F401
     collect_lid_user_identifiers,
     decode_message_content,
+    extract_student_identifier,
     extract_token_user_identifier,
     merge_timetables,
     parse_attendance_types,
@@ -67,7 +69,10 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_class,
     parse_comment_text_map,
     parse_descriptive_grades,
+    parse_auth_subjects,
     parse_descriptive_skills,
+    parse_grading_system,
+    parse_partial_grades,
     parse_free_days,
     parse_grade_categories,
     parse_grade_value,
@@ -82,6 +87,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_lesson_subjects,
     parse_lucky_number,
     parse_me,
+    parse_message,
     parse_message_list,
     parse_messages,
     parse_notes,
@@ -140,6 +146,7 @@ from .const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
+    EVENT_MESSAGE_READ,
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_TIMETABLE_CHANGED,
@@ -192,7 +199,12 @@ _EXTRA_LABELS = (
     "TimetableEntries",
     "DescriptiveGrades/Comments",
     "DescriptiveGrades/Skills",
+    "PartialGrades",
+    "Auth/Subjects",
 )
+# Read receipts: the newest sent messages from the last this-many days.
+_READ_RECEIPT_DAYS = 30
+_READ_RECEIPT_MESSAGES = 5
 # Lesson topics, trips and school documents change a few times a day.
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
@@ -490,6 +502,7 @@ def calculate_average(
     subject_id: int | None = None,
     semester: int | None = None,
     weighted: bool = True,
+    grading: GradingSystemData | None = None,
 ) -> float | None:
     """Grade average, excluding semester/final entries (proposed OR
     actual - see GradeData.is_semester/is_final's own docstring for why
@@ -499,7 +512,12 @@ def calculate_average(
     mean of the same counted grades). `semester` restricts to grades from
     that semester when given."""
     running, weight_total = average_sums(
-        grades, categories, subject_id=subject_id, semester=semester, weighted=weighted
+        grades,
+        categories,
+        subject_id=subject_id,
+        semester=semester,
+        weighted=weighted,
+        grading=grading,
     )
     if weight_total <= 0:
         return None
@@ -584,6 +602,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.missing_mailboxes: set[str] = set()
         # The archive (past school years) is read once a day.
         self._archived_messages: list[MessageData] = []
+        # Read receipts of recently sent messages: message id -> who it
+        # went to and when each one read it (see _async_refresh_read_receipts).
+        self.read_receipts: dict[str, dict[str, Any]] = {}
+        self._receipts_fetched_at: dict[str, datetime] = {}
         self._archive_fetched_at: datetime | None = None
 
         # New-item bus events: the library's ChangeTracker remembers what
@@ -627,6 +649,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # _async_optional).
         self._fetched_at: dict[str, datetime] = {}
         self._cached_text_grade_categories: dict[int, tuple[str, bool]] = {}
+        # The school's grade scale ("+"/"-" values, whether 0 counts).
+        self._cached_grading_system = GradingSystemData()
         self._cached_homework_assignment_categories: dict[int | str, str] = {}
 
         # First-failure timestamp per OPTIONAL_ENDPOINT_LABELS entry - used
@@ -1243,6 +1267,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "TimetableEntries", self._client.async_get_timetable_entries, every=_DAILY
             ),
             **await self._async_get_descriptive_grade_lookups(core_payloads),
+            **await self._async_get_partial_grades(),
         }
         core_payloads = (
             *core_payloads[:6],
@@ -1351,7 +1376,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 descriptive_grades_payload,
                 parse_descriptive_skills((extras or {}).get("DescriptiveGrades/Skills") or {}),
                 parse_comment_text_map((extras or {}).get("DescriptiveGrades/Comments") or {}),
+            )
+            + parse_partial_grades(
+                (extras or {}).get("PartialGrades") or {},
+                parse_auth_subjects((extras or {}).get("Auth/Subjects") or {}),
             ),
+            grading_system=self._cached_grading_system,
             point_grades=point_grades or [],
             justifications=justifications or [],
             text_grades=parse_text_grades(
@@ -1829,6 +1859,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_text_grade_categories(),
             self._client.async_get_homework_assignment_categories(),
             self._client.async_get_units(),
+            self._client.async_get_grading_system(),
             return_exceptions=True,
         )
         payloads = {
@@ -1854,6 +1885,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         self._cached_subjects = parse_id_name_map(payload("Subjects"), ("Subjects",))
         self._cached_teachers = parse_id_name_map(payload("Teachers"), ("Users", "Teachers"))
+        # Also by LID (`AccountId`) - the new descriptive grading names its
+        # teachers that way, like the kindergarten timetable.
+        self._cached_teachers.update(parse_kindergarten_teachers(payload("Teachers")))
+        if payload("GradingSystem"):
+            self._cached_grading_system = parse_grading_system(payload("GradingSystem"))
         self._cached_classrooms = parse_id_name_map(payload("Classrooms"), ("Classrooms",))
         self._cached_lesson_subjects = parse_lesson_subjects(payload("Lessons"))
         self._cached_school = parse_school(payload("Schools"))
@@ -1923,6 +1959,56 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
             "DescriptiveGrades/Skills": await self._async_optional(
                 "DescriptiveGrades/Skills", skill_names, every=_DAILY
+            ),
+        }
+
+    async def _async_get_partial_grades(self) -> dict[str, dict[str, Any]]:
+        """Grades from the new descriptive grading some schools use for
+        grade 1 from 2026 (a POST per cycle, CONFIRMED reachable on a grade 7
+        parent account, empty there). The child's LID is looked up once a
+        day, the LID -> subject lookup only when there are grades. A 403/404
+        (an account without the module) counts as "no grades"."""
+        if not self._feature_enabled(
+            CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
+        ):
+            return {}
+
+        async def student() -> dict[str, Any]:
+            # A refused lookup is an answer too ("no LID"), kept for the
+            # day like any other - not retried on every poll.
+            try:
+                token = extract_token_user_identifier(await self._client.async_get_token_info())
+                if not token:
+                    return {"student": None}
+                return {
+                    "student": extract_student_identifier(
+                        await self._client.async_get_user_info(token)
+                    )
+                }
+            except LibrusError:
+                return {"student": None}
+
+        lid = (await self._async_optional("StudentIdentifier", student, every=_DAILY)).get(
+            "student"
+        )
+        if not lid:
+            return {}
+
+        async def grades() -> dict[str, Any]:
+            try:
+                return await self._client.async_get_partial_grades(lid)
+            except (LibrusSessionExpiredError, LibrusUnexpectedResponseError) as err:
+                if getattr(err, "status_code", None) in (403, 404):
+                    return {"data": []}
+                raise
+
+        payload = await self._async_optional("PartialGrades", grades)
+        if not payload.get("data"):
+            return {"PartialGrades": payload}
+        return {
+            "PartialGrades": payload,
+            "Auth/Subjects": await self._async_optional(
+                "Auth/Subjects", self._client.async_get_auth_subjects, every=_DAILY
             ),
         }
 
@@ -2230,6 +2316,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ("substitutions", "alerts", "justifications", "outbox")
         )
         await self._async_refresh_archived_messages()
+        await self._async_refresh_read_receipts(secondary["outbox"])
 
         return (
             unread_count,
@@ -2269,6 +2356,59 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         else:
             self._note_optional_endpoint_recovery("Messages/Secondary")
         return messages
+
+    async def _async_refresh_read_receipts(self, sent: list[MessageData]) -> None:
+        """Who has read the messages you sent (CONFIRMED live 2026-10-09:
+        opening a SENT message has no side effect). The newest few sent in
+        the last READ_RECEIPT_DAYS days, each at most once an hour, and not
+        again once everyone has read it. A recipient who has newly read one
+        fires EVENT_MESSAGE_READ; the first look at a message only records."""
+        now = dt_util.utcnow()
+        cutoff = (dt_util.now().date() - timedelta(days=_READ_RECEIPT_DAYS)).isoformat()
+        recent = [m for m in sent if (m.send_date or "")[:10] >= cutoff][:_READ_RECEIPT_MESSAGES]
+        keep = {m.id for m in recent}
+        self.read_receipts = {k: v for k, v in self.read_receipts.items() if k in keep}
+        for message in recent:
+            known = self.read_receipts.get(message.id)
+            if known and known["read"] >= known["total"] > 0:
+                continue
+            fetched = self._receipts_fetched_at.get(message.id)
+            if known and fetched and now - fetched < _HOURLY:
+                continue
+            try:
+                payload = await self._client.async_get_message("outbox", message.id)
+            except LibrusError:
+                _LOGGER.debug("Read receipts fetch failed (non-fatal)", exc_info=True)
+                continue
+            full = parse_message(payload, "outbox", message.id)
+            if full is None:
+                continue
+            self._receipts_fetched_at[message.id] = now
+            receivers = [
+                {"name": r.name, "group": r.group, "read": r.read_date} for r in full.receivers
+            ]
+            if known is not None:
+                before = {r["name"] for r in known["receivers"] if r["read"]}
+                for receiver in receivers:
+                    if receiver["read"] and receiver["name"] not in before:
+                        self.hass.bus.async_fire(
+                            EVENT_MESSAGE_READ,
+                            {
+                                "entry_id": self.config_entry.entry_id if self.config_entry else None,
+                                "id": message.id,
+                                "student": self.data.me.display_name if self.data else None,
+                                "topic": message.topic,
+                                "receiver": receiver["name"],
+                                "group": receiver["group"],
+                                "read_date": receiver["read"],
+                                "send_date": message.send_date,
+                            },
+                        )
+            self.read_receipts[message.id] = {
+                "receivers": receivers,
+                "read": sum(1 for r in receivers if r["read"]),
+                "total": len(receivers),
+            }
 
     async def _async_refresh_archived_messages(self) -> None:
         """The archive of past school years barely changes - read it once a
@@ -2435,7 +2575,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "subject_id": grade.subject_id,
                 "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
                 "value": grade.value,
-                "teacher": _teacher_name(data, grade.teacher_id),
+                "teacher": _teacher_name(data, grade.teacher_id if grade.teacher_id is not None else grade.teacher_lid),
                 # The skill the grade is for - what Synergia shows as its category.
                 "category": grade.skill,
                 "skill": grade.skill,
@@ -2483,8 +2623,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             if kind == "descriptive_grades":
                 # Turned off in the options: no data, so nothing to seed -
                 # turning it back on seeds silently instead of announcing
-                # every existing grade.
-                available = available and descriptive_on
+                # every existing grade. Same when the new descriptive
+                # grading failed this cycle.
+                available = (
+                    available and descriptive_on and "PartialGrades" not in self._failed_this_cycle
+                )
             self._known_items[kind] = self._fire_for_new_ids(
                 event,
                 entry_id,

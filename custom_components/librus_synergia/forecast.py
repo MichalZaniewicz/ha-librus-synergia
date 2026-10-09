@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
-from librus_synergia.models import GradeCategoryData, GradeData, LibrusData
+from librus_synergia.models import GradeCategoryData, GradeData, GradingSystemData, LibrusData
 from librus_synergia.parsers import parse_grade_value
 
 # Minimum average for a 2, 3, 4, 5 and 6 - a common setup, but schools
@@ -68,6 +68,7 @@ def average_sums(
     grades: list[GradeData],
     categories: dict[int, GradeCategoryData],
     *,
+    grading: GradingSystemData | None = None,
     subject_id: int | None = None,
     semester: int | None = None,
     weighted: bool = True,
@@ -89,7 +90,7 @@ def average_sums(
         )
         if category is not None and not category.count_to_average:
             continue
-        numeric = parse_grade_value(grade.value)
+        numeric = parse_grade_value(grade.value, grading)
         if numeric is None:
             continue
         weight = (category.weight if category is not None else 1) if weighted else 1
@@ -196,14 +197,16 @@ def subject_forecasts(
     result: list[SubjectForecast] = []
     for subject_id in subject_ids:
         total, weight = average_sums(
-            grades, data.grade_categories, subject_id=subject_id, weighted=weighted
+            grades, data.grade_categories, subject_id=subject_id, weighted=weighted,
+            grading=data.grading_system
         )
         if weight <= 0:
             continue
         average = total / weight
         predicted = predicted_grade(average, thresholds)
         old_total, old_weight = average_sums(
-            older, data.grade_categories, subject_id=subject_id, weighted=weighted
+            older, data.grade_categories, subject_id=subject_id, weighted=weighted,
+            grading=data.grading_system
         )
         declining = old_weight > 0 and predicted < predicted_grade(
             old_total / old_weight, thresholds

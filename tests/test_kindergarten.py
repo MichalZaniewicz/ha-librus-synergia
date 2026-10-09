@@ -118,13 +118,15 @@ def test_kindergarten_lookup_parsers() -> None:
 
 async def test_regular_account_makes_no_discovery_requests(hass) -> None:
     """The whole point of gating discovery on a Timetables 403: an ordinary
-    student account must not pay a single extra request for this."""
+    student account must not pay a single extra request for this. (Auth/
+    TokenInfo is asked once a day for the child's LID, for the new
+    descriptive grading - not for kindergarten discovery.)"""
     client = build_mock_client()
     coordinator = _make_coordinator(hass, client)
 
     await coordinator._async_update_data()
 
-    client.async_get_token_info.assert_not_called()
+    assert client.async_get_token_info.call_count == 1
     client.async_get_user.assert_not_called()
     client.async_get_kindergarten_timetable.assert_not_called()
     client.async_get_kindergarten_activity_types.assert_not_called()
@@ -183,4 +185,6 @@ async def test_failed_discovery_is_not_retried_every_cycle(hass) -> None:
     await coordinator._async_update_data()
     await coordinator._async_update_data()
 
-    assert client.async_get_token_info.call_count == 1
+    # Once for discovery, once for the child's LID (new descriptive
+    # grading) - neither repeated on the second poll.
+    assert client.async_get_token_info.call_count == 2
