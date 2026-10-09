@@ -696,6 +696,7 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
     assert state.attributes["justifications_recent"][0]["receiver"] is None
     assert state.attributes["outbox_recent"] == []
     assert state.attributes["archive_recent"] == []
+    assert state.attributes["missing_mailboxes"] == []
 
 
 async def test_school_and_class_sensors(hass) -> None:

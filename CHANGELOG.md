@@ -7,6 +7,8 @@
   `outbox_recent` (messages you sent, each with a `receiver`) and
   `archive_recent` (past school years, read once a day). `get_message` opens
   them with `mailbox: outbox` / `archive/inbox`.
+  `missing_mailboxes` lists the mailboxes the account doesn't have (Librus
+  answers 404), so the Messages card can hide them.
 - **Homework attachments.** *Homework assignments* `recent[].attachments`
   lists the files a teacher attached (`id`, `filename`), and
   `/api/librus_synergia/homework_attachment/<device id>/<attachment id>`

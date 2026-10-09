@@ -570,6 +570,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # non-fatal (see _async_get_messages).
         self._messages_bootstrapped = False
         self._messages_available = False
+        # Mailboxes Librus answered 404 for - this account doesn't have
+        # them (the Messages card hides their chips).
+        self.missing_mailboxes: set[str] = set()
         # The archive (past school years) is read once a day.
         self._archived_messages: list[MessageData] = []
         self._archive_fetched_at: datetime | None = None
@@ -2205,6 +2208,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for box, result in zip(mailboxes, results, strict=True):
             if isinstance(result, LibrusUnexpectedResponseError) and result.status_code == 404:
                 messages[box] = []
+                self.missing_mailboxes.add(box)
             elif isinstance(result, BaseException):
                 if not isinstance(result, LibrusError):
                     raise result
@@ -2213,6 +2217,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 failed = True
             else:
                 messages[box] = parse_message_list(result, box)
+                self.missing_mailboxes.discard(box)
         if failed:
             self._note_optional_endpoint_failure("Messages/Secondary")
         else:
@@ -2235,9 +2240,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 _LOGGER.debug("Archived messages fetch failed (non-fatal)", exc_info=True)
                 return
             payload = {}
+            self.missing_mailboxes.add(ARCHIVE_MAILBOX)
         except LibrusError:
             _LOGGER.debug("Archived messages fetch failed (non-fatal)", exc_info=True)
             return
+        if payload:
+            self.missing_mailboxes.discard(ARCHIVE_MAILBOX)
         self._archived_messages = parse_message_list(payload, ARCHIVE_MAILBOX)
         self._archive_fetched_at = now
 

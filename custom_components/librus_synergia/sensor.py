@@ -1679,6 +1679,8 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             # school years.
             "outbox_recent": _message_list_attr(data.sent_messages),
             "archive_recent": _message_list_attr(data.archived_messages),
+            # Mailboxes this account doesn't have (Librus answers 404).
+            "missing_mailboxes": sorted(self.coordinator.missing_mailboxes),
         }
 
 

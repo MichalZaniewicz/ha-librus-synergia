@@ -600,6 +600,7 @@ async def test_sent_and_archived_messages_and_missing_mailbox(hass) -> None:
     assert data.archived_messages[0].mailbox == "archive/inbox"
     assert data.alert_messages == []
     assert "Messages/Secondary" not in coordinator._optional_endpoint_first_failure
+    assert coordinator.missing_mailboxes == {"alerts"}
 
     data = await coordinator._async_update_data()
 
