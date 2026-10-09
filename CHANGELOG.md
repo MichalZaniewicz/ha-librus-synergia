@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.2-beta.5
+
+### Fixed
+- **Homework file downloads that Librus's sandbox rejects are retried.**
+  Found live: now and then the sandbox answers `download_failed`, while a
+  new try a moment later works. librus-synergia 0.3.12 retries with a fresh
+  download key, up to three times.
+
+### Changed
+- Requires librus-synergia 0.3.12.
+
 ## 0.12.2-beta.4
 
 ### Fixed
