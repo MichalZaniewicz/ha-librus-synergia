@@ -1,7 +1,7 @@
 # Librus Synergia (unofficial) for Home Assistant
 
 <p align="center">
-  <img src="docs/hero-banner.svg" alt="Librus Synergia">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/hero-banner.svg" alt="Librus Synergia">
 </p>
 
 <p align="center">
@@ -55,7 +55,7 @@ https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
 
 <p align="center">
-  <img src="docs/ai-summary-banner.svg" alt="Weekly AI summary">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/ai-summary-banner.svg" alt="Weekly AI summary">
 </p>
 
 ## Weekly AI summary
@@ -70,7 +70,7 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 66 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
 
-![Report card forecast, school trips, lesson topics, catch-up, behaviour, exam prep, school documents and attendance by subject cards](docs/cards-showcase.png)
+![Report card forecast, school trips, lesson topics, catch-up, behaviour, exam prep, school documents and attendance by subject cards](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/cards-showcase.png)
 
 <details>
 <summary><b>All 66 cards</b></summary>
@@ -80,7 +80,7 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 </details>
 
 <p align="center">
-  <img src="docs/installation-banner.svg" alt="Installation">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/installation-banner.svg" alt="Installation">
 </p>
 
 ## Get started
