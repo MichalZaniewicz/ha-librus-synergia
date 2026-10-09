@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.6
+
+Uses [librus-synergia 0.3.16](https://pypi.org/project/librus-synergia/0.3.16/): "Insufficient scopes" isn't an expired session, downloads are checked and give up after 150 s.
 
 ### Changed
 - **Badges belong to one school year.** A new school year starts them over,
