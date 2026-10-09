@@ -1352,13 +1352,17 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         }
 
 
+# How many notices the Unread announcements sensor lists in `notices`.
+_ANNOUNCEMENTS_LISTED = 15
+
+
 class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
     """Count of school notices ("ogłoszenia") not yet marked read, with a
     recent-items attribute (subject/content preview/dates) matching the
     Behaviour notices and Unread messages sensors' pattern."""
 
     _attr_translation_key = "unread_announcements"
-    _unrecorded_attributes = frozenset({"recent"})
+    _unrecorded_attributes = frozenset({"recent", "notices"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:bullhorn"
 
@@ -1406,8 +1410,32 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
                     "creation_date": n.creation_date,
                 }
                 for n in self._unread()[:10]
-            ]
+            ],
+            # The whole notice board, read or not, newest first - Librus
+            # marks a notice read once it's opened anywhere (the app, the
+            # website), so a list of only unread ones is usually empty.
+            "notices": [
+                {
+                    "id": n.id,
+                    "subject": n.subject,
+                    "content": n.content,
+                    "start_date": n.start_date,
+                    "end_date": n.end_date,
+                    "creation_date": n.creation_date,
+                    "read": n.was_read,
+                }
+                for n in self._notices()[:_ANNOUNCEMENTS_LISTED]
+            ],
         }
+
+    def _notices(self) -> list[Any]:
+        if self.coordinator.data is None:
+            return []
+        return sorted(
+            self.coordinator.data.school_notices,
+            key=lambda n: (n.start_date or n.creation_date or ""),
+            reverse=True,
+        )
 
 
 class LibrusBehaviourNoticesSensor(LibrusSensorBase):

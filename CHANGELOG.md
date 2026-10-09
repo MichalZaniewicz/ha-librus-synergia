@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **The whole notice board.** The Unread announcements sensor has a new
+  `notices` attribute: the latest 15 notices, read ones too, with a `read`
+  flag. Librus marks a notice read once it's opened anywhere (the app, the
+  website), so the unread-only `recent` list was usually empty and the
+  Announcements card said "No announcements".
+
 ## 0.12.5-beta.4
 
 ### Fixed

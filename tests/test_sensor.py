@@ -572,6 +572,24 @@ async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
     assert recent[0]["end_date"] == "2026-09-30"
 
 
+async def test_unread_announcements_sensor_lists_read_notices_too(hass) -> None:
+    """Librus marks a notice read once it's opened anywhere, so the card
+    needs the whole board: `notices` lists read ones as well, newest first."""
+    client = build_mock_client(
+        async_get_school_notices={
+            "SchoolNotices": [
+                {"Id": "A", "Subject": "Starsze", "Content": "", "StartDate": "2026-09-01", "WasRead": True},
+                {"Id": "B", "Subject": "Nowsze", "Content": "", "StartDate": "2026-10-01", "WasRead": False},
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "unread_announcements"))
+    assert state.state == "1"
+    assert [(n["id"], n["read"]) for n in state.attributes["notices"]] == [("B", False), ("A", True)]
+
+
 async def test_unread_messages_sensor_unavailable_when_school_has_no_module(hass) -> None:
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = False
