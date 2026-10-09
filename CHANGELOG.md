@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.2
 
 ### Added
 - **School documents download through Home Assistant.** The document's link
