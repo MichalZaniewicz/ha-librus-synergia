@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.8
 
 Uses [librus-synergia 0.3.17](https://pypi.org/project/librus-synergia/0.3.17/): a dead Synergia web session on a download is caught again, and the 150 s download limit covers the whole call.
 
