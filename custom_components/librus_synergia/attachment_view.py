@@ -7,7 +7,10 @@ disk, and the message isn't opened (marked read) in Librus. The companion
 Messages card calls this when a file name is tapped.
 
 `GET /api/librus_synergia/homework_attachment/<device id>/<attachment id>`
-does the same for a homework assignment's file (the Homework checklist card).
+does the same for a homework assignment's file (the Homework checklist card),
+and `GET /api/librus_synergia/school_file/<device id>/<file id>` for a school
+document (the School documents card) - its Synergia link alone needs a
+logged-in Synergia session, which the browser doesn't have.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 
 URL = f"/api/{DOMAIN}/attachment/{{device_id}}/{{message_id}}/{{attachment_id}}"
 HOMEWORK_URL = f"/api/{DOMAIN}/homework_attachment/{{device_id}}/{{attachment_id}}"
+SCHOOL_FILE_URL = f"/api/{DOMAIN}/school_file/{{device_id}}/{{file_id}}"
 
 
 def _file_response(file: Any, fallback_name: str) -> web.Response:
@@ -106,6 +110,22 @@ class LibrusHomeworkAttachmentView(HomeAssistantView):
         )
 
 
+class LibrusSchoolFileView(HomeAssistantView):
+    """Streams one school document (SchoolFiles)."""
+
+    url = SCHOOL_FILE_URL
+    name = f"api:{DOMAIN}:school_file"
+    requires_auth = True
+
+    async def get(self, request: web.Request, device_id: str, file_id: str) -> web.Response:
+        return await _async_download(
+            request,
+            device_id,
+            lambda c: c.async_download_school_file(file_id),
+            f"school-file-{file_id}",
+        )
+
+
 def async_register_attachment_view(hass: HomeAssistant) -> None:
     """Register the view once per Home Assistant run (views can't be
     unregistered; with no Librus entry loaded it answers 404)."""
@@ -113,4 +133,5 @@ def async_register_attachment_view(hass: HomeAssistant) -> None:
         return
     hass.http.register_view(LibrusAttachmentView())
     hass.http.register_view(LibrusHomeworkAttachmentView())
+    hass.http.register_view(LibrusSchoolFileView())
     hass.data[f"{DOMAIN}_attachment_view"] = True

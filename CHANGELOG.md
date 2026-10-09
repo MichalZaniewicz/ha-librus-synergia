@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **School documents download through Home Assistant.** The document's link
+  opened Synergia, which says "Brak dostępu" in a browser that isn't logged
+  in to Librus. `GET /api/librus_synergia/school_file/<device>/<file id>`
+  now fetches it like a homework file (nothing saved in Home Assistant); the
+  School documents card uses it.
+
+### Fixed
+- **A homework file sometimes failed to download** ("No download link"):
+  Synergia's web session can expire while the API keeps working. It is now
+  recognised as an expired session, so the integration logs in again and
+  retries (librus-synergia 0.3.15).
+
 ## 0.12.5-beta.1
 
 ### Added

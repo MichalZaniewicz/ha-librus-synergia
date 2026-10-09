@@ -239,3 +239,24 @@ async def test_homework_attachment_view_retries_after_session_expiry(hass, hass_
     assert 'filename="karta.pdf"' in response.headers["Content-Disposition"]
     assert client.async_download_homework_attachment.await_count == 2
     client.async_download_homework_attachment.assert_awaited_with("31")
+
+
+async def test_school_file_view_downloads_through_home_assistant(hass, hass_client) -> None:
+    """The document's Synergia link needs a logged-in Synergia session the
+    browser doesn't have, so it goes through Home Assistant."""
+    client = build_mock_client(async_get_school_files=FILES)
+    client.async_download_school_file.return_value = AttachmentFileData(
+        filename="Regulamin.pdf", content_type="application/pdf", content=b"%PDF"
+    )
+    entry = await setup_integration(hass, client)
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    http = await hass_client()
+
+    response = await http.get(f"/api/{DOMAIN}/school_file/{device.id}/17613")
+
+    assert response.status == 200
+    assert await response.read() == b"%PDF"
+    client.async_download_school_file.assert_awaited_once_with("/pliki_szkoly/pobierz/1")
+
+    unknown = await http.get(f"/api/{DOMAIN}/school_file/{device.id}/999")
+    assert unknown.status == 502

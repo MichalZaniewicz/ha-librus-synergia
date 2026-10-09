@@ -2064,6 +2064,23 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
             return await self._client.async_download_homework_attachment(attachment_id)
 
+    async def async_download_school_file(self, file_id: str) -> Any:
+        """Download one school document (by its SchoolFiles id) for the
+        attachment view, with one forced relogin + retry like the homework
+        files. An unknown id is reported as not found."""
+        assert self.config_entry is not None
+        files = self.data.school_files if self.data else []
+        path = next((f.download_path for f in files if str(f.id) == file_id), None)
+        if not path:
+            raise LibrusUnexpectedResponseError(f"Unknown school document {file_id}")
+        try:
+            return await self._client.async_download_school_file(path)
+        except LibrusSessionExpiredError:
+            await self._client.async_ensure_session_valid(
+                self.config_entry.data[CONF_PASSWORD], force=True
+            )
+            return await self._client.async_download_school_file(path)
+
     async def _async_get_justifications(self) -> list[JustificationData]:
         """The parent's submitted absence justifications. A failure keeps
         the last good copy, like any optional endpoint."""
