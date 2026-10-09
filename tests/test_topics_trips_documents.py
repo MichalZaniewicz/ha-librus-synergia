@@ -262,4 +262,4 @@ async def test_school_file_view_downloads_through_home_assistant(hass, hass_clie
     client.async_download_school_file.assert_awaited_once_with("/pliki_szkoly/pobierz/1")
 
     unknown = await http.get(f"/api/{DOMAIN}/school_file/{device.id}/999")
-    assert unknown.status == 502
+    assert unknown.status == 404

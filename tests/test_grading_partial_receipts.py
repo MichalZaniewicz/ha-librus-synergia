@@ -89,6 +89,12 @@ async def test_new_partial_grade_fires_new_grade_event(hass) -> None:
     coordinator = _coordinator(hass, client)
     await coordinator._async_update_data()  # first sync only seeds
 
+    # Without any partial grades they're asked for once an hour, not again
+    # on the next refresh.
+    await coordinator._async_update_data()
+    assert client.async_get_partial_grades.await_count == 1
+
+    coordinator._fetched_at.pop("PartialGrades")  # an hour later
     client.async_get_partial_grades.return_value = PARTIAL
     await coordinator._async_update_data()
     await hass.async_block_till_done()
