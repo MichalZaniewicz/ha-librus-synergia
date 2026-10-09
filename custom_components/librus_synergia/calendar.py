@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from bisect import bisect_left
+from collections.abc import Hashable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -12,7 +14,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from librus_synergia import LibrusError
 from librus_synergia.models import (
     FreeDayData,
     HomeworkEventData,
@@ -28,7 +29,8 @@ from .const import (
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
 )
-from .coordinator import LibrusDataUpdateCoordinator, lesson_change, merge_timetables
+from .coordinator import LibrusDataUpdateCoordinator, lesson_change
+from .forecast import DataMemo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,18 +93,28 @@ def _inclusive_end_date(end_date: datetime) -> date:
     return (end_date - timedelta(microseconds=1)).date()
 
 
-_TOPIC_INDEX: dict[int, dict[tuple[str, int | None], str]] = {}
+# (date, lesson number) -> topic, and the built calendar events, per
+# coordinator data object and entry (see forecast.DataMemo). The topic index
+# used to be keyed by a bare `id()` of the topics list: a recycled id could
+# hand one student's topics to another, and two students evicted each
+# other's index on every call.
+_TOPIC_INDEX = DataMemo()
+_CALENDAR_EVENTS = DataMemo()
 
 
-def _lesson_topic(day: date, lesson: LessonData, data: LibrusData) -> str | None:
+def _lesson_topic(
+    day: date, lesson: LessonData, data: LibrusData, owner: Hashable | None = None
+) -> str | None:
     """The topic Librus has for this lesson (same date and lesson number;
     `Realizations`), if it has been held and filled in."""
-    key = id(data.lesson_topics)
-    index = _TOPIC_INDEX.get(key)
-    if index is None:
-        index = {((t.date or "")[:10], t.lesson_no): t.topic for t in data.lesson_topics if t.topic}
-        _TOPIC_INDEX.clear()
-        _TOPIC_INDEX[key] = index
+    index = _TOPIC_INDEX.get(
+        data,
+        None,
+        lambda: {
+            ((t.date or "")[:10], t.lesson_no): t.topic for t in data.lesson_topics if t.topic
+        },
+        owner=owner,
+    )
     return index.get((day.isoformat(), lesson.lesson_no))
 
 
@@ -131,8 +143,10 @@ class _LessonParts:
         )
 
 
-def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> CalendarEvent | None:
-    parts = _lesson_parts(day, lesson, data)
+def _lesson_to_event(
+    day: date, lesson: LessonData, data: LibrusData, owner: Hashable | None = None
+) -> CalendarEvent | None:
+    parts = _lesson_parts(day, lesson, data, owner)
     return parts.to_event() if parts is not None else None
 
 
@@ -157,7 +171,11 @@ def _merge_parts(group: list[_LessonParts]) -> CalendarEvent:
 
 
 def _day_events(
-    day: date, lessons: list[LessonData], data: LibrusData, merge: bool
+    day: date,
+    lessons: list[LessonData],
+    data: LibrusData,
+    merge: bool,
+    owner: Hashable | None = None,
 ) -> list[CalendarEvent]:
     """Calendar events for one day. With `merge`, lessons with the same
     start and end become one event. Changed lessons (cancelled,
@@ -166,7 +184,7 @@ def _day_events(
     events: list[CalendarEvent] = []
     groups: dict[tuple[datetime, datetime], list[_LessonParts]] = {}
     for lesson in lessons:
-        parts = _lesson_parts(day, lesson, data)
+        parts = _lesson_parts(day, lesson, data, owner)
         if parts is None:
             continue
         if merge and not parts.changed:
@@ -179,7 +197,9 @@ def _day_events(
     return events
 
 
-def _lesson_parts(day: date, lesson: LessonData, data: LibrusData) -> _LessonParts | None:
+def _lesson_parts(
+    day: date, lesson: LessonData, data: LibrusData, owner: Hashable | None = None
+) -> _LessonParts | None:
     if lesson.hour_from is None or lesson.hour_to is None:
         return None
     try:
@@ -220,7 +240,7 @@ def _lesson_parts(day: date, lesson: LessonData, data: LibrusData) -> _LessonPar
         lines.append(f"Zastępstwo za: {replaced}")
     if change["room_changed"]:
         lines.append(f"Zmiana sali: {change['original_classroom'] or '?'} → {classroom_name or '?'}")
-    topic = _lesson_topic(day, lesson, data)
+    topic = _lesson_topic(day, lesson, data, owner)
     if topic:
         lines.append(f"Temat: {topic}")
     if change["kind"] == "moved":
@@ -334,6 +354,43 @@ def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
     )
 
 
+def _agenda_events(data: LibrusData) -> list[CalendarEvent]:
+    """Every Agenda entry and every parent-teacher conference HomeWorks
+    doesn't already list, as all-day events."""
+    events = [
+        event for item in data.homeworks if (event := _homework_to_event(item, data)) is not None
+    ]
+    events += [
+        event
+        for item in _pt_conferences_not_in_agenda(data)
+        if (event := _pt_conference_to_event(item, data)) is not None
+    ]
+    return events
+
+
+def _free_day_events(data: LibrusData) -> list[CalendarEvent]:
+    return [event for item in data.free_days if (event := _free_day_to_event(item)) is not None]
+
+
+@dataclass(frozen=True, slots=True)
+class _TimetableEvents:
+    """The polled timetable's events: per day (for range queries) and all of
+    them sorted by start with their start times alongside (for the current/
+    next event, found by bisection)."""
+
+    by_day: dict[date, list[CalendarEvent]]
+    ordered: list[CalendarEvent]
+    starts: list[datetime]
+
+
+def _timetable_events(data: LibrusData, merge: bool, owner: Hashable | None) -> _TimetableEvents:
+    by_day = {
+        day: _day_events(day, lessons, data, merge, owner) for day, lessons in data.timetable.items()
+    }
+    ordered = sorted((event for events in by_day.values() for event in events), key=lambda e: e.start)
+    return _TimetableEvents(by_day, ordered, [event.start for event in ordered])
+
+
 class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
     """The student's lesson timetable, including known substitutions.
 
@@ -341,24 +398,13 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
     which is fetched on every refresh - so a substitution added today
     shows up in the cards at the next refresh. Dashboards can also ask
     `async_get_events` for other ranges (e.g. "next month"); those weeks
-    are fetched on demand and cached here for a day.
+    are fetched on demand and cached by the coordinator (shared with the
+    Assist timetable tool - see `LibrusDataUpdateCoordinator.
+    async_get_timetable_week`).
     """
 
     _attr_has_entity_name = True
     _attr_translation_key = "timetable"
-
-    # How long an on-demand-fetched week is trusted before being refetched -
-    # same window as the coordinator's own reference-data cache. Without
-    # this, a week fetched once (e.g. a dashboard querying "next month")
-    # would be served from _week_cache FOREVER for the lifetime of this
-    # entity, silently going stale (a substitution added/removed after the
-    # first fetch would never be picked up).
-    _WEEK_CACHE_TTL = timedelta(hours=24)
-    # A dashboard paging through months would otherwise keep every week it
-    # ever looked at. Past the TTL an entry is only a fallback for a failed
-    # refetch; that fallback is kept for weeks within this distance of the
-    # current one, and nothing fetched longer ago than this is kept at all.
-    _WEEK_CACHE_KEEP = timedelta(weeks=8)
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator)
@@ -368,99 +414,57 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         self._merge = bool(
             entry.options.get(CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS)
         )
-        self._week_cache: dict[date, tuple[dict[date, list[LessonData]], datetime]] = {}
 
-    def _coordinator_week(self, week_start: date) -> dict[date, list[LessonData]] | None:
-        """This week's or next week's lessons from the coordinator's own
-        timetable (fetched on every refresh), or None when `week_start` is
-        another week or the coordinator's data doesn't hold it - e.g. on a
-        Monday before the first refresh of the new week, when its data still
-        covers last week and this one."""
+    def _polled_events(self) -> _TimetableEvents | None:
+        """The polled timetable's events, built once per coordinator data
+        object: HA reads `event` on every state write, and every range query
+        within this week and next needs the same events."""
         data = self.coordinator.data
         if data is None:
             return None
-        this_week = _iso_week_start(dt_util.now().date())
-        if week_start not in (this_week, this_week + timedelta(days=7)):
-            return None
-        week_end = week_start + timedelta(days=7)
-        days = {day: lessons for day, lessons in data.timetable.items() if week_start <= day < week_end}
-        return days or None
-
-    def _prune_week_cache(self) -> None:
-        now = dt_util.utcnow()
-        this_week = _iso_week_start(dt_util.now().date())
-        for week_start, (_lessons, fetched_at) in list(self._week_cache.items()):
-            age = now - fetched_at
-            far = abs(week_start - this_week) > self._WEEK_CACHE_KEEP
-            if age > self._WEEK_CACHE_KEEP or (far and age >= self._WEEK_CACHE_TTL):
-                del self._week_cache[week_start]
-
-    async def _async_get_week(self, week_start: date) -> dict[date, list[LessonData]]:
-        from_coordinator = self._coordinator_week(week_start)
-        if from_coordinator is not None:
-            return from_coordinator
-        cached = self._week_cache.get(week_start)
-        if cached is not None and dt_util.utcnow() - cached[1] < self._WEEK_CACHE_TTL:
-            return cached[0]
-        try:
-            payload = await self.coordinator.async_fetch_timetable_week(week_start)
-        except LibrusError as err:
-            # Forced re-login (inside async_fetch_timetable_week) also
-            # failed - don't crash the whole calendar REST request over one
-            # week's worth of lessons. Prefer stale cached data over none if
-            # we have it (a day-old timetable is still more useful than an
-            # empty one); only degrade to "no lessons known" if this week
-            # was never fetched successfully before.
-            if cached is not None:
-                _LOGGER.warning(
-                    "Failed to refresh timetable for week starting %s "
-                    "(session recovery also failed: %s) - serving stale cached "
-                    "data instead",
-                    week_start,
-                    err,
-                )
-                return cached[0]
-            _LOGGER.warning(
-                "Failed to fetch timetable for week starting %s "
-                "(session recovery also failed: %s) - returning no lessons "
-                "for this week",
-                week_start,
-                err,
-            )
-            return {}
-        merged = merge_timetables(payload)
-        self._week_cache[week_start] = (merged, dt_util.utcnow())
-        self._prune_week_cache()
-        return merged
+        owner = self.coordinator.memo_owner
+        return _CALENDAR_EVENTS.get(
+            data, ("timetable", self._merge), lambda: _timetable_events(data, self._merge, owner),
+            owner=owner,
+        )
 
     @property
     def event(self) -> CalendarEvent | None:
-        if self.coordinator.data is None:
+        events = self._polled_events()
+        if events is None:
             return None
         now = dt_util.now()
-        upcoming = [
-            event
-            for day, lessons in self.coordinator.data.timetable.items()
-            for event in _day_events(day, lessons, self.coordinator.data, self._merge)
-            if event.end >= now
-        ]
-        return min(upcoming, key=lambda event: event.start) if upcoming else None
+        # Sorted by start, so the first one not over yet is the current or
+        # next lesson. A lesson never lasts a day: everything that started
+        # before `now - 1 day` is over and skipped by bisection instead of
+        # being walked through on every state write.
+        index = bisect_left(events.starts, now - timedelta(days=1))
+        return next((event for event in events.ordered[index:] if event.end >= now), None)
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
-        if self.coordinator.data is None:
+        data = self.coordinator.data
+        polled = self._polled_events()
+        if data is None or polled is None:
             return []
-        merged: dict[date, list[LessonData]] = {}
+        week_starts: list[date] = []
         week_start = _iso_week_start(start_date.date())
         last_week_start = _iso_week_start(_inclusive_end_date(end_date))
         while week_start <= last_week_start:
-            merged.update(await self._async_get_week(week_start))
+            week_starts.append(week_start)
             week_start += timedelta(days=7)
+        lessons_by_day = await self.coordinator.async_get_timetable_weeks(week_starts)
 
         events: list[CalendarEvent] = []
-        for day, lessons in merged.items():
-            for event in _day_events(day, lessons, self.coordinator.data, self._merge):
+        for day, lessons in lessons_by_day.items():
+            # The polled weeks' events are already built (same lessons).
+            day_events = (
+                polled.by_day[day]
+                if data.timetable.get(day) is lessons and day in polled.by_day
+                else _day_events(day, lessons, data, self._merge, self.coordinator.memo_owner)
+            )
+            for event in day_events:
                 # BUG FIX (2026-09-06, found live): compare the lesson's
                 # OWN start/end datetimes against the real [start_date,
                 # end_date) window, not a day-level filter derived from
@@ -501,18 +505,25 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         if self.coordinator.data is None:
             return None
         today = dt_util.now().date()
+        # `end` of an all-day event is exclusive (the day after): `>` keeps
+        # yesterday's entry (end == today) from showing as current all day,
+        # same as the free-days calendar below.
         upcoming = [
             event
-            for item in self.coordinator.data.homeworks
-            if (event := _homework_to_event(item, self.coordinator.data)) is not None
-            and event.end >= today
-        ] + [
-            event
-            for item in _pt_conferences_not_in_agenda(self.coordinator.data)
-            if (event := _pt_conference_to_event(item, self.coordinator.data)) is not None
-            and event.end >= today
+            for event in self._events()
+            if event.end > today
         ]
         return min(upcoming, key=lambda event: event.start) if upcoming else None
+
+    def _events(self) -> list[CalendarEvent]:
+        """Every Agenda event, built once per coordinator data object (the
+        state, every range query and the next-event lookup all need them)."""
+        data = self.coordinator.data
+        if data is None:
+            return []
+        return _CALENDAR_EVENTS.get(
+            data, "agenda", lambda: _agenda_events(data), owner=self.coordinator.memo_owner
+        )
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
@@ -523,24 +534,15 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         # `end_date.date()` over-includes one day at an exact local-
         # midnight boundary.
         start, end = start_date.date(), _inclusive_end_date(end_date)
-        events: list[CalendarEvent] = []
-        for item in self.coordinator.data.homeworks:
-            event = _homework_to_event(item, self.coordinator.data)
-            # BUG FIX (code review): was single-point containment (`start
-            # <= event.start <= end`), unlike LibrusFreeDaysCalendar below
-            # which already used a proper overlap check for the same class
-            # of range query - currently masked because every Agenda event
-            # today is single-day (containment and overlap agree for those),
-            # but fixed properly now via the shared `_event_overlaps` helper
-            # since this exact bug class ("midnight-boundary"-adjacent date-
-            # range bugs) has bitten this project multiple times already.
-            if event is not None and _event_overlaps(event, start, end):
-                events.append(event)
-        for item in _pt_conferences_not_in_agenda(self.coordinator.data):
-            event = _pt_conference_to_event(item, self.coordinator.data)
-            if event is not None and _event_overlaps(event, start, end):
-                events.append(event)
-        return events
+        # BUG FIX (code review): was single-point containment (`start <=
+        # event.start <= end`), unlike LibrusFreeDaysCalendar below which
+        # already used a proper overlap check for the same class of range
+        # query - currently masked because every Agenda event today is
+        # single-day (containment and overlap agree for those), but fixed
+        # properly now via the shared `_event_overlaps` helper since this
+        # exact bug class ("midnight-boundary"-adjacent date-range bugs) has
+        # bitten this project multiple times already.
+        return [event for event in self._events() if _event_overlaps(event, start, end)]
 
 
 class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
@@ -565,12 +567,16 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
         if self.coordinator.data is None:
             return None
         today = dt_util.now().date()
-        upcoming = [
-            event
-            for item in self.coordinator.data.free_days
-            if (event := _free_day_to_event(item)) is not None and event.end > today
-        ]
+        upcoming = [event for event in self._events() if event.end > today]
         return min(upcoming, key=lambda event: event.start) if upcoming else None
+
+    def _events(self) -> list[CalendarEvent]:
+        data = self.coordinator.data
+        if data is None:
+            return []
+        return _CALENDAR_EVENTS.get(
+            data, "free_days", lambda: _free_day_events(data), owner=self.coordinator.memo_owner
+        )
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
@@ -581,12 +587,7 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
         # `end_date.date()` over-includes one day at an exact local-
         # midnight boundary.
         start, end = start_date.date(), _inclusive_end_date(end_date)
-        events: list[CalendarEvent] = []
-        for item in self.coordinator.data.free_days:
-            event = _free_day_to_event(item)
-            # Overlap check, not containment - a multi-day break can start
-            # before the requested window and/or end after it. See
-            # `_event_overlaps` (now shared with LibrusAgendaCalendar above).
-            if event is not None and _event_overlaps(event, start, end):
-                events.append(event)
-        return events
+        # Overlap check, not containment - a multi-day break can start
+        # before the requested window and/or end after it. See
+        # `_event_overlaps` (now shared with LibrusAgendaCalendar above).
+        return [event for event in self._events() if _event_overlaps(event, start, end)]

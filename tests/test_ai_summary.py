@@ -145,7 +145,9 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
 
     context = build_context(data, _TODAY, weighted=True, include_news=False, student="Ola K")
 
-    assert context["this_week"] == {"from": "2026-09-28", "to": "2026-10-04"}
+    # Weekdays spelled out like every other date in the snapshot.
+    assert context["this_week"] == {"from": "2026-09-28 Mon", "to": "2026-10-04 Sun"}
+    assert context["next_week"]["from"] == "2026-10-05 Mon"
     assert [g["value"] for g in context["grades"]] == ["6"]
     assert context["grades"][0]["date"] == "2026-10-01 Thu"
     assert context["today"] == "2026-10-04 Sun"

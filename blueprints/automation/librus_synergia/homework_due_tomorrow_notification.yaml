@@ -7,8 +7,10 @@ blueprint:
     at least one. Silent (no action) on a day with nothing due tomorrow.
 
 
-    Use `{{ homework_summary }}` in your action for a ready-made list, or
-    `{{ homework_lines }}` / `{{ homework_count }}` directly.
+    Use `{{ homework_summary }}` in your action for a ready-made list
+    (prefixed with the child's name, so one shared notification still says
+    whose homework it is), or `{{ homework_lines }}` / `{{ homework_count }}`
+    / `{{ student_name }}` directly.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/homework_due_tomorrow_notification.yaml
   input:
@@ -74,7 +76,10 @@ actions:
           {%- endif -%}
         {%- endfor -%}
         {{ ns.count }}
-      homework_summary: "Zadanie domowe na jutro:\n{{ homework_lines }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(homework_assignments_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      homework_summary: "{{ (student_name ~ ': ') if student_name else '' }}Zadanie domowe na jutro:\n{{ homework_lines }}"
   - !input notify_action
 
 mode: single

@@ -1,11 +1,16 @@
 blueprint:
   name: "Librus: Time to Leave"
   description: >
-    Runs your action once, right when it's time to leave for the next
-    lesson - computed from the Next lesson sensor's own `start` time minus
-    your travel time, re-checked every minute against the real clock
-    rather than only once per Librus poll cycle, so the timing stays
-    accurate even with a longer poll interval.
+    Runs your action once a school day, right when it's time to leave for
+    the FIRST lesson of the day - its start time minus your travel time,
+    re-checked every minute against the real clock rather than only once
+    per Librus poll cycle, so the timing stays accurate even with a longer
+    poll interval. Later lessons of the same day never trigger it.
+
+
+    The first lesson is taken from the School start sensor. If you leave
+    that input empty, the blueprint looks for the School start sensor on the
+    same device as the Next lesson sensor by itself.
 
 
     Use `{{ leave_text }}` in your action.
@@ -19,6 +24,17 @@ blueprint:
         entity:
           integration: librus_synergia
           domain: sensor
+    school_start_entity:
+      name: School start sensor (optional)
+      description: >
+        The Librus "School start" sensor for this student. Leave empty to
+        find it automatically on the Next lesson sensor's device.
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+          device_class: timestamp
     travel_minutes:
       name: Travel time (minutes)
       description: How long it takes to get to school.
@@ -38,6 +54,7 @@ blueprint:
 
 variables:
   next_lesson_entity: !input next_lesson_entity
+  school_start_entity: !input school_start_entity
   travel_minutes: !input travel_minutes
 
 triggers:
@@ -45,21 +62,49 @@ triggers:
     minutes: "/1"
 
 conditions:
-  # A single expression on purpose (not a {% if %}/{% else %} block) - any
-  # whitespace BETWEEN separate {% %}/{{ }} tags becomes literal template
-  # output, which would break a plain-string boolean comparison; keeping
-  # this as one {{ }} avoids that class of bug entirely (see the Weekly
-  # Digest blueprint's own comment for the same lesson learned the hard
-  # way). `and` short-circuits, so as_datetime(None) is never evaluated
-  # when there's no next lesson. The `0 <= ... < 1` band matches the
-  # trigger's own 1-minute cadence - true for exactly one tick per lesson.
+  # Whitespace between separate tags would become literal template output
+  # and break the boolean result, so every tag trims with `-`.
+  #
+  # The moment to watch is the School start sensor's state (the start of
+  # today's first lesson until it begins). Without that input, the Next
+  # lesson's own start is used, but only when it equals the state of a
+  # timestamp sensor on the same device - the School start sensor - i.e.
+  # only when the next lesson is the first lesson of its day. (The School
+  # end sensor is the end of a lesson and can't equal a lesson's start.)
+  #
+  # The `0 <= ... < 1` band matches the trigger's 1-minute cadence - true
+  # for exactly one tick a day.
   - condition: template
     value_template: >-
-      {{ state_attr(next_lesson_entity, 'start') is not none
-         and 0 <= ((travel_minutes | float(15)) - ((as_datetime(state_attr(next_lesson_entity, 'start')) - now()).total_seconds() / 60)) < 1 }}
+      {%- if school_start_entity -%}
+        {%- set ts = as_timestamp(states(school_start_entity), none) -%}
+      {%- else -%}
+        {%- set ts = as_timestamp(state_attr(next_lesson_entity, 'start'), none) -%}
+      {%- endif -%}
+      {%- if ts is none -%}false
+      {%- else -%}
+        {%- set minutes_to_start = (ts - as_timestamp(now())) / 60 -%}
+        {%- set in_window = 0 <= (travel_minutes | float(15)) - minutes_to_start < 1 -%}
+        {%- if not in_window -%}false
+        {%- elif school_start_entity -%}true
+        {%- else -%}
+          {%- set ns = namespace(first=false) -%}
+          {%- set dev = device_id(next_lesson_entity) -%}
+          {%- for e in (device_entities(dev) if dev else []) -%}
+            {%- if e.startswith('sensor.') and e != next_lesson_entity
+                  and state_attr(e, 'device_class') == 'timestamp'
+                  and as_timestamp(states(e), none) == ts -%}
+              {%- set ns.first = true -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.first }}
+        {%- endif -%}
+      {%- endif -%}
 
 actions:
   - variables:
+      # Right before the first lesson, the Next lesson sensor points at that
+      # same lesson, so its subject and classroom are the first lesson's.
       leave_text: >-
         {{ 'Czas wyjść na lekcję: ' ~ states(next_lesson_entity)
            ~ (' (sala ' ~ state_attr(next_lesson_entity, 'classroom') ~ ')' if state_attr(next_lesson_entity, 'classroom') else '')

@@ -22,10 +22,13 @@ blueprint:
           device_class: timestamp
     minutes_before:
       name: Minutes before the last lesson ends
+      description: >
+        At least 1 minute - the reminder fires when the countdown window
+        opens, so a zero-length window would never trigger.
       default: 15
       selector:
         number:
-          min: 0
+          min: 1
           max: 120
           step: 5
           unit_of_measurement: min
@@ -46,7 +49,8 @@ triggers:
       {%- if s in ['unknown', 'unavailable', ''] -%}false
       {%- else -%}
         {%- set t = s | as_datetime -%}
-        {{ t is not none and t - timedelta(minutes=before | int(15)) <= now() < t }}
+        {#- An older automation saved with 0 minutes still gets a 1-minute window. -#}
+        {{ t is not none and t - timedelta(minutes=[before | int(15), 1] | max) <= now() < t }}
       {%- endif -%}
 
 actions:

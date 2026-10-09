@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, timedelta
+import hashlib
 import logging
 from typing import Any
 
@@ -90,6 +91,12 @@ def daily_averages(
     return out
 
 
+def statistic_id_prefix(entry_id: str) -> str:
+    """Every statistic id of one entry starts with this (the overall one is
+    exactly it) - also how `__init__.async_remove_entry` finds them."""
+    return f"{DOMAIN}:{slugify(entry_id)}_average"
+
+
 def _metadata(statistic_id: str, name: str) -> dict[str, Any]:
     """StatisticMetaData for this Home Assistant: `mean_type`/`unit_class`
     where the recorder knows them, the older `has_mean` otherwise."""
@@ -138,7 +145,7 @@ class LibrusAverageHistory:
     @property
     def _prefix(self) -> str:
         entry = self._coordinator.config_entry
-        return f"{DOMAIN}:{slugify(entry.entry_id if entry else 'librus')}_average"
+        return statistic_id_prefix(entry.entry_id if entry else "librus")
 
     @callback
     def async_start(self) -> None:
@@ -226,24 +233,35 @@ class LibrusAverageHistory:
                 data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted,
                 grading=data.grading_system, start=start
             )
+            first_run = statistic_id not in self._written
             written = self._written.get(statistic_id, {})
-            rows = [
-                {
-                    "start": dt_util.start_of_local_day(day),
-                    "mean": value,
-                    "min": value,
-                    "max": value,
-                }
-                for day, value in points
-                if written.get(day) != value
-            ]
-            if rows:
-                async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
             # The days before `start` are unchanged by definition; from it on
             # the new values replace the old ones.
             kept = {d: v for d, v in written.items() if start is not None and d < start}
-            self._written[statistic_id] = {**kept, **dict(points)}
+            series_now = {**kept, **dict(points)}
+            digest = _series_digest(name, weighted, data.grading_system, series_now)
+            if first_run and self._coordinator.average_digests.get(statistic_id) == digest:
+                # A restart with the same grades: the recorder already has
+                # exactly these rows (the digest of what was last written is
+                # saved with the coordinator's state) - a whole school year
+                # of rows per series used to be written again every start.
+                rows = []
+            else:
+                rows = [
+                    {
+                        "start": dt_util.start_of_local_day(day),
+                        "mean": value,
+                        "min": value,
+                        "max": value,
+                    }
+                    for day, value in points
+                    if written.get(day) != value
+                ]
+            if rows:
+                async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
+            self._written[statistic_id] = series_now
             self._series_grades[statistic_id] = keys
+            self._coordinator.set_average_digest(statistic_id, digest)
         self._computed_categories = categories
         self._computed_today = today
 
@@ -262,6 +280,16 @@ class LibrusAverageHistory:
             if day is not None and day < start:
                 start = day
         return start
+
+
+def _series_digest(
+    name: str, weighted: bool, grading: Any, series: dict[date, float]
+) -> str:
+    """A short fingerprint of one series as written: its name (only a write
+    updates it in the recorder), the mode, the grade scale and every
+    (day, average) row."""
+    text = repr((name, weighted, grading, sorted(series.items())))
+    return hashlib.sha256(text.encode()).hexdigest()[:20]
 
 
 def _grade_key(g: GradeData) -> tuple[Any, ...]:

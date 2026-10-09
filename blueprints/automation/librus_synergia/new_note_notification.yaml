@@ -9,10 +9,11 @@ blueprint:
     Inside your chosen action, use `{{ note_summary }}` for the ready-made
     summary, or reference the individual fields directly, e.g.
     `{{ trigger.event.data.teacher }}` or `{{ trigger.event.data.text }}`.
-    `{{ trigger.event.data.positive }}` is the raw 0/1/2 marker Librus uses
-    for positive/neutral/negative - unconfirmed which is which until a real
-    notice of each kind has been seen, so it's passed through as-is rather
-    than translated here.
+    `{{ trigger.event.data.sentiment }}` says what kind of notice it is:
+    "positive", "negative" or "neutral" - the summary names it, and you can
+    use it in a condition (e.g. only negative notices).
+    `{{ trigger.event.data.positive }}` is Librus's raw marker behind it
+    (0 = negative, 1 = positive, 2 = neutral).
 
 
     If you use this blueprint for more than one child, `note_summary` is
@@ -33,8 +34,12 @@ triggers:
 
 actions:
   - variables:
+      # HA trims rendered variable values, so the space is added where the
+      # word is used, not stored in it.
+      note_kind: >-
+        {{ {'positive': 'pozytywna', 'negative': 'negatywna', 'neutral': 'neutralna'}.get(trigger.event.data.sentiment, '') }}
       note_summary: >-
-        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa uwaga{{ ' od ' + trigger.event.data.teacher if trigger.event.data.teacher else '' }}:
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa uwaga{{ (' ' ~ note_kind) if note_kind else '' }}{{ ' od ' + trigger.event.data.teacher if trigger.event.data.teacher else '' }}:
         {{ trigger.event.data.text }}
   - !input notify_action
 

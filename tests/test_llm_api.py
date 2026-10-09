@@ -88,7 +88,7 @@ async def test_timetable_tool_returns_todays_lessons(hass, freezer) -> None:
             "subject": "Matematyka",
             "teacher": "Anna Nowak",
             "room": "sala 12",
-            "substitution": True,
+            "change": "substitution",
         }
     ]
 

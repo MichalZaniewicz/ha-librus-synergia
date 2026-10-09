@@ -13,6 +13,7 @@ semester grade is given for), in the second semester the whole school year
 from __future__ import annotations
 
 import math
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass
@@ -50,9 +51,26 @@ class DataMemo:
     # when one data object outlives a day or the options differ per caller.
     _KEYS_PER_DATA = 8
 
+    # Every memo, so an unloading entry can drop its slots from all of them
+    # at once (`discard_all`).
+    _ALL: weakref.WeakSet[DataMemo] = weakref.WeakSet()
+
     def __init__(self, size: int = 16) -> None:
         self._size = size
         self._slots: OrderedDict[Hashable, tuple[object, dict[Hashable, Any]]] = OrderedDict()
+        DataMemo._ALL.add(self)
+
+    def discard(self, owner: Hashable) -> None:
+        """Drop `owner`'s slot - its data object and results - right away,
+        instead of keeping a removed or reloading entry's last snapshot alive
+        until other owners push it out."""
+        self._slots.pop(owner, None)
+
+    @classmethod
+    def discard_all(cls, owner: Hashable) -> None:
+        """`discard(owner)` on every memo (an entry unloading)."""
+        for memo in list(cls._ALL):
+            memo.discard(owner)
 
     def get(
         self,

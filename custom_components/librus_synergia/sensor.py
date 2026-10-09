@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timedelta
@@ -13,8 +14,9 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -53,7 +55,7 @@ from .const import (
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
-    days_since_last_absence,
+    _days_since,
     days_since_last_negative_note,
     good_grade_streak,
     grade_improvements,
@@ -66,7 +68,7 @@ from .coordinator import (
     calculate_average as _calculate_average,
 )
 from .catch_up import catch_up
-from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, upcoming_exams
+from .exam_prep import ExamPrep, exam_prep, topics_as_dicts
 from .forecast import (
     HONOURS_AVERAGE,
     DataMemo,
@@ -75,7 +77,14 @@ from .forecast import (
     report_average,
     subject_forecasts,
 )
-from .school_day import MinuteRefresh, SchoolDay, next_end, next_start, school_days
+from .school_day import (
+    SchoolDay,
+    SchoolDayRefresh,
+    SkipUnchangedUpdates,
+    next_end,
+    next_start,
+    school_days,
+)
 
 _T = TypeVar("_T")
 
@@ -86,6 +95,12 @@ _T = TypeVar("_T")
 _GRADES_BY_SUBJECT = DataMemo()
 _GRADE_IMPROVEMENTS = DataMemo()
 _SORTED_LESSONS = DataMemo()
+_TEXT_GRADES_BY_SUBJECT = DataMemo()
+_POINT_GRADES_BY_SUBJECT = DataMemo()
+_SUBJECT_AVERAGES = DataMemo()
+# One pass over the attendance records for the Attendance, Unexcused
+# absences, Subject attendance and Attendance streak sensors.
+_ATTENDANCE = DataMemo()
 
 
 def _grades_by_subject(
@@ -297,10 +312,22 @@ def _point_grade_log(data: LibrusData, grades: list[PointGradeData]) -> list[dic
     ]
 
 
-def _text_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
+def _by_subject(items: list[Any]) -> dict[Any, list[Any]]:
+    out: dict[Any, list[Any]] = {}
+    for item in items:
+        out.setdefault(item.subject_id, []).append(item)
+    return out
+
+
+def _text_grade_attrs(
+    data: LibrusData, subject_id: int, owner: Hashable | None = None
+) -> dict[str, Any]:
     """A subject's text grades (free text instead of a number) - only when
-    it has any."""
-    grades = [g for g in data.text_grades if g.subject_id == subject_id]
+    it has any. Grouped by subject once per data object, not filtered out
+    of every text grade by every subject sensor."""
+    grades = _TEXT_GRADES_BY_SUBJECT.get(
+        data, None, lambda: _by_subject(data.text_grades), owner=owner
+    ).get(subject_id)
     if not grades:
         return {}
     return {
@@ -316,10 +343,14 @@ def _text_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
     }
 
 
-def _point_grade_attrs(data: LibrusData, subject_id: int) -> dict[str, Any]:
+def _point_grade_attrs(
+    data: LibrusData, subject_id: int, owner: Hashable | None = None
+) -> dict[str, Any]:
     """A subject's point grades and their percentage - only when it has any,
     so 1-6 schools see no extra attributes."""
-    grades = [g for g in data.point_grades if g.subject_id == subject_id]
+    grades = _POINT_GRADES_BY_SUBJECT.get(
+        data, None, lambda: _by_subject(data.point_grades), owner=owner
+    ).get(subject_id)
     if not grades:
         return {}
     return {
@@ -411,31 +442,36 @@ async def async_setup_entry(
             LibrusSubjectAverageSensor(coordinator, entry, subject_id) for subject_id in new_ids
         )
 
-    if hide_empty and coordinator.data is not None:
-        # Turning the option on removes the existing sensors of subjects
-        # that still have no grade (the options change reloads the entry).
+    data = coordinator.data
+    # Subject sensors that no longer belong: with "hide subjects without
+    # grades" on, a subject that still has no grade (turning the option on
+    # reloads the entry); and either way, a subject that is gone - not in
+    # Subjects any more and without a grade (a new school year, another
+    # class). Those used to stay forever as `unknown` entities. Only when
+    # Subjects actually answered: an empty lookup (a failed fetch) would
+    # otherwise remove every subject sensor.
+    if data is not None and (hide_empty or data.subjects):
         graded = {
             str(g.subject_id)
-            for g in (
-                *coordinator.data.grades,
-                *coordinator.data.point_grades,
-                *coordinator.data.text_grades,
-            )
+            for g in (*data.grades, *data.point_grades, *data.text_grades)
             if g.subject_id is not None
         }
+        keep = graded if hide_empty else graded | {str(sid) for sid in data.subjects}
         registry = er.async_get(hass)
         prefix, suffix = f"{entry.entry_id}_subject_", "_average"
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
             uid = reg_entry.unique_id
             if uid.startswith(prefix) and uid.endswith(suffix):
-                if uid[len(prefix) : -len(suffix)] not in graded:
+                if uid[len(prefix) : -len(suffix)] not in keep:
                     registry.async_remove(reg_entry.entity_id)
 
     _add_new_subjects()
     entry.async_on_unload(coordinator.async_add_listener(_add_new_subjects))
 
 
-class LibrusSensorBase(CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEntity):
+class LibrusSensorBase(
+    SkipUnchangedUpdates, CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEntity
+):
     """Common bits for every Librus Synergia sensor.
 
     Lists and per-item breakdowns in attributes are kept out of the recorder
@@ -526,6 +562,46 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
         }
 
 
+def _subject_averages(
+    data: LibrusData, weighted: bool, owner: Hashable | None = None
+) -> dict[Any, dict[str, float | None]]:
+    """Every subject's averages - the state's (in the selected mode), both
+    modes, and per semester - worked out once per data object for all
+    subject sensors together, from each subject's own grades. Each sensor
+    used to compute five averages per write, every one of them over every
+    grade of every subject."""
+
+    def compute() -> dict[Any, dict[str, float | None]]:
+        categories = data.grade_categories
+        grading = data.grading_system
+        out: dict[Any, dict[str, float | None]] = {}
+        for subject_id, grades in _grades_by_subject(data, owner).items():
+            out[subject_id] = {
+                "average_weighted": _calculate_average(grades, categories, grading=grading),
+                "average_arithmetic": _calculate_average(
+                    grades, categories, weighted=False, grading=grading
+                ),
+                "average_semester_1": _calculate_average(
+                    grades, categories, semester=1, weighted=weighted, grading=grading
+                ),
+                "average_semester_2": _calculate_average(
+                    grades, categories, semester=2, weighted=weighted, grading=grading
+                ),
+            }
+        return out
+
+    return _SUBJECT_AVERAGES.get(data, ("subject_averages", weighted), compute, owner=owner)
+
+
+def _summary_grade(grades: list[GradeData], flag: str) -> str | None:
+    """The value of a subject's grade with `flag` set (the newest one, if
+    Librus lists several)."""
+    flagged = [g for g in grades if getattr(g, flag)]
+    if not flagged:
+        return None
+    return max(flagged, key=lambda g: g.add_date or "").value
+
+
 class LibrusSubjectAverageSensor(LibrusSensorBase):
     """Average for a single subject (same mode as the overall one),
     discovered dynamically."""
@@ -554,50 +630,43 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         return {"subject": self._subject_name}
 
     def _own_grades(self) -> list[GradeData]:
-        """This subject's grades only - the averages below still filter by
-        subject id too, so the result is the same as over all grades."""
+        """This subject's grades only."""
         assert self.coordinator.data is not None
         by_subject = _grades_by_subject(self.coordinator.data, self.coordinator.memo_owner)
         return by_subject.get(self._subject_id, [])
+
+    def _averages(self) -> dict[str, float | None]:
+        assert self.coordinator.data is not None
+        return _subject_averages(
+            self.coordinator.data, self._weighted, self.coordinator.memo_owner
+        ).get(self._subject_id, {})
 
     @property
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        return _calculate_average(
-            self._own_grades(),
-            self.coordinator.data.grade_categories,
-            subject_id=self._subject_id,
-            weighted=self._weighted, grading=self._grading,
-        )
+        averages = self._averages()
+        return averages.get("average_weighted" if self._weighted else "average_arithmetic")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
+        data = self.coordinator.data
+        owner = self.coordinator.memo_owner
         grades = self._own_grades()
         latest = _latest_grade(grades, subject_id=self._subject_id)
-        proposed = next(
-            (g for g in grades if g.subject_id == self._subject_id and g.is_semester_proposition),
-            None,
-        )
-        final = next(
-            (g for g in grades if g.subject_id == self._subject_id and g.is_final_proposition),
-            None,
-        )
         subject_grades = [
             g
             for g in grades
-            if g.subject_id == self._subject_id
-            and not g.is_semester_proposition
+            if not g.is_semester_proposition
             and not g.is_final_proposition
             and not g.is_semester
             and not g.is_final
         ]
-        count = len(subject_grades)
-        categories = self.coordinator.data.grade_categories
+        categories = data.grade_categories
         # Over ALL grades: a correction points at the grade it improves by id.
-        improves, improved = _grade_improvements(self.coordinator.data, self.coordinator.memo_owner)
+        improves, improved = _grade_improvements(data, owner)
         # Full per-grade list for this one subject - lets a dashboard card
         # show the actual grade log, not just the computed average. Sorted
         # newest-first; date is a plain "YYYY-MM-DD"-prefixed string from
@@ -608,11 +677,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                 "category": categories[g.category_id].name if g.category_id in categories else None,
                 "date": g.add_date,
                 "comments": g.comments,
-                "teacher": (
-                    self.coordinator.data.teachers.get(g.teacher_id)
-                    if g.teacher_id is not None
-                    else None
-                ),
+                "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
                 # Corrections: `improves` is the earlier grade's value on a
                 # correction, `improved` marks the earlier grade itself.
                 "improves": improves.get(g.id),
@@ -630,34 +695,19 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "latest_grade": latest.value if latest else None,
             "latest_grade_date": latest.add_date if latest else None,
             "latest_grade_comments": latest.comments if latest else [],
-            "grade_count": count,
+            "grade_count": len(subject_grades),
             "grades": grade_log,
-            "proposed_semester_grade": proposed.value if proposed else None,
-            "final_grade": final.value if final else None,
-            "average_weighted": _calculate_average(
-                grades, categories, subject_id=self._subject_id, grading=self._grading
-            ),
-            "average_arithmetic": _calculate_average(
-                grades, categories, subject_id=self._subject_id, weighted=False,
-                grading=self._grading
-            ),
-            "average_semester_1": _calculate_average(
-                grades,
-                categories,
-                subject_id=self._subject_id,
-                semester=1,
-                weighted=self._weighted, grading=self._grading,
-            ),
-            "average_semester_2": _calculate_average(
-                grades,
-                categories,
-                subject_id=self._subject_id,
-                semester=2,
-                weighted=self._weighted, grading=self._grading,
-            ),
+            # The teacher's propositions and the real grades once posted.
+            # `final_grade` used to hold the PROPOSED year-end grade; it is
+            # the real one now, and the proposition is `proposed_final_grade`.
+            "proposed_semester_grade": _summary_grade(grades, "is_semester_proposition"),
+            "semester_grade": _summary_grade(grades, "is_semester"),
+            "proposed_final_grade": _summary_grade(grades, "is_final_proposition"),
+            "final_grade": _summary_grade(grades, "is_final"),
+            **self._averages(),
             **self._forecast_attrs(),
-            **_point_grade_attrs(self.coordinator.data, self._subject_id),
-            **_text_grade_attrs(self.coordinator.data, self._subject_id),
+            **_point_grade_attrs(data, self._subject_id, owner),
+            **_text_grade_attrs(data, self._subject_id, owner),
         }
 
     def _forecast_attrs(self) -> dict[str, Any]:
@@ -755,23 +805,6 @@ def _attendance_type(data: LibrusData, type_id: int | str | None) -> AttendanceT
 # to tell "already resolved" from "still needs attention".
 
 
-def _absence_split(data: LibrusData) -> tuple[int, int]:
-    """(excused, unexcused) real-absence record counts - non-presence
-    types only, split on `AttendanceTypeData.is_excused_absence`. Shared by
-    the Attendance sensor's attributes and the dedicated Unexcused absences
-    sensor."""
-    excused = unexcused = 0
-    for attendance in data.attendances:
-        attendance_type = _attendance_type(data, attendance.type_id)
-        if attendance_type is None or attendance_type.is_presence_kind:
-            continue
-        if attendance_type.is_excused_absence:
-            excused += 1
-        else:
-            unexcused += 1
-    return excused, unexcused
-
-
 # "Spóźnienie" (late) is a PRESENCE-kind type (IsPresenceKind: true, same
 # flag value as plain "Obecność") - Librus has no separate API flag telling
 # late apart from ordinary presence either, so (same best-effort text-match
@@ -803,6 +836,118 @@ def _record_status(attendance_type: AttendanceTypeData | None) -> str:
     return "warn" if attendance_type.is_excused_absence else "bad"
 
 
+def _attendance_summary(data: LibrusData, owner: Hashable | None = None) -> dict[str, Any]:
+    """Everything the attendance sensors show, from one pass over the
+    records, once per data object (see `_compute_attendance`)."""
+    return _ATTENDANCE.get(data, None, lambda: _compute_attendance(data), owner=owner)
+
+
+def _compute_attendance(data: LibrusData) -> dict[str, Any]:
+    """One pass over every attendance record: the per-type breakdown, real
+    absences (excused or not), statuses per day, per semester, weekday and
+    subject, and every subject's own attendance. Four sensors each walked
+    every record several times per write before."""
+    breakdown: dict[str, int] = {}
+    presence_by_type: dict[str, bool] = {}
+    absence_dates: list[str] = []
+    unexcused_dates: set[str] = set()
+    excused = unexcused = presence_records = 0
+    by_date: dict[str, str] = {}
+    by_semester: dict[str, dict[str, Any]] = {}
+    by_weekday: dict[str, dict[str, int]] = {}
+    by_subject: dict[str, dict[str, int]] = {}
+    subject_attendance: dict[str, dict[str, Any]] = {}
+    for a in data.attendances:
+        t = _attendance_type(data, a.type_id)
+        name = t.name if t is not None else str(a.type_id)
+        breakdown[name] = breakdown.get(name, 0) + 1
+        if t is not None:
+            presence_by_type[name] = t.is_presence_kind
+            if t.is_presence_kind:
+                presence_records += 1
+            else:
+                if a.date:
+                    absence_dates.append(a.date)
+                if t.is_excused_absence:
+                    excused += 1
+                else:
+                    unexcused += 1
+                    if a.date:
+                        unexcused_dates.add(a.date)
+        # One status per calendar DATE (not per record - a single day can
+        # carry several period-level records), for a "year at a glance"
+        # heatmap card. A day with multiple records takes its WORST status
+        # (bad > warn > good) - one unexcused-absence period that day is
+        # what a parent needs to see, even if the other periods were
+        # present.
+        if a.date:
+            status = _record_status(t)
+            existing = by_date.get(a.date)
+            if existing is None or _STATUS_RANK[status] > _STATUS_RANK[existing]:
+                by_date[a.date] = status
+        if a.semester is not None:
+            bucket = by_semester.setdefault(str(a.semester), {"total": 0, "present": 0})
+            bucket["total"] += 1
+            if t is not None and t.is_presence_kind:
+                bucket["present"] += 1
+        if t is None:
+            continue
+        # The excused/unexcused/late split, by weekday and by subject (see
+        # the Attendance sensor's attribute comments below).
+        if t.is_presence_kind:
+            split = "late" if _is_late_type_name(t.name) else None
+        else:
+            split = "excused" if t.is_excused_absence else "unexcused"
+        if split and a.date:
+            try:
+                weekday = date.fromisoformat(a.date).isoweekday()
+            except ValueError:
+                weekday = None
+            if weekday is not None:
+                day_bucket = by_weekday.setdefault(
+                    str(weekday), {"excused": 0, "unexcused": 0, "late": 0}
+                )
+                day_bucket[split] += 1
+        subject_id = data.lesson_subjects.get(a.lesson_id) if a.lesson_id is not None else None
+        subject_name = data.subjects.get(subject_id) if subject_id is not None else None
+        if not subject_name:
+            continue
+        if split:
+            subject_bucket = by_subject.setdefault(
+                subject_name, {"excused": 0, "unexcused": 0, "late": 0}
+            )
+            subject_bucket[split] += 1
+        attended = subject_attendance.setdefault(subject_name, {"total": 0, "present": 0})
+        attended["total"] += 1
+        if t.is_presence_kind:
+            attended["present"] += 1
+    for bucket in by_semester.values():
+        bucket["percentage"] = (
+            round(100 * bucket["present"] / bucket["total"], 1) if bucket["total"] else None
+        )
+    for bucket in subject_attendance.values():
+        bucket["absent"] = bucket["total"] - bucket["present"]
+        bucket["percentage"] = round(100 * bucket["present"] / bucket["total"], 1)
+    total = len(data.attendances)
+    return {
+        "breakdown": breakdown,
+        "presence_by_type": presence_by_type,
+        "absence_dates": absence_dates,
+        "unexcused_dates": unexcused_dates,
+        "excused": excused,
+        "unexcused": unexcused,
+        "total_records": total,
+        "percentage": round(100 * presence_records / total, 1) if total else None,
+        "by_date": by_date,
+        "by_semester": by_semester,
+        "by_weekday": by_weekday,
+        "by_subject": by_subject,
+        "subject_attendance": dict(
+            sorted(subject_attendance.items(), key=lambda kv: (kv[1]["percentage"], kv[0]))
+        ),
+    }
+
+
 class LibrusAttendanceSensor(LibrusSensorBase):
     """Count of real absences - excludes "present"/"late"/"excused" marks.
 
@@ -828,172 +973,53 @@ class LibrusAttendanceSensor(LibrusSensorBase):
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
-        data = self.coordinator.data
-        return sum(
-            1
-            for a in data.attendances
-            if (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
-        )
+        summary = _attendance_summary(self.coordinator.data, self.coordinator.memo_owner)
+        return summary["excused"] + summary["unexcused"]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        data = self.coordinator.data
-        breakdown: dict[str, int] = {}
-        # Whether each breakdown NAME counts as a presence, per the school's
-        # own AttendanceTypes[].IsPresenceKind - not every "sounds like an
-        # absence" name actually is one (e.g. "Spóźnienie"/late and
-        # "Zwolnienie"/excused-release both count as present) and, in the
-        # other direction, "Nieobecność" contains "obecność" as a literal
-        # substring, so a consumer guessing from the name text alone (a real
-        # bug found live in the companion cards - both "Obecność" and
-        # "Nieobecność" rendered with the same color) gets it wrong. Expose
-        # the authoritative flag instead of making every consumer re-guess it.
-        presence_by_type: dict[str, bool] = {}
-        for attendance in data.attendances:
-            attendance_type = _attendance_type(data, attendance.type_id)
-            name = attendance_type.name if attendance_type is not None else str(attendance.type_id)
-            breakdown[name] = breakdown.get(name, 0) + 1
-            if attendance_type is not None:
-                presence_by_type[name] = attendance_type.is_presence_kind
-        # Most recent real-absence date, for a "days since last absence"
-        # streak card - date strings are "YYYY-MM-DD"-prefixed so a plain
-        # max() over them matches chronological order.
-        absence_dates = [
-            a.date
-            for a in data.attendances
-            if a.date and (t := _attendance_type(data, a.type_id)) is not None and not t.is_presence_kind
-        ]
-
-        # Split the main "absences" count into excused/unexcused - found
-        # live: a parent excused a real absence and it kept showing
-        # identically to an unexcused one in every summary/tile view (only
-        # the full card's per-type legend distinguished them at all). The
-        # bare total is still the sensor's own state (unchanged meaning -
-        # both still count as "not present"); this lets a summary/tile
-        # surface "N still need attention" instead of a blended figure.
-        # There's also a dedicated `sensor.*_unexcused_absences` for the
-        # unexcused figure alone.
-        excused_count, unexcused_count = _absence_split(data)
-
-        # One status per calendar DATE (not per record - a single day can
-        # carry several period-level records), for a "year at a glance"
-        # heatmap card. A day with multiple records takes its WORST status
-        # (bad > warn > good) - one unexcused-absence period that day is
-        # what a parent needs to see, even if the other periods were
-        # present.
-        by_date: dict[str, str] = {}
-        for a in data.attendances:
-            if not a.date:
-                continue
-            status = _record_status(_attendance_type(data, a.type_id))
-            existing = by_date.get(a.date)
-            if existing is None or _STATUS_RANK[status] > _STATUS_RANK[existing]:
-                by_date[a.date] = status
-
-        # Attendance percentage computed here rather than relying on
-        # Librus's own UI showing it (some schools disable theirs).
-        # AttendanceData.semester was already parsed but never actually
-        # used until now.
-        total_records = len(data.attendances)
-        presence_records = sum(
-            1
-            for a in data.attendances
-            if (t := _attendance_type(data, a.type_id)) is not None and t.is_presence_kind
-        )
-        percentage = round(100 * presence_records / total_records, 1) if total_records else None
-
-        by_semester: dict[str, dict[str, Any]] = {}
-        for a in data.attendances:
-            if a.semester is None:
-                continue
-            bucket = by_semester.setdefault(str(a.semester), {"total": 0, "present": 0})
-            bucket["total"] += 1
-            t = _attendance_type(data, a.type_id)
-            if t is not None and t.is_presence_kind:
-                bucket["present"] += 1
-        for bucket in by_semester.values():
-            bucket["percentage"] = (
-                round(100 * bucket["present"] / bucket["total"], 1) if bucket["total"] else None
-            )
-
-        # Same excused/unexcused/late split as above, but grouped by ISO
-        # WEEKDAY (1=Monday..7=Sunday, string keys for JSON) instead of by
-        # calendar date - for a "which day of the week is this happening
-        # on" chart. Unlike by_date (one status per DAY, and late folds
-        # into "good" there), this counts every matching RECORD, so a day
-        # with two late periods counts twice - by_date intentionally can't
-        # answer this question at all (a single status per day has no room
-        # for a fourth "late" value alongside good/warn/bad).
-        by_weekday: dict[str, dict[str, int]] = {}
-        for a in data.attendances:
-            if not a.date:
-                continue
-            t = _attendance_type(data, a.type_id)
-            if t is None:
-                continue
-            if t.is_presence_kind:
-                if not _is_late_type_name(t.name):
-                    continue  # ordinary presence - not part of this breakdown
-                bucket_key = "late"
-            else:
-                bucket_key = "excused" if t.is_excused_absence else "unexcused"
-            try:
-                weekday = date.fromisoformat(a.date).isoweekday()
-            except ValueError:
-                continue
-            day_bucket = by_weekday.setdefault(
-                str(weekday), {"excused": 0, "unexcused": 0, "late": 0}
-            )
-            day_bucket[bucket_key] += 1
-
-        # Same excused/unexcused/late split again, but grouped by SUBJECT
-        # NAME instead of weekday - "which subject is missed most often"
-        # (user-requested feature). Attendances carries no Subject field of
-        # its own; resolved via lesson_id -> Lessons' subject_id -> Subjects'
-        # name (CONFIRMED live 2026-09-23 that a real record's lesson_id
-        # correlates against Lessons). A record whose lesson_id doesn't
-        # resolve (Lessons only covers the current timetable structure, not
-        # necessarily every historical lesson) is skipped rather than
-        # guessed at - same "don't fabricate a bucket" discipline as
-        # everywhere else in this sensor.
-        by_subject: dict[str, dict[str, int]] = {}
-        for a in data.attendances:
-            t = _attendance_type(data, a.type_id)
-            if t is None:
-                continue
-            if t.is_presence_kind:
-                if not _is_late_type_name(t.name):
-                    continue
-                bucket_key = "late"
-            else:
-                bucket_key = "excused" if t.is_excused_absence else "unexcused"
-            if a.lesson_id is None:
-                continue
-            subject_id = data.lesson_subjects.get(a.lesson_id)
-            if subject_id is None:
-                continue
-            subject_name = data.subjects.get(subject_id)
-            if not subject_name:
-                continue
-            subject_bucket = by_subject.setdefault(
-                subject_name, {"excused": 0, "unexcused": 0, "late": 0}
-            )
-            subject_bucket[bucket_key] += 1
-
+        summary = _attendance_summary(self.coordinator.data, self.coordinator.memo_owner)
+        absence_dates = summary["absence_dates"]
         return {
-            "breakdown": breakdown,
-            "presence_by_type": presence_by_type,
-            "total_records": total_records,
+            "breakdown": summary["breakdown"],
+            # Whether each breakdown NAME counts as a presence, per the
+            # school's own AttendanceTypes[].IsPresenceKind - not every
+            # "sounds like an absence" name actually is one (e.g.
+            # "Spóźnienie"/late and "Zwolnienie"/excused-release both count
+            # as present) and, in the other direction, "Nieobecność"
+            # contains "obecność" as a literal substring, so a consumer
+            # guessing from the name text alone (a real bug found live in
+            # the companion cards) gets it wrong.
+            "presence_by_type": summary["presence_by_type"],
+            "total_records": summary["total_records"],
+            # Most recent real-absence date, for a "days since last absence"
+            # streak card - date strings are "YYYY-MM-DD"-prefixed so a
+            # plain max() over them matches chronological order.
             "last_absence_date": max(absence_dates) if absence_dates else None,
-            "percentage": percentage,
-            "by_semester": by_semester,
-            "excused_count": excused_count,
-            "unexcused_count": unexcused_count,
-            "by_date": by_date,
-            "by_weekday": by_weekday,
-            "by_subject": by_subject,
+            # Computed here rather than relying on Librus's own UI showing
+            # it (some schools disable theirs).
+            "percentage": summary["percentage"],
+            "by_semester": summary["by_semester"],
+            # The state (both still count as "not present") split into
+            # excused/unexcused - found live: an excused absence kept
+            # showing identically to an unexcused one in every summary/tile
+            # view. There's also a dedicated `sensor.*_unexcused_absences`.
+            "excused_count": summary["excused"],
+            "unexcused_count": summary["unexcused"],
+            # One worst status per calendar date (good/warn/bad).
+            "by_date": summary["by_date"],
+            # Excused/unexcused/late RECORDS per ISO weekday (1=Monday..
+            # 7=Sunday, string keys for JSON) - unlike by_date, a day with
+            # two late periods counts twice.
+            "by_weekday": summary["by_weekday"],
+            # The same split per SUBJECT NAME ("which subject is missed most
+            # often"). Attendances carry no Subject field of their own;
+            # resolved via lesson_id -> Lessons' subject_id -> Subjects'
+            # name (CONFIRMED live 2026-09-23). A record whose lesson_id
+            # doesn't resolve is skipped rather than guessed at.
+            "by_subject": summary["by_subject"],
         }
 
 
@@ -1020,28 +1046,18 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
-        return _absence_split(self.coordinator.data)[1]
+        return _attendance_summary(self.coordinator.data, self.coordinator.memo_owner)["unexcused"]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
         data = self.coordinator.data
-        excused, _unexcused = _absence_split(data)
-        recent_dates = sorted(
-            {
-                a.date
-                for a in data.attendances
-                if a.date
-                and (t := _attendance_type(data, a.type_id)) is not None
-                and not t.is_presence_kind
-                and not t.is_excused_absence
-            },
-            reverse=True,
-        )[:10]
+        summary = _attendance_summary(data, self.coordinator.memo_owner)
+        recent_dates = sorted(summary["unexcused_dates"], reverse=True)[:10]
         covered = justified_dates(data.justifications)
         return {
-            "excused_count": excused,
+            "excused_count": summary["excused"],
             "recent_dates": recent_dates,
             "awaiting_justification": [d for d in recent_dates if d[:10] not in covered],
             "justification_sent": [d for d in recent_dates if d[:10] in covered],
@@ -1114,29 +1130,15 @@ _SUBJECT_ATTENDANCE_RISK_PERCENTAGE = 50.0
 _SUBJECT_ATTENDANCE_MIN_RECORDS = 5
 
 
-def _subject_attendance(data: LibrusData) -> dict[str, dict[str, Any]]:
+def _subject_attendance(
+    data: LibrusData, owner: Hashable | None = None
+) -> dict[str, dict[str, Any]]:
     """subject name -> {total, present, absent, percentage}, lowest
     percentage first. Same lesson_id -> Lessons -> Subjects resolution as
     the Attendance sensor's `by_subject` (unresolvable records skipped), but
     counting EVERY record, presence marks included, so there's a
     denominator. Excused and unexcused absences both count as absent."""
-    by_subject: dict[str, dict[str, Any]] = {}
-    for a in data.attendances:
-        t = _attendance_type(data, a.type_id)
-        if t is None or a.lesson_id is None:
-            continue
-        subject_id = data.lesson_subjects.get(a.lesson_id)
-        subject_name = data.subjects.get(subject_id) if subject_id is not None else None
-        if not subject_name:
-            continue
-        bucket = by_subject.setdefault(subject_name, {"total": 0, "present": 0})
-        bucket["total"] += 1
-        if t.is_presence_kind:
-            bucket["present"] += 1
-    for bucket in by_subject.values():
-        bucket["absent"] = bucket["total"] - bucket["present"]
-        bucket["percentage"] = round(100 * bucket["present"] / bucket["total"], 1)
-    return dict(sorted(by_subject.items(), key=lambda kv: (kv[1]["percentage"], kv[0])))
+    return _attendance_summary(data, owner)["subject_attendance"]
 
 
 class LibrusSubjectAttendanceSensor(LibrusSensorBase):
@@ -1169,14 +1171,16 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
-        counted = self._counted(_subject_attendance(self.coordinator.data))
+        counted = self._counted(
+            _subject_attendance(self.coordinator.data, self.coordinator.memo_owner)
+        )
         return next(iter(counted.values()))["percentage"] if counted else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        subjects = _subject_attendance(self.coordinator.data)
+        subjects = _subject_attendance(self.coordinator.data, self.coordinator.memo_owner)
         counted = self._counted(subjects)
         return {
             "subject": next(iter(counted), None),
@@ -1216,8 +1220,12 @@ class LibrusAttendanceStreakSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         data = self.coordinator.data
-        return days_since_last_absence(
-            data.attendances, data.attendance_types, data.school_class, dt_util.now().date()
+        # Same as coordinator.days_since_last_absence, from the shared
+        # one-pass attendance summary.
+        return _days_since(
+            _attendance_summary(data, self.coordinator.memo_owner)["absence_dates"],
+            data.school_class,
+            dt_util.now().date(),
         )
 
 
@@ -1259,7 +1267,9 @@ class LibrusGoodGradeStreakSensor(LibrusSensorBase):
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
-        return good_grade_streak(self.coordinator.data.grades)
+        return good_grade_streak(
+            self.coordinator.data.grades, self.coordinator.data.grading_system
+        )
 
 
 # Tiers for LibrusRankSensor, ordered highest-first so the first threshold
@@ -1298,6 +1308,11 @@ class LibrusRankSensor(LibrusSensorBase):
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "rank")
+
+    def _side_state(self) -> Any:
+        # Badges are worked out by the coordinator each cycle (new list,
+        # compared by value) and achievements are kept across restarts.
+        return (list(self.coordinator.badges), self.coordinator.achievements)
 
     def _average(self) -> float | None:
         data = self.coordinator.data
@@ -1402,6 +1417,9 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "lucky_number")
+
+    def _side_state(self) -> Any:
+        return _student_number(self.coordinator)
 
     @property
     def native_value(self) -> int | None:
@@ -1818,6 +1836,13 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "unread_messages")
 
+    def _side_state(self) -> Any:
+        # Both are updated in place by the coordinator - compared as copies.
+        return (
+            copy.deepcopy(self.coordinator.read_receipts),
+            frozenset(self.coordinator.missing_mailboxes),
+        )
+
     @property
     def available(self) -> bool:
         return (
@@ -1913,6 +1938,9 @@ class LibrusClassSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_class")
 
+    def _side_state(self) -> Any:
+        return _student_number(self.coordinator)
+
     @property
     def native_value(self) -> str | None:
         if self.coordinator.data is None or self.coordinator.data.school_class is None:
@@ -1937,14 +1965,82 @@ class LibrusClassSensor(LibrusSensorBase):
         }
 
 
-class LibrusNextLessonSensor(LibrusSensorBase):
+def _next_lesson_transition(
+    lessons: list[tuple[datetime, datetime, date, LessonData]], now: datetime
+) -> datetime | None:
+    """The next moment the Next/Current lesson sensors change: a held
+    lesson starting or ending."""
+    return min(
+        (
+            moment
+            for start, end, _day, lesson in lessons
+            if not lesson.is_canceled
+            for moment in (start, end)
+            if moment > now
+        ),
+        default=None,
+    )
+
+
+class _LibrusLessonClockSensor(LibrusSensorBase):
+    """Base of the Next/Current lesson sensors: written on every coordinator
+    update and at the next lesson start/end (`async_track_point_in_time`,
+    re-armed after firing and on every update). Before, they changed only
+    with the next poll - up to a poll interval late, so a "lesson started"
+    automation fired up to 20 minutes into the lesson."""
+
+    _always_write = True
+    _unsub_lesson_timer: CALLBACK_TYPE | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self._cancel_lesson_timer)
+        self._arm_lesson_timer()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._arm_lesson_timer()
+        super()._handle_coordinator_update()
+
+    @callback
+    def _cancel_lesson_timer(self) -> None:
+        if self._unsub_lesson_timer is not None:
+            self._unsub_lesson_timer()
+            self._unsub_lesson_timer = None
+
+    @callback
+    def _arm_lesson_timer(self) -> None:
+        self._cancel_lesson_timer()
+        if self.coordinator.data is None or self.hass is None:
+            return
+        moment = _next_lesson_transition(
+            _sorted_lessons(self.coordinator.data, self.coordinator.memo_owner), dt_util.now()
+        )
+        if moment is None:
+            return
+        # A second past the moment: the current-lesson check includes the
+        # end minute itself.
+        self._unsub_lesson_timer = async_track_point_in_time(
+            self.hass, self._async_lesson_transition, moment + timedelta(seconds=1)
+        )
+
+    @callback
+    def _async_lesson_transition(self, _now: datetime) -> None:
+        self._unsub_lesson_timer = None
+        self.async_write_ha_state()
+        self._arm_lesson_timer()
+
+
+class LibrusNextLessonSensor(_LibrusLessonClockSensor):
     """The next lesson that will actually take place (cancelled slots are
     skipped). State is the subject name; attributes carry the start/end
-    time, `minutes_until`, teacher, classroom and whether it's a
-    substitution - everything a "leaving for school" TTS or a countdown
-    card needs, without each consumer re-deriving it from the timetable
-    calendar. Client-side over the coordinator's current+next-week window,
-    so it can see through to Monday from a Friday evening but not further.
+    time, teacher, classroom and whether it's a substitution - everything a
+    "leaving for school" TTS or a countdown card needs, without each
+    consumer re-deriving it from the timetable calendar. Client-side over
+    the coordinator's current+next-week window, so it can see through to
+    Monday from a Friday evening but not further. No countdown attribute:
+    it made every write a new state (a card or template counts down from
+    `start` itself).
 
     `has_parallel_group` (code review): when the picked period slot holds
     more than one lesson (parallel groups, e.g. split language subgroups -
@@ -1956,8 +2052,6 @@ class LibrusNextLessonSensor(LibrusSensorBase):
     guessing."""
 
     _attr_translation_key = "next_lesson"
-    # The countdown changes on every write; history only needs the subject.
-    _unrecorded_attributes = frozenset({"minutes_until"})
     _attr_icon = "mdi:clock-start"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1985,19 +2079,17 @@ class LibrusNextLessonSensor(LibrusSensorBase):
         if picked is None:
             return None
         start, end, day, lesson = picked
-        attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
-        attrs["minutes_until"] = max(0, int((start - dt_util.now()).total_seconds() // 60))
-        return attrs
+        return _lesson_attrs(start, end, day, lesson, self.coordinator.data)
 
 
-class LibrusCurrentLessonSensor(LibrusSensorBase):
+class LibrusCurrentLessonSensor(_LibrusLessonClockSensor):
     """The lesson happening right now (`unknown` during breaks / outside
-    school hours). State is the subject name; attributes carry `minutes_left`
-    and the same teacher/classroom/period detail as the Next lesson
-    sensor - including `has_parallel_group` (see that class's docstring)."""
+    school hours). State is the subject name; attributes carry the same
+    teacher/classroom/period detail as the Next lesson sensor - including
+    `has_parallel_group` (see that class's docstring) - and `end` for a
+    countdown."""
 
     _attr_translation_key = "current_lesson"
-    _unrecorded_attributes = frozenset({"minutes_left"})
     _attr_icon = "mdi:clock-time-four-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -2026,16 +2118,15 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
         if picked is None:
             return None
         start, end, day, lesson = picked
-        attrs = _lesson_attrs(start, end, day, lesson, self.coordinator.data)
-        attrs["minutes_left"] = max(0, int((end - dt_util.now()).total_seconds() // 60))
-        return attrs
+        return _lesson_attrs(start, end, day, lesson, self.coordinator.data)
 
 
-class _LibrusSchoolTimeSensor(MinuteRefresh, LibrusSensorBase):
+class _LibrusSchoolTimeSensor(SchoolDayRefresh, LibrusSensorBase):
     """Timestamp of the next first-lesson start / last-lesson end - a
     sensor an automation can trigger on with an offset ("45 minutes
-    before school starts"). Re-checked every minute so it moves on to the
-    next school day right after the moment passes."""
+    before school starts"). Re-checked at each school-day transition
+    (school_day.SchoolDayClock) so it moves on to the next school day right
+    after the moment passes."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
@@ -2128,14 +2219,18 @@ class LibrusNextExamSensor(LibrusSensorBase):
         super().__init__(coordinator, entry, "next_exam")
 
     def _prep(self) -> list[ExamPrep]:
-        if self.coordinator.data is None:
+        """Worked out once per data object and day - the state and the
+        attributes both need it."""
+        data = self.coordinator.data
+        if data is None:
             return []
-        return exam_prep(self.coordinator.data, dt_util.now().date(), limit=10)
+        today = dt_util.now().date()
+        return self._cached("prep", today, lambda: exam_prep(data, today, limit=10))
 
     @property
     def native_value(self) -> date | None:
-        upcoming = upcoming_exams(self.coordinator.data, dt_util.now().date()) if self.coordinator.data else []
-        return upcoming[0][0] if upcoming else None
+        preps = self._prep()
+        return preps[0].day if preps else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -2152,11 +2247,13 @@ class LibrusNextExamSensor(LibrusSensorBase):
             "topics": topics_as_dicts(first),
             "topics_since": first.since.isoformat() if first.since else None,
             "missed_topics": first.missed,
+            # No per-item `days_until`: it changed every day for every test
+            # on the list (a new state each midnight for a long list); the
+            # date is enough, and `days_until` above is the next test's.
             "upcoming": [
                 {
                     "id": prep.item.id,
                     "date": prep.day.isoformat(),
-                    "days_until": (prep.day - today).days,
                     "subject": prep.subject,
                     "category": prep.category,
                     "content": prep.item.content[:200],
@@ -2465,6 +2562,8 @@ class LibrusStatusSensor(LibrusSensorBase):
     _attr_options = STATUS_OPTIONS
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:lan-check"
+    # Reports the cycle itself (data source, failures), not just the data.
+    _always_write = True
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "status")
@@ -2487,6 +2586,9 @@ class LibrusStatusSensor(LibrusSensorBase):
         return {
             "data_source": coordinator.data_source,
             "last_success": iso(coordinator.last_success_at),
+            # The last FAILED attempt (None until one fails): a successful
+            # cycle is `last_success` already, and a timestamp that moved
+            # on every poll made each one a new state.
             "last_attempt": iso(coordinator.last_attempt_at),
             "last_error": coordinator.last_error,
             "failures": coordinator.failures,
@@ -2506,6 +2608,8 @@ class LibrusLastUpdateSensor(LibrusSensorBase):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:cloud-clock-outline"
+    # Moves with every successful poll, identical data or not.
+    _always_write = True
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "last_update")

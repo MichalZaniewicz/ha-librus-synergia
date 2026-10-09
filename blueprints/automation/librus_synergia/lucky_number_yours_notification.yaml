@@ -31,12 +31,13 @@ blueprint:
         action: {}
 
 triggers:
-  # A new number, or the same number published for a new day.
+  # A state trigger without `to`/`attribute` fires on attribute changes
+  # too, so this one trigger covers both a new number and the same number
+  # published for a new day (the condition below keeps only those). A
+  # separate `attribute: day` trigger would fire a second time for the
+  # same change and notify twice.
   - trigger: state
     entity_id: !input lucky_number_entity
-  - trigger: state
-    entity_id: !input lucky_number_entity
-    attribute: day
 
 conditions:
   - condition: template
@@ -63,3 +64,4 @@ actions:
   - !input notify_action
 
 mode: single
+max_exceeded: silent

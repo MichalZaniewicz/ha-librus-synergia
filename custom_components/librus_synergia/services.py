@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -103,8 +104,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 for entry in hass.config_entries.async_entries(DOMAIN)
                 if entry.state is ConfigEntryState.LOADED
             ]
-        for coordinator in coordinators:
-            await coordinator.async_force_refresh()
+        # Together: each student's refresh waits on Librus for seconds, and
+        # one after another made the call last that times the students.
+        await asyncio.gather(*(c.async_force_refresh() for c in coordinators))
 
     hass.services.async_register(
         DOMAIN, SERVICE_REFRESH, _async_handle_refresh, schema=_REFRESH_SCHEMA

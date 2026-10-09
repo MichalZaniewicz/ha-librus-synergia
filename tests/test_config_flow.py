@@ -63,6 +63,9 @@ async def test_user_flow_success(hass) -> None:
     assert result["data"][CONF_USERNAME] == "1234567u"
     assert result["data"][CONF_PASSWORD] == "correct-password"
     assert result["data"][CONF_COOKIES]
+    # A new entry hides subjects without grades; existing entries (no
+    # option saved) keep the old default (off).
+    assert result["options"] == {CONF_HIDE_EMPTY_SUBJECTS: True}
 
 
 async def test_user_flow_duplicate_aborts(hass) -> None:

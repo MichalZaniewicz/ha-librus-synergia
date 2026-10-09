@@ -1,5 +1,74 @@
 # Changelog
 
+## 0.12.5-beta.9
+
+Uses [librus-synergia 0.3.18](https://pypi.org/project/librus-synergia/0.3.18/): a timeout is a `LibrusConnectionError`, one login serves every waiting call, and each request has a 30 s limit.
+
+### Changed (attributes)
+- **Next lesson `minutes_until` and Current lesson `minutes_left` are
+  gone.** Use `start` / `end`; the sensors now update exactly when a lesson
+  starts or ends instead of every minute.
+- **Next exam `upcoming[].days_until` is gone** (the top-level `days_until`
+  stays) - compute it from `upcoming[].date`.
+- **Subject average `final_grade` is now the real year-end grade.** The
+  proposal moved to `proposed_final_grade`; new `semester_grade`.
+- **Status `last_attempt` is the last failed attempt** (empty while
+  everything works); a good cycle shows in `last_success`.
+- Assist's timetable tool reports `change` (cancelled, substitution, room
+  change, moved) instead of `substitution: true`; AI-summary dates carry
+  the weekday.
+- New entries get "Hide subjects without grades" on by default.
+
+### Fixed
+- **Agenda calendar** no longer shows yesterday's entry as the current one.
+- **A failed Wiadomości fetch keeps the last messages** (Status shows
+  "degraded") instead of emptying the sensor; a failed secondary mailbox
+  keeps its last list.
+- **Weeks fetched for the calendar or Assist** no longer mark the whole
+  timetable as failed or unpublished, are shared between parallel requests
+  and refresh after 2 h (24 h for far-away weeks).
+- **Room changes and moved lessons** are reported by Assist and the AI
+  summary too.
+- **Attachment downloads:** ids are checked before any request, error pages
+  don't show Librus's text, file names are cleaned.
+- **Diagnostics** hide more personal data (extra AI context, register
+  number, account ids, receivers, trip details, file names, every
+  `LID-...` id).
+- **Removing the integration** also removes its saved weekly summary,
+  saved payloads and grade-average statistics.
+- **Unloading one of several students** keeps the services and the Assist
+  API while another student is still loaded.
+- **Session cookies** are kept with the saved state; the config entry is
+  rewritten only when the cookies really change.
+- Read receipts of a message without receivers stop being checked;
+  the kindergarten group is remembered over a restart.
+- Day-dependent sensors (school day, in school, school start/end, lucky
+  number...) update at midnight and at the first lesson / last lesson
+  instead of polling every minute.
+- The good-grade streak uses the school's grade scale.
+- Subject sensors of a subject that's gone from Librus and has no grade
+  are removed.
+- Blueprints: "Time to leave" fires only before the first lesson; the
+  morning briefing says "first" or "next" lesson and only for today; trip
+  reminder only for tomorrow's trips; the unexcused-absence notice sends
+  one message a day; new optional inputs `school_start_entity` and
+  `unexcused_absences_entity`.
+- `get_message` accepts `outbox` and `archive/inbox`.
+
+### Performance
+- A refresh whose data didn't change writes no entity states.
+- The extra endpoints, messages, lucky number and school data run in
+  parallel, at most 6 requests at a time.
+- Rarely filled lists (text grades, behaviour points, empty descriptive
+  grades) are asked hourly.
+- State is saved in two files: the small one soon after a change, the
+  large cache at most every 6 hours; throttle times survive a restart, so
+  a restart doesn't refetch everything.
+- One attendance summary and one subject-average pass serve every sensor;
+  timetable events are built once per refresh.
+- A restart with unchanged grades writes no statistics.
+- Event entities subscribe only to their own student's events.
+
 ## 0.12.5-beta.8
 
 Uses [librus-synergia 0.3.17](https://pypi.org/project/librus-synergia/0.3.17/): a dead Synergia web session on a download is caught again, and the 150 s download limit covers the whole call.

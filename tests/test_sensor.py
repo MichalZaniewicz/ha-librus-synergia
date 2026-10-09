@@ -953,7 +953,7 @@ def _hhmm(offset_minutes: int) -> str:
 
 async def test_next_and_current_lesson_sensors(hass, freezer) -> None:
     """Mid-period: current = the lesson spanning now, next = the following
-    one, with the countdown attributes both consumers need."""
+    one, with the start/end times a countdown needs."""
     freezer.move_to(_FROZEN)
     day_iso = dt_util.now().date().isoformat()
     payload = {
@@ -976,14 +976,19 @@ async def test_next_and_current_lesson_sensors(hass, freezer) -> None:
     current = hass.states.get(_entity_id(hass, entry, "current_lesson"))
     assert current.state == "Polski"
     assert current.attributes["lesson_no"] == 2
-    assert current.attributes["minutes_left"] == 30
+    # No countdown attribute any more (a new state on every write) - the
+    # end time is there for a card to count down from.
+    assert "minutes_left" not in current.attributes
+    assert current.attributes["end"] == (dt_util.now() + timedelta(minutes=30)).replace(
+        second=0, microsecond=0
+    ).isoformat()
     assert current.attributes["classroom"] == "12"
     assert current.attributes["has_parallel_group"] is False
 
     nxt = hass.states.get(_entity_id(hass, entry, "next_lesson"))
     assert nxt.state == "Historia"
     assert nxt.attributes["lesson_no"] == 3
-    assert nxt.attributes["minutes_until"] == 45
+    assert "minutes_until" not in nxt.attributes
     assert nxt.attributes["teacher"] == "Anna Nowak"
     assert nxt.attributes["has_parallel_group"] is False
 
@@ -1161,6 +1166,10 @@ async def test_actual_semester_and_final_grades_excluded_from_average(hass) -> N
     assert subject.attributes["grade_count"] == 2
     assert subject.attributes["latest_grade"] == "3"  # the 2026-09-05 one, not the later summary grades
     assert [g["value"] for g in subject.attributes["grades"]] == ["3", "5"]
+    # The real semester and final grades are attributes of their own.
+    assert subject.attributes["semester_grade"] == "4"
+    assert subject.attributes["final_grade"] == "6"
+    assert subject.attributes["proposed_final_grade"] is None
 
 
 async def test_next_exam_sensor(hass) -> None:
@@ -1295,7 +1304,10 @@ async def test_next_exam_sensor_lists_topics_since_previous_test(hass) -> None:
     assert state.attributes["topics"][1]["dates"] == [day(-2), day(-1)]
     assert state.attributes["topics"][1]["lessons"] == 2
     upcoming = state.attributes["upcoming"][0]
-    assert upcoming["days_until"] == 3
+    # No per-item `days_until` (it changed every day for every test); the
+    # date is there, and the top-level `days_until` is for the next test.
+    assert "days_until" not in upcoming
+    assert upcoming["date"] == day(3)
     assert [t["topic"] for t in upcoming["topics"]] == ["Ułamki", "Procenty"]
 
 
@@ -1718,8 +1730,6 @@ def test_changing_attributes_are_kept_out_of_the_recorder() -> None:
     assert {"last_success", "last_attempt", "next_attempt", "last_error"} <= (
         sensor.LibrusStatusSensor._unrecorded_attributes
     )
-    assert "minutes_until" in sensor.LibrusNextLessonSensor._unrecorded_attributes
-    assert "minutes_left" in sensor.LibrusCurrentLessonSensor._unrecorded_attributes
     assert "content" in sensor.LibrusNextExamSensor._unrecorded_attributes
     assert "text_grades" in sensor.LibrusSubjectAverageSensor._unrecorded_attributes
     assert "comment" in sensor.LibrusBehaviourGradeSensor._unrecorded_attributes

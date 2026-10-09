@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import time, timedelta
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
@@ -15,7 +16,7 @@ from homeassistant.helpers.storage import Store
 from librus_synergia import LibrusApiClient, LibrusSessionData
 
 from .ai_summary import LibrusWeeklySummary
-from .average_history import LibrusAverageHistory
+from .average_history import LibrusAverageHistory, statistic_id_prefix
 from .const import (
     CONF_AI_AUDIENCE,
     CONF_AI_CONTEXT,
@@ -41,12 +42,16 @@ from .const import (
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     optional_endpoint_issue_id,
+    payload_store_key,
     school_year_issue_id,
     state_store_key,
 )
+from .forecast import DataMemo
 from .attachment_view import async_register_attachment_view
 from .llm_api import async_setup_llm_api, async_unload_llm_api
 from .services import async_setup_services, async_unload_services
+
+_LOGGER = logging.getLogger(__name__)
 
 type LibrusConfigEntry = ConfigEntry[LibrusDataUpdateCoordinator]
 
@@ -66,14 +71,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     """Set up the integration from a config entry."""
 
     def _persist_session(session_data: LibrusSessionData) -> None:
-        hass.config_entries.async_update_entry(
-            entry,
-            data={
-                **entry.data,
-                CONF_COOKIES: session_data.cookies,
-                CONF_SESSION_LOGGED_IN_AT: session_data.logged_in_at,
-            },
-        )
+        # Into the coordinator's own saved state - the config entry is only
+        # rewritten when the set of cookies changes (see
+        # LibrusDataUpdateCoordinator.remember_session). Every token
+        # refresh (~2 h) used to rewrite core.config_entries, the file with
+        # every integration's setup in it.
+        coordinator.remember_session(session_data)
 
     # A dedicated session per entry, NOT the hass-wide `async_get_
     # clientsession(hass)` - this client's auth lives entirely in the
@@ -102,10 +105,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     coordinator = LibrusDataUpdateCoordinator(
         hass, entry, client, timedelta(minutes=scan_interval_minutes)
     )
-    # What was already seen (new-item events) and the last good responses
-    # (fallback when Librus is down) - see coordinator.async_restore_state.
+    # What was already seen (new-item events), the last good responses
+    # (fallback when Librus is down) and the newest session cookies - see
+    # coordinator.async_restore_state.
     await coordinator.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
+    # Date-dependent values (days until, today/tomorrow) roll over at
+    # midnight even when no poll brings new data.
+    entry.async_on_unload(coordinator.async_start_midnight_tick())
 
     entry.runtime_data = coordinator
 
@@ -180,10 +187,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
         # close it here or a reload leaks one aiohttp session/connector
         # per reload, since a fresh one is created on every setup.
         await entry.runtime_data.client.async_close()
+        # The shared calculation caches still hold this entry's last data.
+        DataMemo.discard_all(entry.entry_id)
     # Services are domain-wide, not per-entry - only drop them once the
-    # LAST Librus Synergia entry (student) is going away, so a second
-    # entry doesn't lose `get_message` while the first is just reloading.
-    remaining = [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id]
+    # LAST loaded Librus Synergia entry (student) is going away, so a second
+    # entry doesn't lose `get_message` while the first is just reloading. A
+    # disabled or failed entry doesn't count: it can't serve them anyway,
+    # and counting it kept the services and the Assist API registered with
+    # no student behind them.
+    remaining = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.entry_id != entry.entry_id and e.state is ConfigEntryState.LOADED
+    ]
     if unloaded and not remaining:
         async_unload_services(hass)
         async_unload_llm_api(hass)
@@ -214,3 +230,31 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.homework_done").async_remove()
     # Seen ids + last good responses (coordinator.async_restore_state).
     await Store(hass, STATE_STORE_VERSION, state_store_key(entry.entry_id)).async_remove()
+    await Store(hass, STATE_STORE_VERSION, payload_store_key(entry.entry_id)).async_remove()
+    # The weekly AI summary's last result (ai_summary.py).
+    await Store(hass, 1, f"{DOMAIN}.weekly_summary.{entry.entry_id}").async_remove()
+    await _async_clear_average_statistics(hass, entry.entry_id)
+
+
+async def _async_clear_average_statistics(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove the removed student's grade-average statistics
+    (average_history.py) - otherwise they stay in the recorder and in every
+    statistics picker forever. Best effort: never fails the removal."""
+    if "recorder" not in hass.config.components:
+        return
+    try:
+        from homeassistant.components.recorder import get_instance  # noqa: PLC0415
+        from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
+            async_list_statistic_ids,
+        )
+
+        prefix = statistic_id_prefix(entry_id)
+        ids = [
+            item["statistic_id"]
+            for item in await async_list_statistic_ids(hass)
+            if str(item.get("statistic_id", "")).startswith(prefix)
+        ]
+        if ids:
+            get_instance(hass).async_clear_statistics(ids)
+    except Exception:  # noqa: BLE001 - a statistics cleanup must never block removal
+        _LOGGER.warning("Could not remove the grade-average statistics", exc_info=True)

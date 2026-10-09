@@ -14,9 +14,13 @@ blueprint:
     sent, not only once it's accepted.
 
 
-    Use `{{ reminder_text }}` in your action for a ready-made message, or
-    `{{ unexcused_count }}`, `{{ absence_dates }}` (e.g. "05.09, 02.09")
-    and `{{ student_name }}` directly.
+    Use `{{ reminder_text }}` in your action for a ready-made message
+    ("Ola: Dni do usprawiedliwienia: 2 (05.09, 02.09)."), or the parts
+    directly: `{{ absence_dates }}` (e.g. "05.09, 02.09" - the days still
+    to justify, the 10 most recent at most), `{{ absence_days_count }}`
+    (how many days that list has), `{{ unexcused_count }}` (the sensor's
+    state: unexcused LESSONS in total, one per missed lesson, including days
+    a justification was already sent for) and `{{ student_name }}`.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/absence_justification_reminder.yaml
   input:
@@ -79,21 +83,34 @@ conditions:
 
 actions:
   - variables:
+      # The sensor's state counts unexcused LESSONS (one record per missed
+      # lesson, so a whole day off is 6-8), including days a justification
+      # was already sent for. The message talks about DAYS instead, taken
+      # from the same list it shows, so the number and the list agree.
       unexcused_count: "{{ states(unexcused_absences_entity) | int(0) }}"
-      # `recent_dates` are the distinct days (newest first, at most 10)
-      # that still have an unexcused record - "YYYY-MM-DD" strings.
+      # `awaiting_justification` (or, on older versions, `recent_dates`)
+      # lists distinct days, newest first, at most 10 - "YYYY-MM-DD".
+      absence_day_list: >-
+        {%- set awaiting = state_attr(unexcused_absences_entity, 'awaiting_justification') -%}
+        {{ awaiting if awaiting is not none else (state_attr(unexcused_absences_entity, 'recent_dates') or []) }}
+      absence_days_count: "{{ absence_day_list | count }}"
       absence_dates: >-
         {%- set ns = namespace(dates=[]) -%}
-        {%- set awaiting = state_attr(unexcused_absences_entity, 'awaiting_justification') -%}
-        {%- for d in (awaiting if awaiting is not none else (state_attr(unexcused_absences_entity, 'recent_dates') or [])) -%}
+        {%- for d in absence_day_list -%}
           {%- set ns.dates = ns.dates + [d[8:10] ~ '.' ~ d[5:7]] -%}
         {%- endfor -%}
         {{ ns.dates | join(', ') }}
       # The device is named "E-dziennik <student>" by the integration.
       student_name: >-
         {{ (device_attr(unexcused_absences_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      # Built from the ISO list again rather than from `absence_dates`: HA
+      # turns a lone "12.10" variable into the number 12.1.
       reminder_text: >-
-        {{ (student_name ~ ': ') if student_name else '' }}Nieobecności do usprawiedliwienia: {{ unexcused_count }}{{ (' (dni: ' ~ absence_dates ~ ')') if absence_dates else '' }}.
+        {%- set ns = namespace(dates=[]) -%}
+        {%- for d in absence_day_list -%}
+          {%- set ns.dates = ns.dates + [d[8:10] ~ '.' ~ d[5:7]] -%}
+        {%- endfor -%}
+        {{ (student_name ~ ': ') if student_name else '' }}{{ ('Dni do usprawiedliwienia: ' ~ ns.dates | count ~ ' (' ~ ns.dates | join(', ') ~ ').') if ns.dates else ('Nieusprawiedliwione lekcje: ' ~ unexcused_count ~ '.') }}
   - !input notify_action
 
 mode: single

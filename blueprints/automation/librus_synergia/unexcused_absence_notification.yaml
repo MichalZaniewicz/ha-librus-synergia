@@ -1,27 +1,56 @@
 blueprint:
   name: "Librus: Unexcused Absence Notification"
   description: >
-    Runs an action - typically "Send a notification" to your phone -
-    whenever a new *unexcused* absence appears via the
-    `librus_synergia_new_absence` event, so you know there's a day that
-    still needs a justification. Absences that are already excused are
-    ignored.
+    Runs an action - typically "Send a notification" to your phone - when a
+    new *unexcused* absence appears via the `librus_synergia_new_absence`
+    event, so you know there's a day that still needs a justification.
+    Absences that are already excused are ignored.
+
+
+    Librus records an absence per LESSON, so a day off sick arrives as 6-8
+    events at once. This blueprint sends ONE message for such a batch: the
+    first unexcused event starts a run that waits 30 seconds (the rest of
+    the batch is dropped silently meanwhile), then reports the day plus every
+    day the child still has to justify, read from the child's Unexcused
+    absences sensor.
 
 
     Inside your chosen action, use `{{ absence_summary }}` for a ready-made
-    one-liner, or the fields directly: `{{ trigger.event.data.date }}`,
-    `{{ trigger.event.data.type }}`, `{{ trigger.event.data.lesson_no }}`.
-    If you use this blueprint for more than one child, `absence_summary` is
-    already prefixed with `{{ trigger.event.data.student }}` (the child's
-    name) so one shared notification still says whose absence it is.
+    message ("Ola: nieusprawiedliwiona nieobecność 06.10. Do
+    usprawiedliwienia: 06.10, 02.10."), or `{{ absence_date }}`,
+    `{{ absence_dates }}` (days still to justify, e.g. "06.10, 02.10") and
+    `{{ trigger.event.data.date }}` / `{{ trigger.event.data.type }}`
+    directly. `absence_summary` starts with the child's name
+    (`{{ trigger.event.data.student }}`).
+
+
+    More than one child: by default one automation covers every child, and
+    if two children's absences arrive within the same 30 seconds only the
+    first child gets a message. To be sure each child is reported, create
+    one automation per child and pick that child's Unexcused absences sensor
+    below - the automation then reacts only to that child's absences.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/unexcused_absence_notification.yaml
   input:
+    unexcused_absences_entity:
+      name: Unexcused absences sensor (optional)
+      description: >
+        Limit this automation to one child by picking that child's Librus
+        "Unexcused absences" sensor. Leave empty to react to every child
+        (the sensor is then found automatically for the list of days).
+      default: ""
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
     notify_action:
       name: Notification action
-      description: The action to run for each new unexcused absence.
+      description: The action to run once per batch of new unexcused absences.
       selector:
         action: {}
+
+variables:
+  absences_entity: !input unexcused_absences_entity
 
 triggers:
   - trigger: event
@@ -29,14 +58,56 @@ triggers:
 
 conditions:
   - condition: template
-    value_template: "{{ not trigger.event.data.excused }}"
+    value_template: >-
+      {{ not trigger.event.data.excused
+         and (not absences_entity
+              or config_entry_id(absences_entity) == trigger.event.data.entry_id) }}
 
 actions:
+  # Let the whole batch arrive and the sensors update before reporting.
+  - delay:
+      seconds: 30
   - variables:
+      # The child's Unexcused absences sensor: the one picked above, or the
+      # sensor of this event's config entry that has `awaiting_justification`.
+      sensor_entity: >-
+        {%- set ns = namespace(e='') -%}
+        {%- if absences_entity -%}
+          {%- set ns.e = absences_entity -%}
+        {%- else -%}
+          {%- for e in integration_entities('librus_synergia') -%}
+            {%- if not ns.e and e.startswith('sensor.')
+                  and config_entry_id(e) == trigger.event.data.entry_id
+                  and state_attr(e, 'awaiting_justification') is not none -%}
+              {%- set ns.e = e -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ ns.e }}
+      # Days still to justify, "YYYY-MM-DD", newest first.
+      awaiting_days: >-
+        {{ (state_attr(sensor_entity, 'awaiting_justification') if sensor_entity else none) or [] }}
+      absence_date: >-
+        {%- set d = trigger.event.data.date or '' -%}
+        {{ (d[8:10] ~ '.' ~ d[5:7]) if d | length >= 10 else d }}
+      absence_dates: >-
+        {%- set ns = namespace(dates=[]) -%}
+        {%- for d in awaiting_days -%}
+          {%- set ns.dates = ns.dates + [d[8:10] ~ '.' ~ d[5:7]] -%}
+        {%- endfor -%}
+        {{ ns.dates | join(', ') }}
+      # Formatted again here rather than reusing the two variables above:
+      # HA turns a lone "12.10" variable into the number 12.1.
       absence_summary: >-
-        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nieusprawiedliwiona nieobecność: {{ trigger.event.data.date }}
-        {{ ('(lekcja ' ~ trigger.event.data.lesson_no ~ ')') if trigger.event.data.lesson_no else '' }}
+        {%- set d = trigger.event.data.date or '' -%}
+        {%- set ns = namespace(dates=[]) -%}
+        {%- for a in awaiting_days -%}
+          {%- set ns.dates = ns.dates + [a[8:10] ~ '.' ~ a[5:7]] -%}
+        {%- endfor -%}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nieusprawiedliwiona nieobecność {{ (d[8:10] ~ '.' ~ d[5:7]) if d | length >= 10 else d }}.{{ (' Do usprawiedliwienia: ' ~ ns.dates | join(', ') ~ '.') if ns.dates else '' }}
   - !input notify_action
 
-mode: queued
-max: 10
+# One run per batch: the extra events of the same batch (one per lesson)
+# arrive while the first run waits, and are dropped without a warning.
+mode: single
+max_exceeded: silent

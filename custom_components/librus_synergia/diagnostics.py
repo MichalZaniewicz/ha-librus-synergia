@@ -5,13 +5,13 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.loader import async_get_integration
 
 from . import LibrusConfigEntry
-from .const import DOMAIN
+from .const import CONF_AI_CONTEXT, CONF_STUDENT_NUMBER, DOMAIN
 
 # entry.data holds login/password/session cookies - all secrets. Coordinator
 # data carries the student's real grades/attendance/notes, so free-text and
@@ -36,8 +36,63 @@ TO_REDACT = {
     "last_name",
     "subject",
     "sender_name",
+    "receiver_name",
     "topic",
+    # The family's own notes for the AI summary and the class register
+    # number (options and data).
+    CONF_AI_CONTEXT,
+    CONF_STUDENT_NUMBER,
+    # Who the student is (Me) and the teachers' LIDs.
+    "account_id",
+    "teacher_lid",
+    # School trips (where, the route, the teacher in charge), the school's
+    # head teacher, file names of homework attachments.
+    "coordinator",
+    "destination",
+    "route",
+    "head_teacher_name",
+    "filename",
 }
+
+# School documents: their names and Synergia links (the `name` key is too
+# common to redact everywhere - category and attendance type names are what
+# a diagnostics dump is for).
+_SCHOOL_FILE_KEYS = ("name", "download_path")
+_LID_PREFIX = "LID-"
+
+
+def _redact_lids(value: Any) -> Any:
+    """Every `LID-...` identifier (a Librus account id - the teachers' map
+    is keyed by them for the new descriptive grading, and some ids in the
+    data are LIDs) replaced by a numbered placeholder, as a key or a
+    value. The same LID gets the same placeholder, so the dump stays
+    consistent."""
+    seen: dict[str, str] = {}
+
+    def placeholder(lid: str) -> str:
+        return seen.setdefault(lid, f"{_LID_PREFIX}**REDACTED**-{len(seen) + 1}")
+
+    def walk(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {
+                (placeholder(k) if isinstance(k, str) and k.startswith(_LID_PREFIX) else k): walk(v)
+                for k, v in item.items()
+            }
+        if isinstance(item, list):
+            return [walk(v) for v in item]
+        if isinstance(item, str) and item.startswith(_LID_PREFIX):
+            return placeholder(item)
+        return item
+
+    return walk(value)
+
+
+def _redact_school_files(data: dict[str, Any]) -> None:
+    for item in data.get("school_files") or []:
+        if isinstance(item, dict):
+            for key in _SCHOOL_FILE_KEYS:
+                if item.get(key):
+                    item[key] = REDACTED
 
 
 def _stringify_keys(value: Any) -> Any:
@@ -82,10 +137,12 @@ async def async_get_config_entry_diagnostics(
     cached reference data)."""
     coordinator = entry.runtime_data
     coordinator_data = (
-        _stringify_keys(dataclasses.asdict(coordinator.data))
+        _redact_lids(_stringify_keys(dataclasses.asdict(coordinator.data)))
         if coordinator.data is not None
         else None
     )
+    if coordinator_data is not None:
+        _redact_school_files(coordinator_data)
     registry = ir.async_get(hass)
     open_issues = [
         {
@@ -112,10 +169,11 @@ async def async_get_config_entry_diagnostics(
         "update_interval_seconds": (
             coordinator.update_interval.total_seconds() if coordinator.update_interval else None
         ),
-        # Not sensitive - just which optional features are toggled on, so
-        # a toggled-off feature (e.g. messages_enabled: false) is never
-        # mistaken for a degraded/broken endpoint downstream.
-        "options": dict(entry.options),
+        # Which optional features are toggled on, so a toggled-off feature
+        # (e.g. messages_enabled: false) is never mistaken for a
+        # degraded/broken endpoint downstream - minus the free-text notes
+        # and the register number.
+        "options": async_redact_data(dict(entry.options), TO_REDACT),
         "session_valid": coordinator.client.is_session_valid(),
         "session_age_seconds": coordinator.client.session_age_seconds,
         "reference_data_fetched_at": (

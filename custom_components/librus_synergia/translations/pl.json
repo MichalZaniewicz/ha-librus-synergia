@@ -34,6 +34,7 @@
     },
     "abort": {
       "already_configured": "To konto Librus jest już skonfigurowane.",
+      "already_in_progress": "To konto Librus jest właśnie konfigurowane.",
       "reauth_successful": "Ponowne uwierzytelnienie powiodło się.",
       "reconfigure_successful": "Rekonfiguracja powiodła się.",
       "unique_id_mismatch": "Ten login należy do innego konta Librus niż to, dla którego skonfigurowano ten wpis. Jeśli chodziło Ci o dodanie nowego ucznia, usuń i dodaj integrację ponownie."
@@ -259,7 +260,7 @@
         },
         "mailbox": {
           "name": "Skrzynka",
-          "description": "W której skrzynce jest wiadomość. Domyślnie \"inbox\" - użyj \"substitutions\" lub \"alerts\" dla wiadomości z atrybutu \"substitutions_recent\" lub \"alerts_recent\" sensora Nieprzeczytane wiadomości."
+          "description": "W której skrzynce jest wiadomość - wartość \"mailbox\" wiadomości z atrybutu \"recent\", \"substitutions_recent\", \"alerts_recent\", \"justifications_recent\", \"outbox_recent\" (wysłane) lub \"archive_recent\" (\"archive/inbox\", poprzednie lata szkolne) sensora Nieprzeczytane wiadomości. Domyślnie \"inbox\"."
         }
       }
     },

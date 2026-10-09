@@ -24,6 +24,7 @@ get_message:
       default: "inbox"
       selector:
         select:
+          custom_value: true
           options:
             - "inbox"
             - "substitutions"
@@ -32,6 +33,8 @@ get_message:
             - "absences"
             - "justifications"
             - "trash"
+            - "outbox"
+            - "archive/inbox"
 
 get_grades:
   fields:

@@ -7,7 +7,7 @@ blueprint:
 
 
     Use `{{ justification_summary }}` in your action for a ready-made
-    message such as "Kacper: usprawiedliwienie za 04.09 przyjęte", or the
+    message such as "Ola: usprawiedliwienie za 04.09 przyjęte", or the
     individual fields: `{{ trigger.event.data.status }}`,
     `{{ trigger.event.data.accepted }}`, `{{ trigger.event.data.rejected }}`,
     `{{ trigger.event.data.date_from }}`, `{{ trigger.event.data.date_to }}`,

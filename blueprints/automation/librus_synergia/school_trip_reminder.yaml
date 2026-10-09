@@ -3,13 +3,16 @@ blueprint:
   description: >
     At a set time, checks the Next school trip sensor and runs your action -
     typically "Send a notification" - when a trip starts tomorrow, with the
-    destination, how the class travels and the route.
+    destination, how the class travels and the route. Every trip starting
+    tomorrow is found (from the sensor's `upcoming` list), even when another
+    trip that is already under way is the "next" one.
 
 
     Use `{{ trip_summary }}` in your action for a ready-made message such as
-    "Kacper: jutro wycieczka - Muzeum Narodowe (autokar). Trasa: szkoła -
+    "Ola: jutro wycieczka - Muzeum Narodowe (autokar). Trasa: szkoła -
     muzeum.", or `{{ trip_destination }}`, `{{ trip_transport }}`,
-    `{{ trip_route }}` and `{{ trip_coordinator }}` directly.
+    `{{ trip_route }}` and `{{ trip_coordinator }}` (the first trip starting
+    tomorrow) and `{{ trip_count }}` directly.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_trip_reminder.yaml
   input:
@@ -20,6 +23,7 @@ blueprint:
         entity:
           integration: librus_synergia
           domain: sensor
+          device_class: date
     check_time:
       name: Time
       description: When to check the day before.
@@ -40,20 +44,47 @@ triggers:
     at: !input check_time
 
 conditions:
+  # `date_from` may carry a time ("YYYY-MM-DD HH:MM:SS"), so only its date
+  # part is compared.
   - condition: template
-    value_template: "{{ state_attr(trips_entity, 'days_until') == 1 }}"
+    value_template: >-
+      {%- set tomorrow = (now().date() + timedelta(days=1)) | string -%}
+      {%- set ns = namespace(count=0) -%}
+      {%- for t in (state_attr(trips_entity, 'upcoming') or []) -%}
+        {%- if (t.date_from or '')[:10] == tomorrow -%}
+          {%- set ns.count = ns.count + 1 -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.count > 0 }}
 
 actions:
   - variables:
-      trip_destination: "{{ state_attr(trips_entity, 'destination') or '' }}"
-      trip_transport: "{{ state_attr(trips_entity, 'transport') or '' }}"
-      trip_route: "{{ state_attr(trips_entity, 'route') or '' }}"
-      trip_coordinator: "{{ state_attr(trips_entity, 'coordinator') or '' }}"
+      # Re-derived here - conditions can't hand data to actions.
+      trips_tomorrow: >-
+        {%- set tomorrow = (now().date() + timedelta(days=1)) | string -%}
+        {%- set ns = namespace(items=[]) -%}
+        {%- for t in (state_attr(trips_entity, 'upcoming') or []) -%}
+          {%- if (t.date_from or '')[:10] == tomorrow -%}
+            {%- set ns.items = ns.items + [t] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.items }}
+      trip_count: "{{ trips_tomorrow | count }}"
+      trip_destination: "{{ trips_tomorrow[0].destination or '' if trips_tomorrow else '' }}"
+      trip_transport: "{{ trips_tomorrow[0].transport or '' if trips_tomorrow else '' }}"
+      trip_route: "{{ trips_tomorrow[0].route or '' if trips_tomorrow else '' }}"
+      trip_coordinator: "{{ trips_tomorrow[0].coordinator or '' if trips_tomorrow else '' }}"
       # The device is named "E-dziennik <student>" by the integration.
       student_name: >-
         {{ (device_attr(trips_entity, 'name') or '') | replace('E-dziennik ', '') }}
       trip_summary: >-
-        {{ (student_name ~ ': ') if student_name else '' }}jutro wycieczka - {{ trip_destination }}{{ (' (' ~ trip_transport ~ ')') if trip_transport else '' }}.{{ (' Trasa: ' ~ trip_route ~ '.') if trip_route else '' }}
+        {%- set ns = namespace(parts=[]) -%}
+        {%- for t in trips_tomorrow -%}
+          {%- set ns.parts = ns.parts + [(t.destination or 'wycieczka')
+               ~ ((' (' ~ t.transport ~ ')') if t.transport else '')
+               ~ '.' ~ ((' Trasa: ' ~ t.route ~ '.') if t.route else '')] -%}
+        {%- endfor -%}
+        {{ (student_name ~ ': ') if student_name else '' }}jutro {{ 'wycieczka' if ns.parts | count == 1 else 'wycieczki' }} - {{ ns.parts | join(' ') }}
   - !input notify_action
 
 mode: single

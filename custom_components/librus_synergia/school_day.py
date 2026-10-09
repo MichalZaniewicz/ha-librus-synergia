@@ -9,13 +9,14 @@ in on a day off).
 
 from __future__ import annotations
 
-from collections.abc import Hashable
+import weakref
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from homeassistant.core import callback
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.core import CALLBACK_TYPE, callback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.util import dt as dt_util
 
 from librus_synergia.models import LessonData, LibrusData
@@ -23,10 +24,10 @@ from librus_synergia.models import LessonData, LibrusData
 from .ai_summary import _day
 from .forecast import DataMemo
 
-# Five entities re-check this every minute (school day today/tomorrow, in
-# school, school start/end) - ten calls a minute that each parsed every
-# lesson's times and expanded every free-day range. Computed once per data
-# object and local date instead.
+# Five entities read this (school day today/tomorrow, in school, school
+# start/end), plus the shared clock and smart polling - each call used to
+# parse every lesson's times and expand every free-day range. Computed once
+# per data object and local date instead.
 _SCHOOL_DAYS = DataMemo()
 
 
@@ -108,10 +109,94 @@ def next_end(days: dict[date, SchoolDay], now: datetime) -> SchoolDay | None:
     return min(upcoming, key=lambda d: d.last_end, default=None)
 
 
-class MinuteRefresh:
+def _next_transition(days: dict[date, SchoolDay], now: datetime) -> datetime:
+    """The next moment a school-day entity can change: a first lesson
+    starting, a last lesson ending, or the next local midnight (today and
+    tomorrow move on)."""
+    midnight = dt_util.start_of_local_day(now.date() + timedelta(days=1))
+    moments = [
+        moment
+        for day in days.values()
+        for moment in (day.first_start, day.last_end)
+        if now < moment < midnight
+    ]
+    return min(moments, default=midnight)
+
+
+class SchoolDayClock:
+    """One timer per coordinator for the school-day entities (school day
+    today/tomorrow, in school, school start/end): it fires at the next real
+    transition (see `_next_transition`) instead of every entity re-checking
+    itself every minute, and is re-armed after firing and on every
+    coordinator update (new lessons can move the next transition)."""
+
+    def __init__(self, coordinator: Any) -> None:
+        self._coordinator = coordinator
+        self._listeners: list[Callable[[], None]] = []
+        self._unsub_timer: CALLBACK_TYPE | None = None
+        self._unsub_coordinator: CALLBACK_TYPE | None = None
+
+    @callback
+    def async_add_listener(self, update: Callable[[], None]) -> CALLBACK_TYPE:
+        self._listeners.append(update)
+        if len(self._listeners) == 1:
+            self._unsub_coordinator = self._coordinator.async_add_listener(self._arm)
+            self._arm()
+
+        @callback
+        def remove() -> None:
+            self._listeners.remove(update)
+            if not self._listeners:
+                self._stop()
+
+        return remove
+
+    @callback
+    def _stop(self) -> None:
+        for unsub in (self._unsub_timer, self._unsub_coordinator):
+            if unsub is not None:
+                unsub()
+        self._unsub_timer = self._unsub_coordinator = None
+
+    @callback
+    def _arm(self) -> None:
+        if self._unsub_timer is not None:
+            self._unsub_timer()
+        days = school_days(self._coordinator.data, self._coordinator.memo_owner)
+        # A second past the moment: a lesson's start/end itself is inclusive
+        # on one side of each check, so the state is read once it's over.
+        moment = _next_transition(days, dt_util.now()) + timedelta(seconds=1)
+        self._unsub_timer = async_track_point_in_time(
+            self._coordinator.hass, self._async_fire, moment
+        )
+
+    @callback
+    def _async_fire(self, _now: datetime) -> None:
+        self._unsub_timer = None
+        for update in list(self._listeners):
+            update()
+        if self._listeners:
+            self._arm()
+
+
+_CLOCKS: weakref.WeakKeyDictionary[Any, SchoolDayClock] = weakref.WeakKeyDictionary()
+
+
+def school_day_clock(coordinator: Any) -> SchoolDayClock:
+    """The coordinator's shared SchoolDayClock (created on first use)."""
+    clock = _CLOCKS.get(coordinator)
+    if clock is None:
+        clock = _CLOCKS[coordinator] = SchoolDayClock(coordinator)
+    return clock
+
+
+class SchoolDayRefresh:
     """Mixin for coordinator entities whose state depends on the clock:
-    re-evaluated every minute, written only when it actually changed (so
-    history isn't flooded with identical states)."""
+    re-evaluated at each school-day transition (`SchoolDayClock`), written
+    only when it actually changed (so history isn't flooded with identical
+    states). Replaces a per-entity check every minute - five entities per
+    student re-reading their state 1440 times a day for a handful of real
+    changes."""
 
     _last_written: Any = None
 
@@ -121,11 +206,13 @@ class MinuteRefresh:
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()  # type: ignore[misc]
         self.async_on_remove(  # type: ignore[attr-defined]
-            async_track_time_change(self.hass, self._async_minute, second=0)  # type: ignore[attr-defined]
+            school_day_clock(self.coordinator).async_add_listener(  # type: ignore[attr-defined]
+                self._async_transition
+            )
         )
 
     @callback
-    def _async_minute(self, _now: datetime) -> None:
+    def _async_transition(self) -> None:
         if self._signature() != self._last_written:
             self.async_write_ha_state()  # type: ignore[attr-defined]
 
@@ -133,3 +220,42 @@ class MinuteRefresh:
     def async_write_ha_state(self) -> None:
         self._last_written = self._signature()
         super().async_write_ha_state()  # type: ignore[misc]
+
+
+class SkipUnchangedUpdates:
+    """Mixin for coordinator entities: a coordinator update that changed
+    nothing this entity shows doesn't write its state again.
+
+    "Nothing changed" = the same data object (the coordinator keeps the old
+    one when a refresh brings identical data, and a skipped poll returns it
+    as is), the same local date (most attributes count days from today; the
+    coordinator's midnight tick brings the new date), the same
+    `last_update_success` and the same `_side_state()` - what an entity
+    reads from the coordinator besides the data (badges, read receipts,
+    ...). Entities whose state depends on the time of day set
+    `_always_write`. Every student's ~40 entities used to be written on
+    every poll, identical or not."""
+
+    _always_write = False
+    _written_data: Any = None
+    _written_key: Any = None
+
+    def _side_state(self) -> Any:
+        """What else besides the data this entity shows - compared with
+        `==`, so return a snapshot (a copy of anything mutated in place)."""
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        coordinator = self.coordinator  # type: ignore[attr-defined]
+        data = coordinator.data
+        key = (coordinator.last_update_success, dt_util.now().date(), self._side_state())
+        if (
+            not self._always_write
+            and self._written_key is not None
+            and data is self._written_data
+            and key == self._written_key
+        ):
+            return
+        self._written_data, self._written_key = data, key
+        super()._handle_coordinator_update()  # type: ignore[misc]

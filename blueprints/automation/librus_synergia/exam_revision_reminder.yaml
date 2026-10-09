@@ -20,6 +20,7 @@ blueprint:
         entity:
           integration: librus_synergia
           domain: sensor
+          device_class: date
     days_before:
       name: Days before the test
       description: How many days ahead to remind.
@@ -51,18 +52,22 @@ triggers:
     at: !input check_time
 
 conditions:
+  # The day of the test is compared as a "YYYY-MM-DD" string with each
+  # `upcoming` item's `date`, so the count is always against today's clock.
   - condition: template
     value_template: >-
+      {%- set target = (now().date() + timedelta(days=days_before | int(3))) | string -%}
       {{ (state_attr(next_exam_entity, 'upcoming') or [])
-         | selectattr('days_until', 'eq', days_before | int) | list | count > 0 }}
+         | selectattr('date', 'eq', target) | list | count > 0 }}
 
 actions:
   - variables:
-      # `upcoming` items carry date, subject, category, days_until and
+      target_date: "{{ (now().date() + timedelta(days=days_before | int(3))) | string }}"
+      # `upcoming` items carry id, date, subject, category, content and
       # `topics` (date, lesson_no, topic, absent).
       revision_lines: >-
         {%- set ns = namespace(lines=[]) -%}
-        {%- for e in (state_attr(next_exam_entity, 'upcoming') or []) if e.days_until == days_before | int -%}
+        {%- for e in (state_attr(next_exam_entity, 'upcoming') or []) if e.date == target_date -%}
           {%- set head = (e.category ~ ' · ' if e.category else '') ~ (e.subject or 'lekcja') -%}
           {%- set topics = e.topics or [] -%}
           {%- if topics -%}
@@ -77,7 +82,7 @@ actions:
         {%- endfor -%}
         {{ ns.lines | join('\n') }}
       exam_count: >-
-        {{ (state_attr(next_exam_entity, 'upcoming') or []) | selectattr('days_until', 'eq', days_before | int) | list | count }}
+        {{ (state_attr(next_exam_entity, 'upcoming') or []) | selectattr('date', 'eq', target_date) | list | count }}
       # The device is named "E-dziennik <student>" by the integration.
       student_name: >-
         {{ (device_attr(next_exam_entity, 'name') or '') | replace('E-dziennik ', '') }}

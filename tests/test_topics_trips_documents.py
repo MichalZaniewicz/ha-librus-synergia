@@ -112,6 +112,8 @@ async def test_new_descriptive_grade_fires_new_grade_event(hass) -> None:
     await coordinator._async_update_data()  # first sync only seeds
 
     client.async_get_descriptive_grades.return_value = DESCRIPTIVE
+    # Asked hourly while the last answer had none (see coordinator._sparse).
+    coordinator._fetched_at.clear()
     await coordinator._async_update_data()
     await hass.async_block_till_done()
 

@@ -34,6 +34,7 @@
     },
     "abort": {
       "already_configured": "This Librus account is already configured.",
+      "already_in_progress": "This Librus account is already being set up.",
       "reauth_successful": "Re-authentication was successful.",
       "reconfigure_successful": "Reconfiguration was successful.",
       "unique_id_mismatch": "This login belongs to a different Librus account than the one this entry was set up for. Remove and re-add the integration instead if you meant to add a new student."
@@ -259,7 +260,7 @@
         },
         "mailbox": {
           "name": "Mailbox",
-          "description": "Which mailbox the message is in. Defaults to \"inbox\" - use \"substitutions\" or \"alerts\" for a message from the Unread messages sensor's \"substitutions_recent\" or \"alerts_recent\" attribute."
+          "description": "Which mailbox the message is in - the \"mailbox\" value of the message in the Unread messages sensor's \"recent\", \"substitutions_recent\", \"alerts_recent\", \"justifications_recent\", \"outbox_recent\" (sent messages) or \"archive_recent\" (\"archive/inbox\", past school years) attribute. Defaults to \"inbox\"."
         }
       }
     },

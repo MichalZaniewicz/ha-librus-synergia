@@ -234,7 +234,16 @@ class LibrusSynergiaConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(info["unique_id"])
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=info["title"], data=info["data"])
+                # A new student starts with "hide subjects without grades"
+                # on - a fresh install otherwise begins with a row of
+                # `unknown` averages (every subject, early in the year).
+                # Entries created before keep the option as they had it
+                # (missing = off), so nobody's existing sensors disappear.
+                return self.async_create_entry(
+                    title=info["title"],
+                    data=info["data"],
+                    options={CONF_HIDE_EMPTY_SUBJECTS: True},
+                )
 
         return self.async_show_form(step_id="user", data_schema=USER_SCHEMA, errors=errors)
 

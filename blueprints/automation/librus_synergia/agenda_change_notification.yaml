@@ -13,7 +13,7 @@ blueprint:
 
 
     Inside your chosen action, use `{{ agenda_change_summary }}` for a
-    ready-made message such as "Kacper: [Sprawdzian] Matematyka - termin
+    ready-made message such as "Ola: [Sprawdzian] Matematyka - termin
     12.10 → 14.10", or the individual fields:
     `{{ trigger.event.data.kind }}` (`changed` / `removed`),
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.category }}`,

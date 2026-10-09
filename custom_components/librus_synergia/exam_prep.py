@@ -142,6 +142,14 @@ def exam_prep(
         return []
     by_subject = exam_dates_by_subject(data)
     missed = missed_lessons(data)
+    # Every held lesson with a topic, per subject, its date parsed once -
+    # each test used to walk (and parse) every lesson of the school year.
+    held_by_subject: dict[Any, list[tuple[date, Any]]] = {}
+    for lesson in data.lesson_topics:
+        held = _day(lesson.date)
+        if held is None or lesson.subject_id is None or not lesson.topic.strip():
+            continue
+        held_by_subject.setdefault(lesson.subject_id, []).append((held, lesson))
     year_start = _day(data.school_class.begin_school_year) if data.school_class else None
     result = []
     for day, item in exams:
@@ -157,10 +165,7 @@ def exam_prep(
             earlier = [d for d in by_subject.get(subject_id, []) if d < day]
             prep.since = earlier[-1] if earlier else None
             topics = []
-            for lesson in data.lesson_topics:
-                held = _day(lesson.date)
-                if lesson.subject_id != subject_id or held is None or not lesson.topic.strip():
-                    continue
+            for held, lesson in held_by_subject.get(subject_id, []):
                 if held >= day or held > today:
                     continue
                 # After the previous test (that day's lesson was the test

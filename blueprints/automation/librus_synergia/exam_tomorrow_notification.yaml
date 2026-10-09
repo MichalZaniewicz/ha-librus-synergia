@@ -19,6 +19,7 @@ blueprint:
         entity:
           integration: librus_synergia
           domain: sensor
+          device_class: date
     check_time:
       name: Time
       description: When to check each day (e.g. the evening before).

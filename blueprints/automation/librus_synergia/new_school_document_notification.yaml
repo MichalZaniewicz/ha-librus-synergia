@@ -7,7 +7,7 @@ blueprint:
 
 
     Use `{{ document_summary }}` in your action for a ready-made message such
-    as "Kacper: szkoła udostępniła dokument „Regulamin wycieczek”", or
+    as "Ola: szkoła udostępniła dokument „Regulamin wycieczek”", or
     `{{ trigger.event.data.name }}`, `{{ trigger.event.data.added }}` and
     `{{ trigger.event.data.url }}` (opens in Synergia, where you have to be
     logged in) directly.
