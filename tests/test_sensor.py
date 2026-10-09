@@ -827,24 +827,43 @@ async def test_behaviour_grade_sensor_classic_scale(hass) -> None:
 
 async def test_descriptive_grades_sensor(hass) -> None:
     client = build_mock_client(
-        async_get_descriptive_grades={
-            "Grades": [
+        async_get_descriptive_grades={"Grades": [
                 {
                     "Id": 1,
                     "Subject": {"Id": 100},
-                    "Grade": "Bardzo dobrze",
-                    "AddDate": "2026-09-05",
+                    "Skill": {"Id": 55},
+                    "AddedBy": {"Id": 7},
+                    "Grade": 3,
+                    "Map": "6",
+                    "RealGradeValue": "6",
+                    "Date": "2026-09-30",
+                    "AddDate": "2026-09-30 13:37:00",
+                    "Semester": 1,
+                    "Comments": [{"Id": 44}],
                 }
-            ]
+        ]},
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Edukacja muzyczna"}]},
+        async_get_descriptive_grade_skills={
+            "Skills": [{"Id": 55, "Name": "Ekspresja muzyczna. Śpiew", "Subject": {"Id": 100}}]
         },
-        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_descriptive_grade_comments={
+            "Comments": [{"Id": 44, "Grade": {"Id": 1}, "Text": "Piosenka - dwie zwrotki"}]
+        },
+        async_get_teachers={"Users": [{"Id": 7, "FirstName": "Anna", "LastName": "Nowak"}]},
     )
     entry = await setup_integration(hass, client)
 
     entity_id = _entity_id(hass, entry, "descriptive_grades")
     state = hass.states.get(entity_id)
     assert state.state == "1"
-    assert state.attributes["recent"][0]["subject"] == "Matematyka"
+    grade = state.attributes["grades"][0]
+    assert grade == state.attributes["recent"][0]
+    assert grade["subject"] == "Edukacja muzyczna"
+    assert grade["value"] == "6"
+    assert grade["skill"] == "Ekspresja muzyczna. Śpiew"
+    assert grade["teacher"] == "Anna Nowak"
+    assert grade["comments"] == ["Piosenka - dwie zwrotki"]
+    assert grade["date"] == "2026-09-30"
 
 
 async def test_unread_announcements_sensor_unavailable_when_disabled_via_options(hass) -> None:

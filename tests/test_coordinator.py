@@ -1084,27 +1084,90 @@ async def test_behaviour_grades_parsed_with_resolved_category_and_comments(hass)
 
 
 async def test_descriptive_grades_parsed(hass) -> None:
+    """Shape CONFIRMED live 2026-10-09 (#13): the grade shown is `Map`
+    ("6"), not `Grade` (3); skill names and comments come from their own
+    endpoints."""
     client = build_mock_client(
-        async_get_descriptive_grades={
-            "Grades": [
+        async_get_descriptive_grades={"Grades": [
                 {
                     "Id": 1,
                     "Subject": {"Id": 100},
-                    "Grade": "Opanował materiał w stopniu bardzo dobrym",
                     "Skill": {"Id": 55},
-                    "AddDate": "2026-09-05",
+                    "AddedBy": {"Id": 7},
+                    "Grade": 3,
+                    "Map": "6",
+                    "RealGradeValue": "6",
+                    "Date": "2026-09-30",
+                    "AddDate": "2026-09-30 13:37:00",
+                    "Semester": 1,
+                    "Comments": [{"Id": 44}],
                 }
-            ]
+        ]},
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Edukacja muzyczna"}]},
+        async_get_descriptive_grade_skills={
+            "Skills": [{"Id": 55, "Name": "Ekspresja muzyczna. Śpiew", "Subject": {"Id": 100}}]
         },
-        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_descriptive_grade_comments={
+            "Comments": [{"Id": 44, "Grade": {"Id": 1}, "Text": "Piosenka - dwie zwrotki"}]
+        },
+        async_get_teachers={"Users": [{"Id": 7, "FirstName": "Anna", "LastName": "Nowak"}]},
     )
     coordinator = _make_coordinator(hass, client)
 
     data = await coordinator._async_update_data()
 
-    assert len(data.descriptive_grades) == 1
-    assert data.descriptive_grades[0].subject_id == 100
-    assert data.descriptive_grades[0].skill_id == 55
+    (grade,) = data.descriptive_grades
+    assert (grade.subject_id, grade.value) == (100, "6")
+    assert (grade.skill_id, grade.skill) == (55, "Ekspresja muzyczna. Śpiew")
+    assert grade.comments == ["Piosenka - dwie zwrotki"]
+    assert grade.teacher_id == 7
+
+
+async def test_descriptive_grade_lookups_skipped_without_descriptive_grades(hass) -> None:
+    """The skills list is the whole school's (~330 KB) - not fetched for a
+    student without descriptive grades, nor are the comments."""
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client)
+
+    await coordinator._async_update_data()
+
+    client.async_get_descriptive_grade_skills.assert_not_called()
+    client.async_get_descriptive_grade_comments.assert_not_called()
+
+
+async def test_descriptive_grade_skills_fetched_once_a_day(hass) -> None:
+    client = build_mock_client(
+        async_get_descriptive_grades={"Grades": [
+                {
+                    "Id": 1,
+                    "Subject": {"Id": 100},
+                    "Skill": {"Id": 55},
+                    "AddedBy": {"Id": 7},
+                    "Grade": 3,
+                    "Map": "6",
+                    "RealGradeValue": "6",
+                    "Date": "2026-09-30",
+                    "AddDate": "2026-09-30 13:37:00",
+                    "Semester": 1,
+                    "Comments": [{"Id": 44}],
+                }
+        ]},
+        async_get_descriptive_grade_skills={
+            "Skills": [{"Id": 55, "Name": "Ekspresja muzyczna. Śpiew", "Subject": {"Id": 100}}]
+        },
+        async_get_descriptive_grade_comments={
+            "Comments": [{"Id": 44, "Grade": {"Id": 1}, "Text": "Piosenka - dwie zwrotki"}]
+        },
+        async_get_teachers={"Users": [{"Id": 7, "FirstName": "Anna", "LastName": "Nowak"}]},
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    await coordinator._async_update_data()
+    data = await coordinator._async_update_data()
+
+    assert client.async_get_descriptive_grade_skills.call_count == 1
+    assert client.async_get_descriptive_grade_comments.call_count == 2
+    assert data.descriptive_grades[0].skill == "Ekspresja muzyczna. Śpiew"
 
 
 def _timetable_with_disruption(day_iso: str, *, canceled: bool = False, substitution: bool = False) -> dict:

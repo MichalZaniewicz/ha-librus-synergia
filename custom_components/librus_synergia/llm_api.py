@@ -392,12 +392,19 @@ class GradesTool(_LibrusTool):
                 "descriptive_grades": [
                     _compact(
                         {
-                            "date": _dated(d.add_date),
+                            "date": _dated(d.date or d.add_date),
                             "subject": _subject_name(data, d.subject_id),
                             "value": _cut(d.value),
+                            "skill": d.skill,
+                            "teacher": _teacher_name(data, d.teacher_id),
+                            "comment": _cut(" / ".join(d.comments)) if d.comments else None,
                         }
                     )
-                    for d in sorted(data.descriptive_grades, key=lambda d: d.add_date or "", reverse=True)
+                    for d in sorted(
+                        data.descriptive_grades,
+                        key=lambda d: d.date or d.add_date or "",
+                        reverse=True,
+                    )
                     if subject_ids is None or d.subject_id in subject_ids
                 ][:10]
                 or None,

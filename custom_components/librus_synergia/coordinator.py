@@ -67,6 +67,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_class,
     parse_comment_text_map,
     parse_descriptive_grades,
+    parse_descriptive_skills,
     parse_free_days,
     parse_grade_categories,
     parse_grade_value,
@@ -183,7 +184,15 @@ _KINDERGARTEN_MAX_CANDIDATES = 6
 # The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
 _CORE_PAYLOAD_LABELS = ("Me", *CORE_ENDPOINT_LABELS, *OPTIONAL_ENDPOINT_LABELS)
 # Optional endpoints parsed in _build_data from their raw payloads.
-_EXTRA_LABELS = ("BaseTextGrades", "Realizations", "SchoolTrips", "SchoolFiles", "TimetableEntries")
+_EXTRA_LABELS = (
+    "BaseTextGrades",
+    "Realizations",
+    "SchoolTrips",
+    "SchoolFiles",
+    "TimetableEntries",
+    "DescriptiveGrades/Comments",
+    "DescriptiveGrades/Skills",
+)
 # Lesson topics, trips and school documents change a few times a day.
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
@@ -1231,6 +1240,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "TimetableEntries": await self._async_optional(
                 "TimetableEntries", self._client.async_get_timetable_entries, every=_DAILY
             ),
+            **await self._async_get_descriptive_grade_lookups(core_payloads),
         }
         core_payloads = (
             *core_payloads[:6],
@@ -1335,7 +1345,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             homework_categories=self._cached_homework_categories,
             note_categories=self._cached_note_categories,
             behaviour_grade_categories=self._cached_behaviour_grade_categories,
-            descriptive_grades=parse_descriptive_grades(descriptive_grades_payload),
+            descriptive_grades=parse_descriptive_grades(
+                descriptive_grades_payload,
+                parse_descriptive_skills((extras or {}).get("DescriptiveGrades/Skills") or {}),
+                parse_comment_text_map((extras or {}).get("DescriptiveGrades/Comments") or {}),
+            ),
             point_grades=point_grades or [],
             justifications=justifications or [],
             text_grades=parse_text_grades(
@@ -1879,6 +1893,36 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for label, result in zip(_POINT_GRADE_LABELS, results)
         )
         return parse_point_grades(grades_payload, parse_point_grade_categories(categories_payload))
+
+    async def _async_get_descriptive_grade_lookups(
+        self, core_payloads: tuple[dict[str, Any], ...]
+    ) -> dict[str, dict[str, Any]]:
+        """Comments (every cycle) and skill names (once a day) for the
+        descriptive grades - skipped entirely when the student has none.
+        The skills list holds the whole school's skills (~330 KB, seen
+        live), so only id + name are kept."""
+        payload = core_payloads[_CORE_PAYLOAD_LABELS.index("DescriptiveGrades")]
+        if not (payload or {}).get("Grades"):
+            return {}
+
+        async def skill_names() -> dict[str, Any]:
+            skills = (await self._client.async_get_descriptive_grade_skills()).get("Skills")
+            return {
+                "Skills": [
+                    {"Id": item.get("Id"), "Name": item.get("Name")}
+                    for item in skills or []
+                    if isinstance(item, dict)
+                ]
+            }
+
+        return {
+            "DescriptiveGrades/Comments": await self._async_optional(
+                "DescriptiveGrades/Comments", self._client.async_get_descriptive_grade_comments
+            ),
+            "DescriptiveGrades/Skills": await self._async_optional(
+                "DescriptiveGrades/Skills", skill_names, every=_DAILY
+            ),
+        }
 
     async def _async_optional(
         self, label: str, factory: Any, *, every: timedelta | None = None

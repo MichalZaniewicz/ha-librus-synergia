@@ -1542,13 +1542,13 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
 
 
 class LibrusDescriptiveGradesSensor(LibrusSensorBase):
-    """An alternate, non-numeric grading system - CONFIRMED enabled for
-    this school (via `Units`), unlike `PointGrades`. Fields CONFIRMED via
-    szkolny-android's reference parser (2026-09-06), but never seen
-    populated."""
+    """Grades in skills-based subjects (`DescriptiveGrades`, e.g. music in
+    grades 1-3). Shape CONFIRMED live 2026-10-09 (#13): the grade, the skill
+    it is for, the teacher and their comments. `grades` holds all of them,
+    `recent` the newest five."""
 
     _attr_translation_key = "descriptive_grades"
-    _unrecorded_attributes = frozenset({"recent"})
+    _unrecorded_attributes = frozenset({"recent", "grades"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:text-box-outline"
 
@@ -1574,24 +1574,25 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        subjects = self.coordinator.data.subjects
-        recent = sorted(
-            (g for g in self.coordinator.data.descriptive_grades if g.add_date),
-            key=lambda g: g.add_date,
-            reverse=True,
-        )[:5]
-        return {
-            "recent": [
-                {
-                    "subject": subjects.get(g.subject_id) if g.subject_id else None,
-                    "value": g.value,
-                    "skill_id": g.skill_id,
-                    "category_id": g.category_id,
-                    "date": g.add_date,
-                }
-                for g in recent
-            ]
-        }
+        data = self.coordinator.data
+        grades = [
+            {
+                "subject": data.subjects.get(g.subject_id) if g.subject_id else None,
+                "value": g.value,
+                "skill": g.skill,
+                "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                "comments": list(g.comments),
+                # The lesson's date, as on the other grade lists.
+                "date": g.date or g.add_date,
+                "semester": g.semester,
+                "skill_id": g.skill_id,
+                "category_id": g.category_id,
+            }
+            for g in sorted(
+                data.descriptive_grades, key=lambda g: g.date or g.add_date or "", reverse=True
+            )
+        ]
+        return {"grades": grades, "recent": grades[:5]}
 
 
 def _message_list_attr(messages: list[MessageData]) -> list[dict[str, Any]]:

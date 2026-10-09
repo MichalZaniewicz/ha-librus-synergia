@@ -287,6 +287,10 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     "Realizations",
     "SchoolTrips",
     "SchoolFiles",
+    # Descriptive grades' comments and skill names - only fetched when the
+    # student has descriptive grades.
+    "DescriptiveGrades/Comments",
+    "DescriptiveGrades/Skills",
 )
 
 # Repair issue translation keys - see repairs.py for what each one means and

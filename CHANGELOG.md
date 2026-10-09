@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Fixed
+- **Descriptive grades show the real grade** (#13). A "6" in Synergia came
+  through as `3`: Librus keeps the shown grade in a different field.
+  Needs librus-synergia 0.3.13.
+
+### Added
+- **Descriptive grades: what each one is for, who gave it, and the comment**
+  (#13). The Descriptive grades sensor has a `grades` attribute with every
+  grade (`recent` keeps the newest five), each with `skill` (e.g. "Ekspresja
+  muzyczna. Śpiew" - what Synergia shows as the category), `teacher`,
+  `comments`, `date` and `semester`. `get_grades` returns them as
+  `descriptive_grades`, and Assist's grades tool includes the skill, teacher
+  and comment. The skill names and comments are only fetched for students
+  who have descriptive grades (the skill list once a day).
+
 ### Changed
 - **Lessons held at the same time are one calendar entry** (#14). A subject
   plus Wspomaganie (a support teacher), or split groups, used to show as two

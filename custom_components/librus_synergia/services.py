@@ -220,6 +220,23 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 }
                 for g in text_grades
             ]
+        descriptive_grades = [
+            g for g in data.descriptive_grades if subject_id is None or g.subject_id == subject_id
+        ]
+        if descriptive_grades:
+            response["descriptive_grades"] = [
+                {
+                    "subject": data.subjects.get(g.subject_id) if g.subject_id is not None else None,
+                    "subject_id": g.subject_id,
+                    "value": g.value,
+                    "skill": g.skill,
+                    "comments": list(g.comments),
+                    "date": g.date or g.add_date,
+                    "semester": g.semester,
+                    "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                }
+                for g in descriptive_grades
+            ]
         # Schools grading in points (0-100 etc.) - only when there are any.
         point_grades = [
             g for g in data.point_grades if subject_id is None or g.subject_id == subject_id

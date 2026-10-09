@@ -18,7 +18,7 @@ freezegun
 
 # The integration's own runtime requirement (manifest.json) - HA installs
 # it for real users; the test suite needs it installed explicitly.
-librus-synergia==0.3.12
+librus-synergia==0.3.13
 
 # Windows-only: zoneinfo has no system tz database to fall back to there
 # (unlike Linux/macOS), and pytest-homeassistant-custom-component's hass

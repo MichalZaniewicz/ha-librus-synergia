@@ -140,6 +140,8 @@ def build_mock_client(**overrides) -> AsyncMock:
     client.async_get_homework_assignment_categories.return_value = {"Categories": []}
     client.async_get_user.return_value = {"User": {}}
     client.async_get_descriptive_grades.return_value = {"Grades": []}
+    client.async_get_descriptive_grade_skills.return_value = {"Skills": []}
+    client.async_get_descriptive_grade_comments.return_value = {"Comments": []}
     client.async_get_text_grades.return_value = {"Grades": []}
     client.async_get_homework_assignments.return_value = {"HomeWorkAssignments": []}
     client.async_bootstrap_messages.return_value = False

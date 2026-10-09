@@ -257,6 +257,52 @@ async def test_get_grades_service_returns_every_subject_sorted_newest_first(hass
     assert response["grades"][0]["category"] == "praca na lekcji"
 
 
+async def test_get_grades_service_includes_descriptive_grades(hass) -> None:
+    client = build_mock_client(
+        async_get_descriptive_grades={
+            "Grades": [
+                {
+                    "Id": 1,
+                    "Subject": {"Id": 100},
+                    "Skill": {"Id": 55},
+                    "AddedBy": {"Id": 7},
+                    "Grade": 3,
+                    "Map": "6",
+                    "Date": "2026-09-30",
+                    "Semester": 1,
+                    "Comments": [{"Id": 44}],
+                }
+            ]
+        },
+        async_get_descriptive_grade_skills={"Skills": [{"Id": 55, "Name": "Rytmika"}]},
+        async_get_descriptive_grade_comments={"Comments": [{"Id": 44, "Text": "Brawo"}]},
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Edukacja muzyczna"}]},
+        async_get_teachers={"Users": [{"Id": 7, "FirstName": "Anna", "LastName": "Nowak"}]},
+    )
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "get_grades",
+        {"device_id": _device_id(hass, entry)},
+        blocking=True,
+        return_response=True,
+    )
+
+    assert response["descriptive_grades"] == [
+        {
+            "subject": "Edukacja muzyczna",
+            "subject_id": 100,
+            "value": "6",
+            "skill": "Rytmika",
+            "comments": ["Brawo"],
+            "date": "2026-09-30",
+            "semester": 1,
+            "teacher": "Anna Nowak",
+        }
+    ]
+
+
 async def test_get_grades_service_filters_by_subject_id(hass) -> None:
     client = build_mock_client(
         async_get_grades=GOOD_GRADES_PAYLOAD,
