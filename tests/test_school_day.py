@@ -3,6 +3,7 @@ and the grade-average history."""
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -15,7 +16,10 @@ from custom_components.librus_synergia.average_history import (
     daily_averages,
 )
 from custom_components.librus_synergia.const import DOMAIN
-from librus_synergia.parsers import parse_grades
+from custom_components.librus_synergia.school_day import school_days
+from custom_components.librus_synergia.sensor import _sorted_lessons
+from librus_synergia.models import GradingSystemData, LibrusData, MeData
+from librus_synergia.parsers import merge_timetables, parse_grades
 
 from .conftest import build_mock_client, setup_integration
 
@@ -97,6 +101,46 @@ async def test_school_day_sensors_follow_the_clock(hass, freezer) -> None:
     assert start.attributes["date"] == (today + timedelta(days=1)).isoformat()
     assert start.attributes["lesson_no"] == 2
     assert _local_hhmm(start.state) == "08:55"
+
+
+def _plain_data(timetable: dict) -> LibrusData:
+    return LibrusData(
+        me=MeData(account_id=1, first_name="Ola", last_name="Kowalska"),
+        grades=[],
+        grade_categories={},
+        notes=[],
+        attendances=[],
+        attendance_types={},
+        timetable=merge_timetables(timetable),
+        homeworks=[],
+        school_notices=[],
+        lucky_number=None,
+        subjects={},
+        teachers={},
+        classrooms={},
+    )
+
+
+async def test_school_days_are_worked_out_once_per_data_and_day(hass, freezer) -> None:
+    """Five entities read this every minute - one calculation per data
+    object and local date, a fresh one for new data or a new day."""
+    freezer.move_to(_FROZEN)
+    data = _plain_data(_timetable())
+
+    days = school_days(data)
+    assert dt_util.now().date() in days
+    assert school_days(data) is days
+    lessons = _sorted_lessons(data)
+    assert _sorted_lessons(data) is lessons
+
+    # A new data object (the coordinator's next refresh) - even with the
+    # same content - is worked out again.
+    fresh = dataclasses.replace(data)
+    assert school_days(fresh) is not days
+    assert school_days(fresh) == days
+
+    freezer.tick(timedelta(days=1))
+    assert school_days(data) is not days
 
 
 async def test_free_day_is_not_a_school_day(hass, freezer) -> None:
@@ -195,3 +239,71 @@ async def test_average_history_writes_statistics(hass) -> None:
     assert "Matematyka" in add.call_args_list[1].args[1]["name"]
     rows = add.call_args_list[1].args[2]
     assert rows[0]["mean"] == 5.0
+
+
+def _written_days(add) -> dict[str, list[date]]:
+    """statistic_id -> the local days of the rows written."""
+    return {
+        call.args[1]["statistic_id"]: [row["start"].date() for row in call.args[2]]
+        for call in add.call_args_list
+    }
+
+
+async def test_average_history_writes_only_what_changed(hass, freezer) -> None:
+    """Every row at the start; then a new day writes just that day, and a
+    grade added on an earlier day rewrites from that day on."""
+    freezer.move_to(_FROZEN)  # 2026-09-09 local
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [{"Id": 1, "Grade": "5", "Subject": {"Id": 100}, "AddDate": "2026-09-02 10:00:00"}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    coordinator = entry.runtime_data
+    history = LibrusAverageHistory(hass, coordinator)
+    prefix = f"{DOMAIN}:{entry.entry_id.lower()}_average"
+    subject = f"{prefix}_100"
+
+    with patch(
+        "homeassistant.components.recorder.statistics.async_add_external_statistics"
+    ) as add:
+        history._async_update()
+        first = _written_days(add)
+        assert len(first[prefix]) == 8  # 2 .. 9 September
+        assert first[subject][-1] == date(2026, 9, 9)
+
+        # Nothing changed: nothing written.
+        add.reset_mock()
+        history._async_update()
+        assert add.call_count == 0
+
+        # The next day: only that day's row, per series.
+        freezer.tick(timedelta(days=1))
+        add.reset_mock()
+        history._async_update()
+        assert _written_days(add) == {prefix: [date(2026, 9, 10)], subject: [date(2026, 9, 10)]}
+
+        # A grade dated 5 September: rewritten from the 5th on.
+        added = parse_grades(
+            {"Grades": [{"Id": 2, "Grade": "3", "Subject": {"Id": 100}, "AddDate": "2026-09-05 10:00:00"}]}
+        )
+        coordinator.data = dataclasses.replace(
+            coordinator.data, grades=[*coordinator.data.grades, *added]
+        )
+        add.reset_mock()
+        history._async_update()
+        written = _written_days(add)
+        assert written[subject] == [date(2026, 9, d) for d in range(5, 11)]
+        rows = {call.args[1]["statistic_id"]: call.args[2] for call in add.call_args_list}
+        assert rows[subject][0]["mean"] == 4.0
+
+        # Another grade scale (here: what a "+" is worth) may change every
+        # average: every row is written again, unchanged values too.
+        coordinator.data = dataclasses.replace(
+            coordinator.data,
+            grading_system=GradingSystemData(plus_value=0.75),
+        )
+        add.reset_mock()
+        history._async_update()
+        assert len(_written_days(add)[subject]) == 9  # 2 .. 10 September

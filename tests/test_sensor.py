@@ -533,9 +533,9 @@ async def test_behaviour_notices_sensor_resolves_category_name(hass) -> None:
 
 
 async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
-    """The `recent` attribute must carry more than just a bare subject list
-    (content preview + dates), matching the Behaviour notices/Unread
-    messages sensors' established pattern."""
+    """`recent` lists the unread notices with id, subject and dates; the
+    full text is only in `notices` (it used to be in both, which made this
+    state ~20 KB)."""
     long_content = "Treść ogłoszenia. " * 20  # > 200 chars
     client = build_mock_client(
         async_get_school_notices={
@@ -561,15 +561,18 @@ async def test_unread_announcements_sensor_exposes_recent_details(hass) -> None:
     assert len(recent) == 1
     assert recent[0]["id"] == "LID-NBOARD-NOTICE-9093-1"
     assert recent[0]["subject"] == "Kandydaci do Rady Samorządu Uczniowskiego"
+    assert "content" not in recent[0]
+    assert recent[0]["start_date"] == "2026-09-01"
+    assert recent[0]["end_date"] == "2026-09-30"
     # BUG FIX (2026-09-06, found live - "ogłoszeń nie można odczytywać?"):
     # unlike the Wiadomości mailboxes, Librus does NOT truncate this
     # endpoint's content server-side - it was this integration hardcoding a
     # 200-char cutoff for no real reason, making the full text impossible
-    # for a card to ever show regardless of what it did with it.
-    assert recent[0]["content"] == long_content
-    assert len(recent[0]["content"]) > 200
-    assert recent[0]["start_date"] == "2026-09-01"
-    assert recent[0]["end_date"] == "2026-09-30"
+    # for a card to ever show. The whole text is in `notices`.
+    notices = state.attributes["notices"]
+    assert notices[0]["id"] == "LID-NBOARD-NOTICE-9093-1"
+    assert notices[0]["content"] == long_content
+    assert len(notices[0]["content"]) > 200
 
 
 async def test_unread_announcements_sensor_lists_read_notices_too(hass) -> None:
@@ -1682,3 +1685,18 @@ async def test_homework_recent_lists_upcoming_not_the_earliest_of_the_year(hass)
 
     recent = hass.states.get(_entity_id(hass, entry, "homework_assignments")).attributes["recent"]
     assert [r["id"] for r in recent] == [99]
+
+
+def test_changing_attributes_are_kept_out_of_the_recorder() -> None:
+    """Values that change on (almost) every write - countdowns, timestamps,
+    error text - and long text are only useful live, not in history."""
+    from custom_components.librus_synergia import sensor
+
+    assert {"last_success", "last_attempt", "next_attempt", "last_error"} <= (
+        sensor.LibrusStatusSensor._unrecorded_attributes
+    )
+    assert "minutes_until" in sensor.LibrusNextLessonSensor._unrecorded_attributes
+    assert "minutes_left" in sensor.LibrusCurrentLessonSensor._unrecorded_attributes
+    assert "content" in sensor.LibrusNextExamSensor._unrecorded_attributes
+    assert "text_grades" in sensor.LibrusSubjectAverageSensor._unrecorded_attributes
+    assert "comment" in sensor.LibrusBehaviourGradeSensor._unrecorded_attributes

@@ -13,12 +13,47 @@ semester grade is given for), in the second semester the whole school year
 from __future__ import annotations
 
 import math
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from librus_synergia.models import GradeCategoryData, GradeData, GradingSystemData, LibrusData
 from librus_synergia.parsers import parse_grade_value
+
+_T = TypeVar("_T")
+
+
+class DataMemo:
+    """The last few results of a calculation over one `LibrusData`.
+
+    Many entities read the same derived figures (forecasts, school days)
+    from the same coordinator data - every subject sensor, every minute
+    tick - and the data only changes when the coordinator builds a NEW
+    `LibrusData` object (it never edits one in place). So a result is kept
+    per data object (compared with `is`; the object itself is held so a
+    recycled `id()` can't match) plus a small key for anything else it
+    depends on (today's date, the options). A few entries rather than one,
+    so several students (config entries) don't keep evicting each other -
+    but only a few, since each entry keeps its data object in memory.
+
+    Callers share the returned object - they must not modify it."""
+
+    def __init__(self, size: int = 4) -> None:
+        self._size = size
+        self._entries: list[tuple[object, Hashable, Any]] = []
+
+    def get(self, data: object, key: Hashable, compute: Callable[[], _T]) -> _T:
+        for held, held_key, value in self._entries:
+            if held is data and held_key == key:
+                return value  # type: ignore[no-any-return]
+        value = compute()
+        self._entries.insert(0, (data, key, value))
+        del self._entries[self._size :]
+        return value
+
+    def clear(self) -> None:
+        self._entries.clear()
 
 # Minimum average for a 2, 3, 4, 5 and 6 - a common setup, but schools
 # differ (see the option's description).
@@ -172,6 +207,12 @@ def forecast_basis(data: LibrusData, today: date) -> tuple[str, int | None]:
     return BASIS_SEMESTER_1, 1
 
 
+# Every subject average sensor, the Grade forecast sensor, the grade-risk
+# binary sensor and the coordinator ask for the same forecasts each update
+# (~20 calls per cycle) - computed once per data object instead.
+_FORECASTS = DataMemo()
+
+
 def subject_forecasts(
     data: LibrusData,
     today: date,
@@ -180,7 +221,21 @@ def subject_forecasts(
     weighted: bool = True,
 ) -> list[SubjectForecast]:
     """One forecast per subject with at least one counted grade, worst
-    first."""
+    first. The list is shared between callers - don't modify it."""
+    return _FORECASTS.get(
+        data,
+        (today, tuple(thresholds), weighted),
+        lambda: _subject_forecasts(data, today, tuple(thresholds), weighted=weighted),
+    )
+
+
+def _subject_forecasts(
+    data: LibrusData,
+    today: date,
+    thresholds: tuple[float, ...],
+    *,
+    weighted: bool,
+) -> list[SubjectForecast]:
     basis, semester = forecast_basis(data, today)
     # A grade without a semester number counts in either basis.
     grades = [

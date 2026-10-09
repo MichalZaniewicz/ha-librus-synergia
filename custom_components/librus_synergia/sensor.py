@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Hashable
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -69,12 +70,40 @@ from .catch_up import catch_up
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, upcoming_exams
 from .forecast import (
     HONOURS_AVERAGE,
+    DataMemo,
     SubjectForecast,
     forecast_basis,
     report_average,
     subject_forecasts,
 )
 from .school_day import MinuteRefresh, SchoolDay, next_end, next_start, school_days
+
+_T = TypeVar("_T")
+
+# Shared per coordinator data object (see forecast.DataMemo): every subject
+# average sensor needs its subject's grades and the grade corrections, and
+# the Next/Current lesson sensors the sorted timetable - worked out once per
+# update instead of once per entity and property.
+_GRADES_BY_SUBJECT = DataMemo()
+_GRADE_IMPROVEMENTS = DataMemo()
+_SORTED_LESSONS = DataMemo()
+
+
+def _grades_by_subject(data: LibrusData) -> dict[Any, list[GradeData]]:
+    """subject id -> that subject's grades, in the order Librus sent them."""
+
+    def group() -> dict[Any, list[GradeData]]:
+        result: dict[Any, list[GradeData]] = {}
+        for grade in data.grades:
+            result.setdefault(grade.subject_id, []).append(grade)
+        return result
+
+    return _GRADES_BY_SUBJECT.get(data, None, group)
+
+
+def _grade_improvements(data: LibrusData) -> tuple[dict[int, str], set[int]]:
+    """`coordinator.grade_improvements` over all grades, once per data."""
+    return _GRADE_IMPROVEMENTS.get(data, None, lambda: grade_improvements(data.grades))
 
 
 def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> GradeData | None:
@@ -121,7 +150,13 @@ def _lesson_bounds(day: date, lesson: LessonData) -> tuple[datetime, datetime] |
 def _sorted_lessons(data: LibrusData) -> list[tuple[datetime, datetime, date, LessonData]]:
     """Every timetable lesson with a valid time, flattened and sorted by
     start. Keeps parallel-group lessons (a single period split into two
-    language classes, say) - both appear, ordered by start then arbitrarily."""
+    language classes, say) - both appear, ordered by start then arbitrarily.
+    Shared between callers (keyed by the local date, like
+    `school_day.school_days`) - don't modify it."""
+    return _SORTED_LESSONS.get(data, dt_util.now().date(), lambda: _sort_lessons(data))
+
+
+def _sort_lessons(data: LibrusData) -> list[tuple[datetime, datetime, date, LessonData]]:
     out: list[tuple[datetime, datetime, date, LessonData]] = []
     for day, lessons in data.timetable.items():
         for lesson in lessons:
@@ -409,6 +444,22 @@ class LibrusSensorBase(CoordinatorEntity[LibrusDataUpdateCoordinator], SensorEnt
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = librus_device_info(entry)
         self._entry = entry
+        self._librus_memo: dict[str, tuple[object, Hashable, Any]] = {}
+
+    def _cached(self, name: str, key: Hashable, compute: Callable[[], _T]) -> _T:
+        """`compute()` once per coordinator data object (and `key`, e.g.
+        today's date): Home Assistant reads the state, the attributes and
+        sometimes the icon separately on every write, and they often need
+        the same figure. Only for values that depend on nothing but the
+        data and `key` - the coordinator builds a new data object on every
+        refresh, it never edits one in place."""
+        data = self.coordinator.data
+        held = self._librus_memo.get(name)
+        if held is not None and held[0] is data and held[1] == key:
+            return held[2]  # type: ignore[no-any-return]
+        value = compute()
+        self._librus_memo[name] = (data, key, value)
+        return value
 
     @property
     def _weighted(self) -> bool:
@@ -471,7 +522,9 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     discovered dynamically."""
 
     _attr_translation_key = "subject_average"
-    _unrecorded_attributes = frozenset({"grades", "latest_grade_comments", "point_grades"})
+    _unrecorded_attributes = frozenset(
+        {"grades", "latest_grade_comments", "point_grades", "text_grades"}
+    )
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
@@ -491,12 +544,18 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     def translation_placeholders(self) -> dict[str, str]:
         return {"subject": self._subject_name}
 
+    def _own_grades(self) -> list[GradeData]:
+        """This subject's grades only - the averages below still filter by
+        subject id too, so the result is the same as over all grades."""
+        assert self.coordinator.data is not None
+        return _grades_by_subject(self.coordinator.data).get(self._subject_id, [])
+
     @property
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
         return _calculate_average(
-            self.coordinator.data.grades,
+            self._own_grades(),
             self.coordinator.data.grade_categories,
             subject_id=self._subject_id,
             weighted=self._weighted, grading=self._grading,
@@ -506,7 +565,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        grades = self.coordinator.data.grades
+        grades = self._own_grades()
         latest = _latest_grade(grades, subject_id=self._subject_id)
         proposed = next(
             (g for g in grades if g.subject_id == self._subject_id and g.is_semester_proposition),
@@ -527,7 +586,8 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         ]
         count = len(subject_grades)
         categories = self.coordinator.data.grade_categories
-        improves, improved = grade_improvements(grades)
+        # Over ALL grades: a correction points at the grade it improves by id.
+        improves, improved = _grade_improvements(self.coordinator.data)
         # Full per-grade list for this one subject - lets a dashboard card
         # show the actual grade log, not just the computed average. Sorted
         # newest-first; date is a plain "YYYY-MM-DD"-prefixed string from
@@ -1228,12 +1288,17 @@ class LibrusRankSensor(LibrusSensorBase):
         super().__init__(coordinator, entry, "rank")
 
     def _average(self) -> float | None:
-        if self.coordinator.data is None:
+        data = self.coordinator.data
+        if data is None:
             return None
-        return _calculate_average(
-            self.coordinator.data.grades,
-            self.coordinator.data.grade_categories,
-            weighted=self._weighted, grading=self._grading,
+        # Read by the icon, the state and the attributes on every write.
+        weighted = self._weighted
+        return self._cached(
+            "average",
+            weighted,
+            lambda: _calculate_average(
+                data.grades, data.grade_categories, weighted=weighted, grading=data.grading_system
+            ),
         )
 
     @property
@@ -1357,9 +1422,9 @@ _ANNOUNCEMENTS_LISTED = 15
 
 
 class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
-    """Count of school notices ("ogłoszenia") not yet marked read, with a
-    recent-items attribute (subject/content preview/dates) matching the
-    Behaviour notices and Unread messages sensors' pattern."""
+    """Count of school notices ("ogłoszenia") not yet marked read. `recent`
+    lists the unread ones (id, subject, dates); `notices` is the whole board
+    with the full text of each notice."""
 
     _attr_translation_key = "unread_announcements"
     _unrecorded_attributes = frozenset({"recent", "notices"})
@@ -1393,18 +1458,15 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {
+            # No `content` here: the same notices are in `notices` below
+            # with their full text, and carrying it twice made this one of
+            # the largest states in the integration (~20 KB). The companion
+            # cards read the text from `notices`; `recent` only gives them
+            # the unread subjects and dates.
             "recent": [
                 {
                     "id": n.id,
                     "subject": n.subject,
-                    # Unlike the Wiadomości mailboxes, Librus does NOT
-                    # truncate this endpoint's content server-side - it was
-                    # this integration that used to cut it to 200 chars for
-                    # no real reason, making the full text impossible for a
-                    # card to ever show. Expose it whole; there's no read-
-                    # marking side effect or extra API call to worry about
-                    # here, unlike the Wiadomości "click to read" feature.
-                    "content": n.content,
                     "start_date": n.start_date,
                     "end_date": n.end_date,
                     "creation_date": n.creation_date,
@@ -1418,6 +1480,8 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
                 {
                     "id": n.id,
                     "subject": n.subject,
+                    # Whole: Librus doesn't shorten this endpoint's text,
+                    # and the cards expand a notice to read all of it.
                     "content": n.content,
                     "start_date": n.start_date,
                     "end_date": n.end_date,
@@ -1557,7 +1621,7 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
     (`BehaviourGradeData.display`/`name`, librus-synergia 0.3.1)."""
 
     _attr_translation_key = "behaviour_grade"
-    _unrecorded_attributes = frozenset({"recent"})
+    _unrecorded_attributes = frozenset({"recent", "comment"})
     _attr_icon = "mdi:medal-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1871,6 +1935,8 @@ class LibrusNextLessonSensor(LibrusSensorBase):
     guessing."""
 
     _attr_translation_key = "next_lesson"
+    # The countdown changes on every write; history only needs the subject.
+    _unrecorded_attributes = frozenset({"minutes_until"})
     _attr_icon = "mdi:clock-start"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1909,6 +1975,7 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
     sensor - including `has_parallel_group` (see that class's docstring)."""
 
     _attr_translation_key = "current_lesson"
+    _unrecorded_attributes = frozenset({"minutes_left"})
     _attr_icon = "mdi:clock-time-four-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -2028,7 +2095,7 @@ class LibrusNextExamSensor(LibrusSensorBase):
     description (see `exam_prep.EXAM_RE`) - deliberately conservative."""
 
     _attr_translation_key = "next_exam"
-    _unrecorded_attributes = frozenset({"upcoming", "topics"})
+    _unrecorded_attributes = frozenset({"upcoming", "topics", "content"})
     _attr_device_class = SensorDeviceClass.DATE
     _attr_icon = "mdi:file-document-alert-outline"
 
@@ -2147,7 +2214,7 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "lesson_topics")
 
-    def _rows(self, since: str | None = None, only: str | None = None) -> list[dict[str, Any]]:
+    def _rows(self, since: str) -> list[dict[str, Any]]:
         data = self.coordinator.data
         # Lessons the student missed (a non-presence attendance record on the
         # same date and lesson number) - "what to catch up on".
@@ -2159,7 +2226,7 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
         rows = []
         for t in data.lesson_topics:
             day = (t.date or "")[:10]
-            if (only and day != only) or (since and day < since):
+            if day < since:
                 continue
             rows.append(
                 {
@@ -2173,22 +2240,40 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
             )
         return rows
 
+    def _topics(self) -> dict[str, Any]:
+        """`today`, `recent` and `catch_up` - worked out once per data
+        object and day (the state and the attributes both need them)."""
+        today = dt_util.now().date()
+
+        def build() -> dict[str, Any]:
+            # Newest first, like `lesson_topics`; today's rows are among
+            # the last 14 days', so one pass gives both lists.
+            rows = self._rows(since=(today - timedelta(days=14)).isoformat())
+            today_iso = today.isoformat()
+            return {
+                "today": sorted(
+                    (r for r in rows if r["date"] == today_iso),
+                    key=lambda r: r["lesson_no"] or 0,
+                ),
+                # 80 rows ~ the 10 school days the companion Lesson topics
+                # card can be set to show - don't cut it shorter.
+                "recent": rows[:80],
+                "catch_up": catch_up(self.coordinator.data, today),
+            }
+
+        return self._cached("topics", today, build)
+
     @property
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
-        return len(self._rows(only=dt_util.now().date().isoformat()))
+        return len(self._topics()["today"])
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.coordinator.data is None:
             return None
-        today = dt_util.now().date()
-        return {
-            "today": sorted(self._rows(only=today.isoformat()), key=lambda r: r["lesson_no"] or 0),
-            "recent": self._rows(since=(today - timedelta(days=14)).isoformat())[:80],
-            "catch_up": catch_up(self.coordinator.data, today),
-        }
+        return dict(self._topics())
 
 
 class LibrusPlanChangesSensor(LibrusSensorBase):
@@ -2210,7 +2295,11 @@ class LibrusPlanChangesSensor(LibrusSensorBase):
         if data is None or not data.standing_timetable:
             return None
         today = dt_util.now().date()
+        # The state and the attributes both need the comparison.
+        return self._cached("changes", today, lambda: self._compare(data, today))
 
+    @staticmethod
+    def _compare(data: LibrusData, today: date) -> list[dict[str, Any]]:
         def name(table: dict[Any, str], key: Any) -> str | None:
             # Timetable ids can come as strings ("41999"), lookups use ints.
             if key is None:
@@ -2342,6 +2431,11 @@ class LibrusStatusSensor(LibrusSensorBase):
     unavailable). Stays available itself so the outage can be seen."""
 
     _attr_translation_key = "status"
+    # Timestamps and the error text change on almost every refresh - the
+    # state alone is what's worth keeping in history.
+    _unrecorded_attributes = frozenset(
+        {"last_success", "last_attempt", "next_attempt", "last_error"}
+    )
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = STATUS_OPTIONS
     _attr_entity_category = EntityCategory.DIAGNOSTIC

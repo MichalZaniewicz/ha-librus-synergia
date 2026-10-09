@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+- **About 40% fewer requests to Librus** (a normal refresh: ~24 → ~15):
+  - mailboxes the account doesn't have (404) are checked once a day, not on
+    every refresh;
+  - grade categories and attendance types are read once a day with the other
+    reference data - and at once when a grade or absence uses one that isn't
+    known yet;
+  - grade and behaviour-grade comments are read only when a new comment
+    appears (and once a day);
+  - the lucky number is asked at most hourly, not at all once the next day's
+    number is known;
+  - message lists are fetched again only when that mailbox's unread count
+    changes, or after an hour (the unread counts still every refresh).
+- **Less work inside Home Assistant:** the school-day sensors' every-minute
+  check, the grade forecast and the per-subject grade lists are worked out
+  once per refresh instead of many times; the average-history statistics
+  write only what changed (a grade-scale change now rewrites them too); the
+  saved state is written only when something changed (and no longer keeps
+  the timetable twice).
+- Fields that change every refresh or can grow large are no longer stored
+  in the history database (Status times and error, lesson countdowns, the
+  next exam's description, text grades, the behaviour grade comment).
+
+### Changed
+- **Unread announcements: `recent` no longer carries the notice text** - it
+  is in `notices` (one copy instead of two; the sensor's attributes were
+  ~20 KB).
+
+### Fixed
+- **Today's and next week's lessons in the cards come from the latest
+  refresh.** The timetable calendar kept its own copy of those weeks for up
+  to a day, so a substitution added today could show late.
+
 ## 0.12.5-beta.6
 
 Uses [librus-synergia 0.3.16](https://pypi.org/project/librus-synergia/0.3.16/): "Insufficient scopes" isn't an expired session, downloads are checked and give up after 150 s.

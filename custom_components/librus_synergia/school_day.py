@@ -15,10 +15,18 @@ from typing import Any
 
 from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util
 
 from librus_synergia.models import LessonData, LibrusData
 
 from .ai_summary import _day
+from .forecast import DataMemo
+
+# Five entities re-check this every minute (school day today/tomorrow, in
+# school, school start/end) - ten calls a minute that each parsed every
+# lesson's times and expanded every free-day range. Computed once per data
+# object and local date instead.
+_SCHOOL_DAYS = DataMemo()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,9 +51,16 @@ def _free_dates(data: LibrusData) -> set[date]:
 
 
 def school_days(data: LibrusData | None) -> dict[date, SchoolDay]:
-    """Every day in the cached timetable that has lessons, keyed by date."""
+    """Every day in the cached timetable that has lessons, keyed by date.
+    The dict is shared between callers - don't modify it."""
     if data is None:
         return {}
+    # Keyed by the local date too, so a result never outlives the day it
+    # was worked out on (lesson times become local datetimes).
+    return _SCHOOL_DAYS.get(data, dt_util.now().date(), lambda: _school_days(data))
+
+
+def _school_days(data: LibrusData) -> dict[date, SchoolDay]:
     # Imported here: sensor.py imports this module for its own entities.
     from .sensor import _lesson_bounds  # noqa: PLC0415
 

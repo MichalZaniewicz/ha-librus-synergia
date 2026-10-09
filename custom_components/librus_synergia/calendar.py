@@ -337,10 +337,11 @@ def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
 class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
     """The student's lesson timetable, including known substitutions.
 
-    Dashboards can ask `async_get_events` for arbitrary ranges (e.g. "next
-    month") outside the coordinator's cached current+next-week window, so
-    this fetches specific weeks on demand through the client directly,
-    caching each week locally to avoid refetching it repeatedly.
+    This week and next come straight from the coordinator's timetable,
+    which is fetched on every refresh - so a substitution added today
+    shows up in the cards at the next refresh. Dashboards can also ask
+    `async_get_events` for other ranges (e.g. "next month"); those weeks
+    are fetched on demand and cached here for a day.
     """
 
     _attr_has_entity_name = True
@@ -353,6 +354,11 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
     # entity, silently going stale (a substitution added/removed after the
     # first fetch would never be picked up).
     _WEEK_CACHE_TTL = timedelta(hours=24)
+    # A dashboard paging through months would otherwise keep every week it
+    # ever looked at. Past the TTL an entry is only a fallback for a failed
+    # refetch; that fallback is kept for weeks within this distance of the
+    # current one, and nothing fetched longer ago than this is kept at all.
+    _WEEK_CACHE_KEEP = timedelta(weeks=8)
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator)
@@ -364,7 +370,35 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         )
         self._week_cache: dict[date, tuple[dict[date, list[LessonData]], datetime]] = {}
 
+    def _coordinator_week(self, week_start: date) -> dict[date, list[LessonData]] | None:
+        """This week's or next week's lessons from the coordinator's own
+        timetable (fetched on every refresh), or None when `week_start` is
+        another week or the coordinator's data doesn't hold it - e.g. on a
+        Monday before the first refresh of the new week, when its data still
+        covers last week and this one."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        this_week = _iso_week_start(dt_util.now().date())
+        if week_start not in (this_week, this_week + timedelta(days=7)):
+            return None
+        week_end = week_start + timedelta(days=7)
+        days = {day: lessons for day, lessons in data.timetable.items() if week_start <= day < week_end}
+        return days or None
+
+    def _prune_week_cache(self) -> None:
+        now = dt_util.utcnow()
+        this_week = _iso_week_start(dt_util.now().date())
+        for week_start, (_lessons, fetched_at) in list(self._week_cache.items()):
+            age = now - fetched_at
+            far = abs(week_start - this_week) > self._WEEK_CACHE_KEEP
+            if age > self._WEEK_CACHE_KEEP or (far and age >= self._WEEK_CACHE_TTL):
+                del self._week_cache[week_start]
+
     async def _async_get_week(self, week_start: date) -> dict[date, list[LessonData]]:
+        from_coordinator = self._coordinator_week(week_start)
+        if from_coordinator is not None:
+            return from_coordinator
         cached = self._week_cache.get(week_start)
         if cached is not None and dt_util.utcnow() - cached[1] < self._WEEK_CACHE_TTL:
             return cached[0]
@@ -396,6 +430,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             return {}
         merged = merge_timetables(payload)
         self._week_cache[week_start] = (merged, dt_util.utcnow())
+        self._prune_week_cache()
         return merged
 
     @property

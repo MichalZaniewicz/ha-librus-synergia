@@ -376,6 +376,9 @@ async def test_messages_missing_at_first_poll_are_not_announced_later(hass) -> N
     await hass.async_block_till_done()
     assert events == []
 
+    # A new message raises the unread count - the inbox list is fetched
+    # again only then (or once an hour).
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 3}}
     client.async_get_messages.return_value = {"data": [_message("1"), _message("2"), _message("3")]}
     await coordinator._async_update_data()
     await hass.async_block_till_done()

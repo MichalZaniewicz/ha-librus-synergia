@@ -250,7 +250,9 @@ async def test_confirmed_403_on_core_endpoint_degrades_instead_of_failing_setup(
     "confirmed 403 = module unavailable" treatment Timetables already had
     (issue #4, see test_timetables_unpublished_403_loads_rest_of_data_
     without_reauth above) to the whole TIER 1 core gather - this must
-    degrade ONLY the attendance-types lookup, not fail the cycle."""
+    degrade ONLY the attendance-types lookup, not fail the cycle.
+    (Attendances/Types is now fetched with the daily reference data, which
+    degrades the same way.)"""
     client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
     client.async_get_attendance_types.side_effect = LibrusSessionExpiredError(
         "Session rejected on .../Attendances/Types (HTTP 403).", status_code=403
@@ -277,11 +279,12 @@ async def test_genuine_401_on_any_core_endpoint_still_triggers_relogin(hass) -> 
     exactly like a 401 always has. Confirms the `return_exceptions=True`
     refactor's own "any 401 anywhere in this tier -> raise before
     degrading anything" scan works regardless of which endpoint the 401
-    actually lands on."""
+    actually lands on. (Attendances here - Attendances/Types used to be in
+    this tier and has moved to the daily reference data.)"""
     client = build_mock_client(async_get_grades=GRADE_PAYLOAD)
-    client.async_get_attendance_types.side_effect = [
+    client.async_get_attendances.side_effect = [
         LibrusSessionExpiredError("session dead", status_code=401),
-        {"Types": []},
+        {"Attendances": []},
     ]
     coordinator = _make_coordinator(hass, client)
 

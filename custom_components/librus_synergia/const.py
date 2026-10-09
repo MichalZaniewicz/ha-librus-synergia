@@ -60,6 +60,10 @@ SMART_POLLING_NIGHT_END = 6
 # good response of every endpoint, the fallback while Librus is down.
 STATE_STORE_VERSION = 1
 STATE_SAVE_DELAY = 300  # seconds
+# The state is only written when something in it changed (a new response, a
+# newly seen item, ...) - but at least this often, so `last_success_at` (how
+# old the saved data is after a restart) doesn't drift far behind.
+STATE_SAVE_MAX_INTERVAL = timedelta(hours=6)
 # How old the last good data may get and still be shown while Librus keeps
 # failing (and be rebuilt from the saved responses at HA start). Past this the
 # entities go unavailable.
@@ -167,12 +171,15 @@ AI_OPTION_KEYS = (
 )
 
 # Labels for the SUPPLEMENTARY (tier 2, `return_exceptions=True`) endpoints
-# fetched by `coordinator.py::_async_fetch_core_payloads`, in the exact
-# order passed to that method's second `asyncio.gather()` call - used for
-# the warning logged when one fails, and for the matching repair-issue id
-# (see `coordinator.py::optional_endpoint_issue_id`). Keep in sync with
-# that gather() call. Public (not underscore-prefixed) since `__init__.py`
-# also needs it, to clear any repair issues for a removed config entry.
+# fetched by `coordinator.py::_async_fetch_core_payloads`, in the order of
+# that method's tier-2 result - used for the warning logged when one fails,
+# and for the matching repair-issue id (see `coordinator.py::
+# optional_endpoint_issue_id`). The two comment lookups are not in the
+# tier-2 gather itself: they are asked only when a grade references a
+# comment id that isn't known yet (or once a day), which needs the grades
+# first - see `coordinator.py::_async_get_comments`. Public (not
+# underscore-prefixed) since `__init__.py` also needs it, to clear any
+# repair issues for a removed config entry.
 OPTIONAL_ENDPOINT_LABELS = (
     "Grades/Comments",
     "HomeWorkAssignments",
@@ -202,7 +209,9 @@ OPTIONAL_ENDPOINT_LABELS = (
 # unavailable, degrade gracefully" treatment (issue #4); generalized here
 # to the whole core tier since the SAME class of report would otherwise
 # just recur with a different endpoint name for the next limited-access
-# account type.
+# account type. (`Attendances/Types` and `Grades/Categories` have since
+# moved to the daily reference data - lookups that change a few times a
+# year - see REFERENCE_DATA_ENDPOINT_LABELS.)
 #
 # NOTE: the two "Timetable (this week/next week)" entries below
 # structurally can never show up as degraded - `_fetch_timetable_or_
@@ -217,10 +226,8 @@ OPTIONAL_ENDPOINT_LABELS = (
 # for a label that was never marked failing is a complete no-op.
 CORE_ENDPOINT_LABELS = (
     "Grades",
-    "Grades/Categories",
     "Notes",
     "Attendances",
-    "Attendances/Types",
     "Timetable (this week)",
     "Timetable (next week)",
     "HomeWorks",
@@ -258,6 +265,14 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     "Units",
     # The school's grade scale: what "+" and "-" add or take away.
     "GradingSystem",
+    # Grade categories (name, weight, counts to the average) and attendance
+    # types (absence / present / late ...). Read every cycle until 0.12.5;
+    # they change a few times a year. A grade or attendance record with an
+    # id that isn't known yet makes the coordinator ask again in the same
+    # cycle (`_async_resolve_missing_lookups`), so a new category doesn't
+    # wait for the next day.
+    "Grades/Categories",
+    "Attendances/Types",
 )
 
 # The handful of degradable fetches that don't belong to any of the three

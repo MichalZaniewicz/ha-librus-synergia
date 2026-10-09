@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, timedelta
 
 from homeassistant.components.calendar import CalendarEvent
@@ -259,11 +260,18 @@ async def test_agenda_calendar_today_query_excludes_tomorrow(hass) -> None:
     assert response[entity_id]["events"] == []
 
 
-async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
+# Three weeks ahead: outside this week and next, which the calendar serves
+# from the coordinator's own timetable - so a query for it goes through the
+# on-demand fetch (`async_fetch_timetable_week`) these tests are about.
+_ON_DEMAND_DAYS_AHEAD = 21
+
+
+async def _get_timetable_events(hass, entity_id: str, days_ahead: int = 0) -> list[dict]:
     """Calls the real `calendar.get_events` service - the same code path
     Home Assistant's own calendar REST API (and therefore any dashboard
     card's `hass.callApi('calendars/...')`) exercises - to invoke
-    `CalendarEntity.async_get_events` end to end, for "today" only.
+    `CalendarEntity.async_get_events` end to end, for one day (today, or
+    `days_ahead` days from now).
 
     Deliberately kept to a single calendar DATE on both ends, not "this
     ISO week": a wider window can straddle an ISO-week boundary depending
@@ -280,7 +288,9 @@ async def _get_timetable_events(hass, entity_id: str) -> list[dict]:
     BOTH ends guarantees `_iso_week_start` agrees for both, so
     `async_get_events` always fetches exactly one week, regardless of
     which day CI runs on."""
-    start_of_today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_today = dt_util.start_of_local_day(
+        dt_util.now().date() + timedelta(days=days_ahead)
+    )
     end_of_today = start_of_today + timedelta(hours=23, minutes=59, seconds=59)
     response = await hass.services.async_call(
         "calendar",
@@ -324,10 +334,10 @@ async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass, f
     Wednesday, chosen so neither a UTC/local timezone shift nor an ISO-week
     edge can move it to a different calendar day or weekday."""
     freezer.move_to("2026-09-09T12:00:00+00:00")
-    today = dt_util.now().date().isoformat()
+    day = (dt_util.now().date() + timedelta(days=_ON_DEMAND_DAYS_AHEAD)).isoformat()
     good_payload = {
         "Timetable": {
-            today: [
+            day: [
                 [
                     {
                         "LessonNo": "1",
@@ -358,7 +368,7 @@ async def test_timetable_calendar_recovers_from_mid_cycle_session_expiry(hass, f
         good_payload,
     ]
 
-    events = await _get_timetable_events(hass, entity_id)
+    events = await _get_timetable_events(hass, entity_id, _ON_DEMAND_DAYS_AHEAD)
 
     assert len(events) == 1
     assert events[0]["summary"] == "Matematyka"
@@ -384,7 +394,7 @@ async def test_timetable_calendar_treats_403_as_unpublished_not_session_expiry(h
         "Session rejected on .../Timetables (HTTP 403).", status_code=403
     )
 
-    events = await _get_timetable_events(hass, entity_id)
+    events = await _get_timetable_events(hass, entity_id, _ON_DEMAND_DAYS_AHEAD)
 
     assert events == []
     force_calls = [
@@ -407,7 +417,7 @@ async def test_timetable_calendar_degrades_gracefully_when_recovery_fails(hass) 
         LibrusAuthError("Still rejected after forced re-login."),
     ]
 
-    events = await _get_timetable_events(hass, entity_id)
+    events = await _get_timetable_events(hass, entity_id, _ON_DEMAND_DAYS_AHEAD)
 
     assert events == []
 
@@ -590,3 +600,52 @@ async def test_timetable_never_merges_cancelled_lesson_with_its_substitution(has
     events = await _tomorrow_events(hass, entity_id)
     assert len(events) == 2
     assert any("(odwołane)" in e["summary"] for e in events)
+
+
+async def test_timetable_this_and_next_week_come_from_coordinator_data(hass) -> None:
+    """This week and next are read from the coordinator's timetable (fetched
+    on every refresh) - no extra request, and a substitution from the next
+    refresh shows at once instead of after the on-demand week cache's day."""
+    client = _parallel_client([_parallel_lesson("10", "20", "30")])
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+    client.async_get_timetable.reset_mock()
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert [e["summary"] for e in events] == ["Edukacja wczesnoszkolna"]
+    client.async_get_timetable.assert_not_called()
+
+    coordinator = entry.runtime_data
+    tomorrow = dt_util.now().date() + timedelta(days=1)
+    lesson = coordinator.data.timetable[tomorrow][0]
+    coordinator.async_set_updated_data(
+        dataclasses.replace(
+            coordinator.data,
+            timetable={tomorrow: [dataclasses.replace(lesson, subject_id=11)]},
+        )
+    )
+    await hass.async_block_till_done()
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert [e["summary"] for e in events] == ["Wspomaganie"]
+    client.async_get_timetable.assert_not_called()
+
+
+async def test_timetable_other_weeks_are_fetched_and_cached(hass) -> None:
+    """A week outside this and next is fetched once, then served from the
+    calendar's own cache."""
+    day = dt_util.now().date() + timedelta(days=_ON_DEMAND_DAYS_AHEAD)
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 10, "Name": "Edukacja wczesnoszkolna"}]},
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+    client.async_get_timetable.reset_mock()
+    client.async_get_timetable.return_value = {
+        "Timetable": {day.isoformat(): [[_parallel_lesson("10", "20", "30")]]}
+    }
+
+    for _ in range(2):
+        events = await _get_timetable_events(hass, entity_id, _ON_DEMAND_DAYS_AHEAD)
+        assert [e["summary"] for e in events] == ["Edukacja wczesnoszkolna"]
+    assert client.async_get_timetable.call_count == 1

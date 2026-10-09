@@ -13,6 +13,7 @@ single edge case.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
@@ -163,6 +164,7 @@ from .const import (
     SMART_POLLING_NIGHT_END,
     SMART_POLLING_NIGHT_START,
     STATE_SAVE_DELAY,
+    STATE_SAVE_MAX_INTERVAL,
     STATE_STORE_VERSION,
     STATUS_DEGRADED,
     STATUS_ERROR,
@@ -219,6 +221,71 @@ _FRESH_SESSION_SECONDS = 30
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
 _DAILY = timedelta(days=1)
+# A mailbox Librus answered 404 for (the account doesn't have it) is asked
+# again after this long, not every cycle.
+_MISSING_MAILBOX_RECHECK = timedelta(hours=24)
+# A message list is reused while its mailbox's unread count stays the same,
+# for at most this long (a message that arrived and was read in between
+# leaves the count unchanged).
+_MESSAGE_LIST_MAX_AGE = timedelta(hours=1)
+
+# Positions in `_async_fetch_core_payloads`' result.
+_TIMETABLE_THIS_WEEK = _CORE_PAYLOAD_LABELS.index("Timetable (this week)")
+_TIMETABLE_NEXT_WEEK = _CORE_PAYLOAD_LABELS.index("Timetable (next week)")
+# Both weeks live in `_timetable_cache` (keyed by the week's Monday, so the
+# copy can't belong to the wrong week after Sunday); they aren't kept among
+# the last good responses too.
+_TIMETABLE_WEEK_LABELS = frozenset({"Timetable (this week)", "Timetable (next week)"})
+# The comment lookups and the raw payload whose `Comments` ids they resolve.
+_COMMENT_SOURCES = {
+    "Grades/Comments": "Grades",
+    "BehaviourGrades/Points/Comments": "BehaviourGrades/Points",
+}
+
+
+def _as_id(value: Any) -> Any:
+    """An id from a raw payload as the lookups key it: int when it is one."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _referenced_ids(payload: Any, list_key: str, field: str) -> set[Any]:
+    """Ids of `field` (`{"Id": ...}`) across the items of a raw list payload,
+    e.g. every grade's category id."""
+    items = payload.get(list_key) if isinstance(payload, dict) else None
+    ids: set[Any] = set()
+    for item in items if isinstance(items, list) else []:
+        ref = item.get(field) if isinstance(item, dict) else None
+        if isinstance(ref, dict) and ref.get("Id") is not None:
+            ids.add(_as_id(ref["Id"]))
+    return ids
+
+
+def _referenced_comment_ids(payload: Any, list_key: str = "Grades") -> set[Any]:
+    """Comment ids the items of a raw grades payload point at - bare ids or
+    `{"Id": ...}` objects (CONFIRMED live 2026-10-09: objects)."""
+    items = payload.get(list_key) if isinstance(payload, dict) else None
+    ids: set[Any] = set()
+    for item in items if isinstance(items, list) else []:
+        comments = item.get("Comments") if isinstance(item, dict) else None
+        for entry in comments if isinstance(comments, list) else []:
+            comment_id = entry.get("Id") if isinstance(entry, dict) else entry
+            if comment_id is not None:
+                ids.add(_as_id(comment_id))
+    return ids
+
+
+def _comment_ids(payload: Any) -> set[Any]:
+    """Every comment id a `{"Comments": [{"Id", "Text"}]}` payload holds
+    (with or without text - an empty one is still known)."""
+    items = payload.get("Comments") if isinstance(payload, dict) else None
+    return {
+        _as_id(item["Id"])
+        for item in (items if isinstance(items, list) else [])
+        if isinstance(item, dict) and item.get("Id") is not None
+    }
 
 
 def school_file_url(path: str | None) -> str | None:
@@ -568,11 +635,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_free_days: list[FreeDayData] = []
         self._cached_note_categories: dict[int, str] = {}
         self._cached_behaviour_grade_categories: dict[int, str] = {}
+        # Grade categories and attendance types - reference data too (see
+        # REFERENCE_DATA_ENDPOINT_LABELS). An id that isn't in them is asked
+        # for again in the same cycle (_async_resolve_missing_lookups): when
+        # that was last done and which ids Librus itself didn't know then.
+        self._cached_grade_categories: dict[int, GradeCategoryData] = {}
+        self._cached_attendance_types: dict[int, AttendanceTypeData] = {}
+        self._lookup_refetched_at: dict[str, datetime] = {}
+        self._unresolved_lookup_ids: dict[str, set[Any]] = {}
 
-        # The lucky number is normally published once a day; skip refetching
-        # it before LUCKY_NUMBER_PUBLISH_HOUR once today's value is cached.
+        # The lucky number is normally published once a day (see
+        # _async_get_lucky_number for when it is asked for).
         self._cached_lucky_number: LuckyNumberData | None = None
-        self._lucky_number_fetched_date: date | None = None
+        self._lucky_number_fetched_at: datetime | None = None
 
         # Wiadomości (messages) needs a one-time-per-login bootstrap (a
         # separate session cookie on wiadomosci.librus.pl) - not every cycle,
@@ -590,8 +665,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._login_lock = asyncio.Lock()
         self._login_count = 0
         # Mailboxes Librus answered 404 for - this account doesn't have
-        # them (the Messages card hides their chips).
+        # them (the Messages card hides their chips). Asked again once a
+        # day (_MISSING_MAILBOX_RECHECK), from when each was last probed.
         self.missing_mailboxes: set[str] = set()
+        self._mailbox_probed_at: dict[str, datetime] = {}
+        # The last message list of each mailbox, when it was fetched and the
+        # mailbox's unread count then - reused while that count stays the
+        # same (see _reusable_mailbox_list). The unread counts themselves are
+        # asked for every cycle.
+        self._mailbox_lists: dict[str, list[MessageData]] = {}
+        self._mailbox_fetched_at: dict[str, datetime] = {}
+        self._mailbox_counts: dict[str, int | None] = {}
         # Mailboxes whose fetch failed this cycle (their list is empty then).
         self._failed_mailboxes: set[str] = set()
         # The archive (past school years) is read once a day.
@@ -674,6 +758,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         self._last_good: dict[str, Any] = {}
         self._timetable_cache: dict[str, Any] = {}
+        # The state is written only when it changed (_maybe_schedule_save):
+        # a stored response differs from the one before (`_state_dirty`),
+        # or the rest of it (seen ids, receipts, badges, ...) differs from
+        # what was last handed to the store (`_saved_state_fingerprint`).
+        self._state_dirty = False
+        self._saved_state_fingerprint: str | None = None
+        self._state_saved_at: datetime | None = None
         # Health of the last cycles, for the Status / Last update sensors.
         self.last_success_at: datetime | None = None
         self.last_attempt_at: datetime | None = None
@@ -742,20 +833,83 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._last_good = payloads
             if isinstance(units := payloads.get("Units"), dict):
                 self.point_grades_enabled = point_grades_enabled(units)
+            # Saved by 0.12.5-beta.6 or older: the two timetable weeks were
+            # stored here as well as under "timetable". Dropped (and the
+            # smaller file written after the next cycle).
+            for label in _TIMETABLE_WEEK_LABELS:
+                if self._last_good.pop(label, None) is not None:
+                    self._state_dirty = True
         if isinstance(weeks := stored.get("timetable"), dict):
             self._timetable_cache = weeks
         if isinstance(number := stored.get("student_number"), int):
             self.student_number_from_librus = number
         if saved := stored.get("last_success_at"):
             self.last_success_at = dt_util.parse_datetime(saved)
+        # What was just read is what the file holds: nothing to write until
+        # it changes (or STATE_SAVE_MAX_INTERVAL passes).
+        self._saved_state_fingerprint = self._state_fingerprint()
+        self._state_saved_at = self.last_success_at
 
     async def async_save_state(self) -> None:
         """Write the saved state now - on unload, so a reload right after a
         cycle (an options change) doesn't start from the older file and
-        announce the same new items again."""
+        announce the same new items again. Always writes, changed or not."""
         await self._state_store.async_save(self._state_to_save())
 
+    def _maybe_schedule_save(self) -> None:
+        """Schedule a delayed write of the state after a successful cycle -
+        only when something in it changed, or the last write is
+        STATE_SAVE_MAX_INTERVAL old (so `last_success_at` stays fresh).
+        Writing the whole file (every last good response) after every
+        cycle, changed or not, was most of what this integration wrote to
+        disk."""
+        fingerprint = self._state_fingerprint()
+        if (
+            not self._state_dirty
+            and fingerprint == self._saved_state_fingerprint
+            and self._state_saved_at is not None
+            and dt_util.utcnow() - self._state_saved_at < STATE_SAVE_MAX_INTERVAL
+        ):
+            return
+        self._schedule_save(fingerprint)
+
+    def _schedule_save(self, fingerprint: str | None = None) -> None:
+        """Hand the state to the store's delayed write. The write calls
+        `_state_to_save` when it happens, so a change made after this is
+        written too (and marks the state dirty again for the next cycle -
+        a harmless extra write at worst)."""
+        self._state_dirty = False
+        self._saved_state_fingerprint = fingerprint or self._state_fingerprint()
+        self._state_saved_at = dt_util.utcnow()
+        self._state_store.async_delay_save(self._state_to_save, STATE_SAVE_DELAY)
+
+    def _state_fingerprint(self) -> str:
+        """The saved state minus the stored responses, as one string - a
+        snapshot that can't change under us (unlike the live dicts in it,
+        e.g. read_receipts, which are updated in place)."""
+        try:
+            return json.dumps(self._tracked_state(), sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            # Not comparable (mixed key types): treat it as changed.
+            return f"unsortable {dt_util.utcnow().isoformat()}"
+
+    def _remember_payload(self, label: str, payload: Any) -> None:
+        """Keep a section's last good response; a different one than before
+        means the saved state needs writing."""
+        if self._last_good.get(label) != payload:
+            self._state_dirty = True
+        self._last_good[label] = payload
+
     def _state_to_save(self) -> dict[str, Any]:
+        return {
+            **self._tracked_state(),
+            "payloads": self._last_good,
+            "timetable": self._timetable_cache,
+            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
+        }
+
+    def _tracked_state(self) -> dict[str, Any]:
+        """Everything saved except the stored responses and `last_success_at`."""
         tracker = self._change_tracker
         return {
             "seen": tracker.seen.to_dict() if tracker.is_seeded else None,
@@ -783,10 +937,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 if self._known_forecast is not None
                 else None
             ),
-            "payloads": self._last_good,
-            "timetable": self._timetable_cache,
             "student_number": self.student_number_from_librus,
-            "last_success_at": self.last_success_at.isoformat() if self.last_success_at else None,
         }
 
     @property
@@ -930,9 +1081,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         this_week -= timedelta(days=this_week.weekday())
         if not this_week <= week_start <= this_week + timedelta(days=7):
             return
-        self._timetable_cache[week_start.isoformat()] = payload
-        for key in [k for k in self._timetable_cache if k < this_week.isoformat()]:
-            del self._timetable_cache[key]
+        key = week_start.isoformat()
+        if self._timetable_cache.get(key) != payload:
+            self._state_dirty = True
+        self._timetable_cache[key] = payload
+        for old in [k for k in self._timetable_cache if k < this_week.isoformat()]:
+            del self._timetable_cache[old]
+            self._state_dirty = True
 
     async def _async_maybe_discover_kindergarten(self, me_payload: dict[str, Any]) -> bool:
         """Try to find a kindergarten child's LID, returning True only when
@@ -1144,7 +1299,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.failures = 0
         self.next_attempt_at = None
         self.data_source = "live"
-        self._state_store.async_delay_save(self._state_to_save, STATE_SAVE_DELAY)
+        self._maybe_schedule_save()
         return data
 
     def _in_outage_backoff(self) -> bool:
@@ -1269,8 +1424,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         # Order: _CORE_PAYLOAD_LABELS (Me, tier 1, tier 2).
         me_payload = core_payloads[0]
-        self._last_good["Me"] = me_payload
-        timetable_this_week, timetable_next_week = core_payloads[6], core_payloads[7]
+        self._remember_payload("Me", me_payload)
+        timetable_this_week = core_payloads[_TIMETABLE_THIS_WEEK]
+        timetable_next_week = core_payloads[_TIMETABLE_NEXT_WEEK]
 
         if await self._async_maybe_discover_kindergarten(me_payload):
             try:
@@ -1300,10 +1456,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # against), but cheap and safe to remove as a variable regardless.
         # Still concurrent with the OTHER two (not back to fully
         # sequential), just not sharing their exact same burst.
-        lucky_number, _ = await asyncio.gather(
+        lucky_number, reference_refreshed = await asyncio.gather(
             self._async_get_lucky_number(today),
             self._async_refresh_reference_data(),
         )
+        await self._async_resolve_missing_lookups(core_payloads, reference_refreshed)
         messages_result = await self._async_get_messages()
         point_grades = await self._async_get_point_grades()
         justifications = await self._async_get_justifications()
@@ -1326,12 +1483,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             **await self._async_get_descriptive_grade_lookups(core_payloads),
             **await self._async_get_partial_grades(),
         }
-        core_payloads = (
-            *core_payloads[:6],
-            timetable_this_week,
-            timetable_next_week,
-            *core_payloads[8:],
-        )
+        payloads = list(core_payloads)
+        payloads[_TIMETABLE_THIS_WEEK] = timetable_this_week
+        payloads[_TIMETABLE_NEXT_WEEK] = timetable_next_week
+        core_payloads = tuple(payloads)
         data = self._build_data(
             core_payloads, lucky_number, messages_result, point_grades, justifications, extras
         )
@@ -1354,14 +1509,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         extras: dict[str, Any] | None = None,
     ) -> LibrusData:
         """Parse one cycle's responses (in `_CORE_PAYLOAD_LABELS` order)
-        together with the cached reference lookups."""
+        together with the cached reference lookups (grade categories and
+        attendance types among them)."""
         (
             me_payload,
             grades_payload,
-            categories_payload,
             notes_payload,
             attendances_payload,
-            attendance_types_payload,
             timetable_this_week,
             timetable_next_week,
             homeworks_payload,
@@ -1390,9 +1544,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         notes = parse_notes(notes_payload)
         homeworks = parse_homeworks(homeworks_payload)
         attendances = parse_attendances(attendances_payload)
-        attendance_types = parse_attendance_types(attendance_types_payload)
+        attendance_types = self._cached_attendance_types
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
-        grade_categories = parse_grade_categories(categories_payload)
+        grade_categories = self._cached_grade_categories
         return LibrusData(
             me=me,
             grades=grades,
@@ -1471,7 +1625,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """The homework to-do reports a tick (for the homework badge)."""
         if uid not in self.homework_done_ever:
             self.homework_done_ever.add(uid)
-            self._state_store.async_delay_save(self._state_to_save, STATE_SAVE_DELAY)
+            self._schedule_save()
 
     @property
     def weighted_average(self) -> bool:
@@ -1640,10 +1794,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
         core_results = await asyncio.gather(
             self._client.async_get_grades(),
-            self._client.async_get_grade_categories(),
             self._client.async_get_notes(),
             self._client.async_get_attendances(),
-            self._client.async_get_attendance_types(),
             self._fetch_timetable_or_unpublished(week_start),
             self._fetch_timetable_or_unpublished(next_week_start),
             self._client.async_get_homeworks(),
@@ -1668,23 +1820,65 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
         )
 
+        gathered_labels = [
+            label for label in OPTIONAL_ENDPOINT_LABELS if label not in _COMMENT_SOURCES
+        ]
         optional_results = await asyncio.gather(
-            self._client.async_get_grade_comments(),
             self._client.async_get_homework_assignments(),
             self._maybe(behaviour_grades_enabled, self._client.async_get_behaviour_grade_points),
-            self._maybe(
-                behaviour_grades_enabled, self._client.async_get_behaviour_grade_point_comments
-            ),
             self._maybe(descriptive_grades_enabled, self._client.async_get_descriptive_grades),
             self._client.async_get_parent_teacher_conferences(),
             return_exceptions=True,
         )
-        optional_payloads = [
-            self._degrade_optional_payload(label, result)
-            for label, result in zip(OPTIONAL_ENDPOINT_LABELS, optional_results)
-        ]
+        optional = {
+            label: self._degrade_optional_payload(label, result)
+            for label, result in zip(gathered_labels, optional_results, strict=True)
+        }
+        # The comment lookups, once the grades they belong to are known.
+        sources = {"Grades": core[_CORE_PAYLOAD_LABELS.index("Grades")], **optional}
+        grade_comments, behaviour_comments = await asyncio.gather(
+            self._async_get_comments(
+                "Grades/Comments", self._client.async_get_grade_comments, sources["Grades"]
+            ),
+            self._async_get_comments(
+                "BehaviourGrades/Points/Comments",
+                self._client.async_get_behaviour_grade_point_comments,
+                sources["BehaviourGrades/Points"],
+                enabled=behaviour_grades_enabled,
+            ),
+        )
+        optional["Grades/Comments"] = grade_comments
+        optional["BehaviourGrades/Points/Comments"] = behaviour_comments
 
-        return (*core, *optional_payloads)
+        return (*core, *(optional[label] for label in OPTIONAL_ENDPOINT_LABELS))
+
+    async def _async_get_comments(
+        self, label: str, factory: Any, source_payload: Any, *, enabled: bool = True
+    ) -> dict[str, Any]:
+        """A comment lookup (`Grades/Comments`, `BehaviourGrades/Points/
+        Comments`): every comment of the school year, while a grade points
+        at a few of them. Asked only when a grade references a comment id
+        the saved lookup doesn't have yet, and otherwise once a day (a
+        teacher can edit a comment's text). The saved copy stands in on a
+        failure, like any optional endpoint."""
+        if not enabled:
+            # Switched off in the options: no request, and any earlier
+            # degraded-endpoint issue for it is cleared.
+            return self._degrade_optional_payload(label, {})
+        referenced = _referenced_comment_ids(source_payload)
+        missing = referenced - _comment_ids(self._last_good.get(label))
+        if not missing:
+            every: timedelta | None = _DAILY
+        elif missing <= self._unresolved_lookup_ids.get(label, set()):
+            # Asked already and Librus didn't have them either: hourly, not
+            # every cycle.
+            every = _HOURLY
+        else:
+            every = None
+        payload = await self._async_optional(label, factory, every=every)
+        if label not in self._failed_this_cycle:
+            self._unresolved_lookup_ids[label] = referenced - _comment_ids(payload)
+        return payload
 
     def _degrade_optional_payload(
         self, label: str, result: dict[str, Any] | BaseException
@@ -1713,7 +1907,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
-        self._last_good[label] = result
+        self._remember_payload(label, result)
         return result
 
     def _fallback(self, label: str) -> dict[str, Any]:
@@ -1760,7 +1954,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     result,
                 )
                 self._note_optional_endpoint_failure(label)
-                self._last_good[label] = {}
+                if label not in _TIMETABLE_WEEK_LABELS:
+                    self._remember_payload(label, {})
+                return {}
+            if (
+                isinstance(result, LibrusError)
+                and not isinstance(result, LibrusSessionExpiredError)
+                and label in _TIMETABLE_WEEK_LABELS
+            ):
+                # The week failed and `_timetable_cache` has no copy of it
+                # (a week the coordinator hasn't fetched yet, e.g. the next
+                # one right after Sunday): no lessons known for it this
+                # cycle, rather than failing the whole cycle - and rather
+                # than another week's copy.
+                _LOGGER.debug("Timetable week '%s' failed with no saved copy: %s", label, result)
+                self._note_optional_endpoint_failure("Timetable")
+                self.fallback_sections.add("Timetable")
                 return {}
             if (
                 isinstance(result, LibrusError)
@@ -1775,7 +1984,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
-        self._last_good[label] = result
+        if label not in _TIMETABLE_WEEK_LABELS:
+            # The weeks are kept in `_timetable_cache` (by their Monday).
+            self._remember_payload(label, result)
         return result
 
     # How long a supplementary endpoint must fail on EVERY attempt before a
@@ -1820,24 +2031,34 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
 
     async def _async_get_lucky_number(self, today: date) -> LuckyNumberData | None:
-        now = dt_util.now()
-        if (
-            self._cached_lucky_number is not None
-            and self._lucky_number_fetched_date == today
-            and now.hour < LUCKY_NUMBER_PUBLISH_HOUR
-        ):
-            return self._cached_lucky_number
+        """The lucky number, asked for only when a new one can be there:
+        not while the cached one is for a later day (Librus publishes the
+        next school day's number the afternoon before - CONFIRMED live), not
+        before LUCKY_NUMBER_PUBLISH_HOUR once today's is known, and otherwise
+        at most once an hour - also when Librus has no number at all
+        (holidays, a school without the feature), which used to be asked
+        every cycle all day. A failed request is retried the next cycle."""
+        cached = self._cached_lucky_number
+        today_iso = today.isoformat()
+        cached_day = ((cached.day or "")[:10]) if cached is not None else ""
+        if cached_day > today_iso:
+            return cached
+        if cached_day == today_iso and dt_util.now().hour < LUCKY_NUMBER_PUBLISH_HOUR:
+            return cached
+        asked = self._lucky_number_fetched_at
+        if asked is not None and dt_util.utcnow() - asked < _HOURLY:
+            return cached
         try:
             payload = await self._client.async_get_lucky_number()
         except LibrusError:
             _LOGGER.debug("Lucky number fetch failed (non-fatal)", exc_info=True)
             self._note_optional_endpoint_failure("LuckyNumbers")
-            return self._cached_lucky_number
+            return cached
         self._note_optional_endpoint_recovery("LuckyNumbers")
+        self._lucky_number_fetched_at = dt_util.utcnow()
         lucky = parse_lucky_number(payload)
         if lucky is not None:
             self._cached_lucky_number = lucky
-            self._lucky_number_fetched_date = today
         return self._cached_lucky_number
 
     def _degrade_reference_result(
@@ -1879,14 +2100,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 return self._fallback(label)
             raise result
         self._note_optional_endpoint_recovery(label)
-        self._last_good[label] = result
+        self._remember_payload(label, result)
         return result
 
-    async def _async_refresh_reference_data(self) -> None:
+    async def _async_refresh_reference_data(self) -> bool:
         """Refresh near-static reference data at most once a day: subject/
         teacher/classroom name lookups, school/class identity, homework
-        agenda categories, note categories, behaviour-grade categories, and
-        the free-days calendar.
+        agenda categories, note categories, behaviour-grade categories,
+        grade categories, attendance types and the free-days calendar.
 
         The Subjects/Teachers/Classrooms endpoint names were UNVERIFIED when
         first written but are now CONFIRMED live, same as everything else
@@ -1910,13 +2131,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         24h-cached "confirmed real, empty" degrade, not a per-cycle retry -
         a permanently-broken endpoint no longer gets hammered every single
         coordinator cycle forever).
+
+        Returns whether it actually fetched this cycle (False within the
+        day) - `_async_resolve_missing_lookups` doesn't ask again for what
+        was just fetched.
         """
         now = dt_util.utcnow()
         if (
             self._reference_data_fetched_at is not None
             and now - self._reference_data_fetched_at < timedelta(hours=24)
         ):
-            return
+            return False
         free_days_enabled = self._feature_enabled(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED)
         behaviour_grades_enabled = self._feature_enabled(
             CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
@@ -1939,11 +2164,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_homework_assignment_categories(),
             self._client.async_get_units(),
             self._client.async_get_grading_system(),
+            self._client.async_get_grade_categories(),
+            self._client.async_get_attendance_types(),
             return_exceptions=True,
         )
         payloads = {
             label: self._degrade_reference_result(label, result)
-            for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results)
+            for label, result in zip(REFERENCE_DATA_ENDPOINT_LABELS, results, strict=True)
         }
         self._apply_reference_payloads(payloads)
         if self._kindergarten_lid is not None:
@@ -1951,6 +2178,72 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._check_school_year_rollover()
         await self._async_refresh_student_number()
         self._reference_data_fetched_at = now
+        return True
+
+    async def _async_resolve_missing_lookups(
+        self, core_payloads: tuple[Any, ...], reference_refreshed: bool
+    ) -> None:
+        """Ask for the grade categories / attendance types again in the same
+        cycle when a grade or attendance record points at an id the cached
+        lookup doesn't have (a category the teacher just created) - they are
+        otherwise refreshed once a day with the rest of the reference data.
+
+        Not repeated for ids Librus itself didn't know when last asked
+        (hourly at most), nor right after the daily refresh just fetched
+        them. A failed request is retried the next cycle; until then its
+        label counts as failed this cycle, so the absences tracker doesn't
+        record absences of a type it can't see yet."""
+        now = dt_util.utcnow()
+        checks = (
+            (
+                "Grades/Categories",
+                _referenced_ids(
+                    core_payloads[_CORE_PAYLOAD_LABELS.index("Grades")], "Grades", "Category"
+                ),
+                self._client.async_get_grade_categories,
+            ),
+            (
+                "Attendances/Types",
+                _referenced_ids(
+                    core_payloads[_CORE_PAYLOAD_LABELS.index("Attendances")], "Attendances", "Type"
+                ),
+                self._client.async_get_attendance_types,
+            ),
+        )
+        for label, referenced, factory in checks:
+            missing = referenced - set(self._lookup_map(label))
+            if reference_refreshed:
+                if label not in self._failed_this_cycle:
+                    self._lookup_refetched_at[label] = now
+                    self._unresolved_lookup_ids[label] = missing
+                continue
+            if not missing:
+                continue
+            asked = self._lookup_refetched_at.get(label)
+            if (
+                asked is not None
+                and missing <= self._unresolved_lookup_ids.get(label, set())
+                and now - asked < _HOURLY
+            ):
+                continue
+            try:
+                result: dict[str, Any] | BaseException = await factory()
+            except LibrusError as err:
+                result = err
+            payload = self._degrade_reference_result(label, result)
+            if isinstance(result, BaseException):
+                continue
+            if label == "Grades/Categories":
+                self._cached_grade_categories = parse_grade_categories(payload)
+            else:
+                self._cached_attendance_types = parse_attendance_types(payload)
+            self._lookup_refetched_at[label] = now
+            self._unresolved_lookup_ids[label] = referenced - set(self._lookup_map(label))
+
+    def _lookup_map(self, label: str) -> dict[Any, Any]:
+        if label == "Grades/Categories":
+            return self._cached_grade_categories
+        return self._cached_attendance_types
 
     def _apply_reference_payloads(self, payloads: dict[str, Any]) -> None:
         """Parse the reference-data responses (keyed by
@@ -1993,6 +2286,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_homework_assignment_categories = parse_id_name_map(
             payload("HomeworkAssignmentCategories"), ("Categories",)
         )
+        self._cached_grade_categories = parse_grade_categories(payload("Grades/Categories"))
+        self._cached_attendance_types = parse_attendance_types(payload("Attendances/Types"))
 
     async def _async_get_point_grades(self) -> list[PointGradeData]:
         """Point grades with their categories (maximum, weight). Skipped
@@ -2311,11 +2606,39 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._messages_recheck_at = now + _HOURLY
         if not self._messages_available:
             return 0, {}, []
-        unread_payload, inbox_payload = await asyncio.gather(
-            self._client.async_get_unread_messages_count(),
-            self._client.async_get_messages(limit=10),
+        # The unread counts every cycle; the inbox list only when its count
+        # changed, or the copy is an hour old (see _reusable_mailbox_list).
+        unread_count, unread_by_mailbox, _ = parse_messages(
+            await self._client.async_get_unread_messages_count(), {}
         )
-        return parse_messages(unread_payload, inbox_payload)
+        inbox = self._reusable_mailbox_list("inbox", unread_count)
+        if inbox is None:
+            inbox = parse_message_list(await self._client.async_get_messages(limit=10), "inbox")
+            self._remember_mailbox_list("inbox", unread_count, inbox)
+        return unread_count, unread_by_mailbox, inbox
+
+    def _reusable_mailbox_list(self, box: str, count: int | None) -> list[MessageData] | None:
+        """The last list of a mailbox, when it can stand in for a new
+        request: the mailbox's unread count is the same as when it was
+        fetched (a new message raises it, reading one lowers it) and it is
+        less than _MESSAGE_LIST_MAX_AGE old. `count` is None for a mailbox
+        without one (outbox): then only the age decides. None = fetch."""
+        fetched = self._mailbox_fetched_at.get(box)
+        if (
+            fetched is None
+            or box not in self._mailbox_lists
+            or self._mailbox_counts.get(box) != count
+            or dt_util.utcnow() - fetched >= _MESSAGE_LIST_MAX_AGE
+        ):
+            return None
+        return list(self._mailbox_lists[box])
+
+    def _remember_mailbox_list(
+        self, box: str, count: int | None, messages: list[MessageData]
+    ) -> None:
+        self._mailbox_lists[box] = list(messages)
+        self._mailbox_counts[box] = count
+        self._mailbox_fetched_at[box] = dt_util.utcnow()
 
     async def _async_get_messages(
         self,
@@ -2423,7 +2746,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # live for alerts/substitutions on some accounts) - empty, not a
         # failure.
         secondary = await self._async_get_secondary_mailboxes(
-            ("substitutions", "alerts", "justifications", "outbox")
+            ("substitutions", "alerts", "justifications", "outbox"), unread_by_mailbox
         )
         await self._async_refresh_archived_messages()
         if "outbox" not in self._failed_mailboxes:
@@ -2441,19 +2764,43 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
 
     async def _async_get_secondary_mailboxes(
-        self, mailboxes: tuple[str, ...]
+        self, mailboxes: tuple[str, ...], unread_by_mailbox: dict[str, int]
     ) -> dict[str, list[MessageData]]:
+        """The other mailboxes' lists. A mailbox the account doesn't have
+        (404) is asked again only once a day - it stays in
+        `missing_mailboxes` meanwhile, so the Messages card keeps hiding it.
+        A list is reused while the mailbox's unread count is unchanged and
+        the copy is under an hour old (outbox has no count: hourly)."""
+        now = dt_util.utcnow()
+        messages: dict[str, list[MessageData]] = {}
+        to_fetch: list[str] = []
+        for box in mailboxes:
+            probed = self._mailbox_probed_at.get(box)
+            if (
+                box in self.missing_mailboxes
+                and probed is not None
+                and now - probed < _MISSING_MAILBOX_RECHECK
+            ):
+                messages[box] = []
+                continue
+            count = unread_by_mailbox.get(box)
+            reused = self._reusable_mailbox_list(box, count)
+            if reused is not None:
+                messages[box] = reused
+                continue
+            to_fetch.append(box)
         results = await asyncio.gather(
-            *(self._client.async_get_messages(mailbox=box, limit=10) for box in mailboxes),
+            *(self._client.async_get_messages(mailbox=box, limit=10) for box in to_fetch),
             return_exceptions=True,
         )
-        messages: dict[str, list[MessageData]] = {}
         failed = False
         self._failed_mailboxes = set()
-        for box, result in zip(mailboxes, results, strict=True):
+        for box, result in zip(to_fetch, results, strict=True):
             if isinstance(result, LibrusUnexpectedResponseError) and result.status_code == 404:
                 messages[box] = []
                 self.missing_mailboxes.add(box)
+                self._mailbox_probed_at[box] = now
+                self._mailbox_lists.pop(box, None)
             elif isinstance(result, BaseException):
                 if not isinstance(result, LibrusError):
                     raise result
@@ -2463,7 +2810,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 failed = True
             else:
                 messages[box] = parse_message_list(result, box)
+                self._remember_mailbox_list(box, unread_by_mailbox.get(box), messages[box])
                 self.missing_mailboxes.discard(box)
+                self._mailbox_probed_at.pop(box, None)
         if failed:
             self._note_optional_endpoint_failure("Messages/Secondary")
         else:

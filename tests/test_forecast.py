@@ -167,3 +167,22 @@ def test_basis_switches_to_the_school_year_in_semester_two() -> None:
 def test_no_semester_dates_uses_latest_grade_semester() -> None:
     data = _data([_grade(1, "5", 10, semester=2)], end_first="")
     assert forecast_basis(data, _TODAY)[0] == BASIS_SCHOOL_YEAR
+
+
+def test_forecasts_are_worked_out_once_per_data_object() -> None:
+    """~20 entities ask for the same forecasts each update; one calculation
+    per data object, day, thresholds and mode."""
+    data = _data([_grade(1, "5", 10, cat=1), _grade(2, "3", 10)])
+    first = subject_forecasts(data, _TODAY, _THRESHOLDS)
+    assert subject_forecasts(data, _TODAY, _THRESHOLDS) is first
+    # Thresholds as a list (any sequence) hit the same entry.
+    assert subject_forecasts(data, _TODAY, list(_THRESHOLDS)) is first
+    # Another mode, day or thresholds is a result of its own.
+    assert subject_forecasts(data, _TODAY, _THRESHOLDS, weighted=False)[0].average == 4.0
+    assert subject_forecasts(data, date(2026, 10, 21), _THRESHOLDS) is not first
+    assert subject_forecasts(data, _TODAY, (1.5, 2.5, 3.5, 4.5, 5.0))[0].predicted == 5
+    # A new data object - the coordinator's next refresh - gets its own
+    # result (the memo holds the objects and compares them with `is`).
+    changed = _data([_grade(1, "2", 10)])
+    assert subject_forecasts(changed, _TODAY, _THRESHOLDS)[0].average == 2.0
+    assert subject_forecasts(data, _TODAY, _THRESHOLDS)[0].average == 4.5

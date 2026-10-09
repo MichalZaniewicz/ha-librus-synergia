@@ -8,9 +8,12 @@ overall and per subject - written as external statistics
 can then chart the year, picked by name ("Ola Kowalska - średnia
 Matematyka").
 
-The statistics are rewritten whenever the grades change and once a day
-(so today gets its point); writing the same days again just replaces
-them. Nothing is fetched from Librus for this.
+The averages are worked out again whenever the grades change and once a
+day (so today gets its point), but only the rows whose value changed are
+written: on a new day just that day, after a new or changed grade the days
+from that grade on. Everything is written again at startup and when the
+average mode, the school's grade scale or a series name changes. Writing a
+day again replaces it. Nothing is fetched from Librus for this.
 """
 
 from __future__ import annotations
@@ -106,6 +109,13 @@ class LibrusAverageHistory:
         self._hass = hass
         self._coordinator = coordinator
         self._signature: Any = None
+        # What every row depends on beyond the grades themselves - when it
+        # changes, every row is written again.
+        self._full_signature: Any = None
+        # statistic_id -> {day: average} as last written, so only the rows
+        # that differ are written (a year of rows for ~17 series used to be
+        # rewritten every day).
+        self._written: dict[str, dict[date, float]] = {}
         self._unsub: Callable[[], None] | None = None
 
     @property
@@ -142,7 +152,11 @@ class LibrusAverageHistory:
         signature = (
             today,
             weighted,
-            tuple(sorted((g.id, g.value, g.add_date or "", g.category_id or 0) for g in data.grades)),
+            # The grade scale ("+"/"-" values, whether 0 counts) changes
+            # every average too.
+            data.grading_system,
+            _categories_signature(data),
+            _grades_signature(data),
         )
         if signature == self._signature:
             return
@@ -169,6 +183,12 @@ class LibrusAverageHistory:
                     subject_id,
                 )
             )
+        full_signature = (weighted, data.grading_system, tuple((sid, name) for sid, name, _ in series))
+        if full_signature != self._full_signature:
+            # Another mode or grade scale changes every row; a new name only
+            # reaches the recorder with a write, so write them all again.
+            self._written.clear()
+            self._full_signature = full_signature
         for statistic_id, name, subject_id in series:
             points = daily_averages(
                 data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted,
@@ -176,6 +196,7 @@ class LibrusAverageHistory:
             )
             if not points:
                 continue
+            written = self._written.get(statistic_id, {})
             rows = [
                 {
                     "start": dt_util.start_of_local_day(day),
@@ -184,5 +205,46 @@ class LibrusAverageHistory:
                     "max": value,
                 }
                 for day, value in points
+                if written.get(day) != value
             ]
+            if not rows:
+                continue
             async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
+            self._written[statistic_id] = dict(points)
+
+
+def _grades_signature(data: LibrusData) -> tuple[Any, ...]:
+    """Everything about the grades an average depends on: value, day,
+    category, subject and the semester/final flags (those don't count)."""
+    return tuple(
+        sorted(
+            (
+                (
+                    g.id,
+                    g.value,
+                    g.add_date or "",
+                    g.category_id or 0,
+                    g.subject_id,
+                    g.is_semester_proposition,
+                    g.is_final_proposition,
+                    g.is_semester,
+                    g.is_final,
+                )
+                for g in data.grades
+            ),
+            key=lambda item: str(item[0]),
+        )
+    )
+
+
+def _categories_signature(data: LibrusData) -> tuple[Any, ...]:
+    """A category's weight and whether it counts change every grade in it."""
+    return tuple(
+        sorted(
+            (
+                (category_id, category.weight, category.count_to_average)
+                for category_id, category in data.grade_categories.items()
+            ),
+            key=lambda item: str(item[0]),
+        )
+    )
