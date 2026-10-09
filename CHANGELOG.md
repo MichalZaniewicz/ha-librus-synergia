@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.2-beta.2
 
 ### Added
 - **Sent messages and the archive.** The *Unread messages* sensor has
