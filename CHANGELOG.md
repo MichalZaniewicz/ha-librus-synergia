@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.12.3-beta.1
 
 ### Fixed
 - **Descriptive grades show the real grade** (#13). A "6" in Synergia came
   through as `3`: Librus keeps the shown grade in a different field.
-  Needs librus-synergia 0.3.13.
+  Needs librus-synergia 0.3.13 (installed on its own).
 
 ### Added
 - **Descriptive grades: what each one is for, who gave it, and the comment**
