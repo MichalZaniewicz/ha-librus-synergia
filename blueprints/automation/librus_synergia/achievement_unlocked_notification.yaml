@@ -3,11 +3,14 @@ blueprint:
   description: >
     Runs your action - typically "Send a notification" - whenever a new
     gamification milestone fires via the
-    `librus_synergia_achievement_unlocked` event: a first six, a good-grade
-    streak (5/10/20 in a row), or a week/month/3-months streak without an
-    absence or a negative behaviour note. Each achievement fires at most
-    once ever, so this never spams - a bad grade breaking a streak later
-    doesn't "revoke" one already earned.
+    `librus_synergia_achievement_unlocked` event - one of 20 badges, e.g. a
+    first six, 5/10/25 sixes, a good-grade streak, a test at 5+, a
+    correction to a higher grade, a full month at school, or a streak
+    without an absence or a negative behaviour note. Each badge (and each
+    tier of one) fires at most once ever, so this never spams - a bad grade
+    breaking a streak later doesn't "revoke" one already earned. Badges
+    earned before the integration was installed or updated are recorded
+    silently, not announced.
 
 
     Inside your chosen action, use `{{ achievement_text }}` for a
