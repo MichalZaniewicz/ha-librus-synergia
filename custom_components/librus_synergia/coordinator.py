@@ -614,10 +614,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_agenda: dict[str, dict[str, Any]] | None = None
         # Justification id -> its last seen status (None until first sync).
         self._known_justifications: dict[str, str] | None = None
-        # Ids already announced per kind (text grades, school trips, school
-        # documents); None until the first sync, which only seeds them.
+        # Ids already announced per kind (text grades, descriptive grades,
+        # school trips, school documents); None until the first sync, which
+        # only seeds them.
         self._known_items: dict[str, set[Any] | None] = {
             "text_grades": None,
+            "descriptive_grades": None,
             "school_trips": None,
             "school_files": None,
         }
@@ -2406,8 +2408,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
 
     def _fire_extra_item_events(self, data: LibrusData) -> None:
-        """New text grades (as EVENT_NEW_GRADE with `kind: text`), school
-        trips and school documents - seeded silently on the first sync."""
+        """New text grades and descriptive grades (as EVENT_NEW_GRADE with
+        `kind: text` / `kind: descriptive`), school trips and school
+        documents - seeded silently on the first sync."""
         entry_id = self.config_entry.entry_id if self.config_entry else None
         student = data.me.display_name
         text_grades = {
@@ -2427,6 +2430,28 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             }
             for grade in data.text_grades
         }
+        descriptive_grades = {
+            grade.id: {
+                "subject_id": grade.subject_id,
+                "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
+                "value": grade.value,
+                "teacher": _teacher_name(data, grade.teacher_id),
+                # The skill the grade is for - what Synergia shows as its category.
+                "category": grade.skill,
+                "skill": grade.skill,
+                "weight": None,
+                "counts_to_average": False,
+                "comments": list(grade.comments),
+                "date": grade.date or grade.add_date,
+                "semester": grade.semester,
+                "kind": "descriptive",
+                "improves": None,
+            }
+            for grade in data.descriptive_grades
+        }
+        descriptive_on = self._feature_enabled(
+            CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
+        )
         trips = {
             trip.id: {
                 "destination": trip.destination,
@@ -2444,17 +2469,29 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         }
         for kind, event, items in (
             ("text_grades", EVENT_NEW_GRADE, text_grades),
+            ("descriptive_grades", EVENT_NEW_GRADE, descriptive_grades),
             ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
             ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
         ):
-            label = {"text_grades": "BaseTextGrades", "school_trips": "SchoolTrips", "school_files": "SchoolFiles"}[kind]
+            label = {
+                "text_grades": "BaseTextGrades",
+                "descriptive_grades": "DescriptiveGrades",
+                "school_trips": "SchoolTrips",
+                "school_files": "SchoolFiles",
+            }[kind]
+            available = label not in self._failed_this_cycle
+            if kind == "descriptive_grades":
+                # Turned off in the options: no data, so nothing to seed -
+                # turning it back on seeds silently instead of announcing
+                # every existing grade.
+                available = available and descriptive_on
             self._known_items[kind] = self._fire_for_new_ids(
                 event,
                 entry_id,
                 self._known_items[kind],
                 items,
                 student=student,
-                available=label not in self._failed_this_cycle,
+                available=available,
             )
 
     def _fire_justification_events(self, data: LibrusData) -> None:

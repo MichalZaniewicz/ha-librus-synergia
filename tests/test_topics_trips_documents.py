@@ -40,8 +40,8 @@ FILES = {"Data": [{"id": "17613", "displayName": "Regulamin wycieczek", "addedOn
                    "downloadUrl": "/pliki_szkoly/pobierz/1"}]}
 
 
-def _coordinator(hass, client) -> LibrusDataUpdateCoordinator:
-    entry = make_config_entry()
+def _coordinator(hass, client, *, options: dict | None = None) -> LibrusDataUpdateCoordinator:
+    entry = make_config_entry(options=options)
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
     return LibrusDataUpdateCoordinator(hass, entry, client, timedelta(minutes=20))
@@ -90,6 +90,51 @@ async def test_new_text_grade_trip_and_document_fire_events(hass) -> None:
     assert grades[0].data["value"] == "Bardzo dobrze opanowany materiał"
     assert trips[0].data["destination"] == "Muzeum Narodowe"
     assert documents[0].data["url"] == "https://synergia.librus.pl/pliki_szkoly/pobierz/1"
+
+
+DESCRIPTIVE = {
+    "Grades": [
+        {"Id": 11, "Subject": {"Id": 100}, "Skill": {"Id": 55}, "AddedBy": {"Id": 7}, "Grade": 3, "Map": "6",
+         "Date": "2026-09-30", "AddDate": "2026-09-30 13:37:00", "Semester": 1, "Comments": [{"Id": 44}]}
+    ]
+}
+
+
+async def test_new_descriptive_grade_fires_new_grade_event(hass) -> None:
+    grades = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(
+        async_get_subjects=SUBJECTS,
+        async_get_descriptive_grade_skills={"Skills": [{"Id": 55, "Name": "Rytmika"}]},
+        async_get_descriptive_grade_comments={"Comments": [{"Id": 44, "Text": "Brawo"}]},
+    )
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()  # first sync only seeds
+
+    client.async_get_descriptive_grades.return_value = DESCRIPTIVE
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+
+    assert len(grades) == 1
+    data = grades[0].data
+    assert (data["kind"], data["value"], data["subject"]) == ("descriptive", "6", "Matematyka")
+    assert (data["skill"], data["category"], data["comments"]) == ("Rytmika", "Rytmika", ["Brawo"])
+    assert data["counts_to_average"] is False
+
+
+async def test_descriptive_grades_turned_on_later_are_seeded_silently(hass) -> None:
+    grades = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(async_get_subjects=SUBJECTS, async_get_descriptive_grades=DESCRIPTIVE)
+    coordinator = _coordinator(hass, client, options={"descriptive_grades_enabled": False})
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    hass.config_entries.async_update_entry(
+        coordinator.config_entry, options={"descriptive_grades_enabled": True}
+    )
+    await coordinator._async_update_data()  # first sync with them on: seeds
+    await hass.async_block_till_done()
+
+    assert grades == []
 
 
 async def test_lesson_topics_trips_and_documents_sensors(hass, freezer) -> None:

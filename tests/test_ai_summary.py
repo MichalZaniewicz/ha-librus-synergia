@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, datetime, time
 
 from homeassistant.core import SupportsResponse
@@ -25,6 +26,8 @@ from custom_components.librus_synergia.const import (
     DOMAIN,
     EVENT_WEEKLY_SUMMARY,
 )
+
+from librus_synergia.models import DescriptiveGradeData
 
 from .conftest import build_mock_client, setup_integration
 
@@ -158,6 +161,32 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
     assert context["next_week"]["agenda"][0]["date"] == "2026-10-06 Tue"
     assert "school_news" not in context
     assert not is_empty_week(context)
+
+
+async def test_build_context_includes_this_weeks_descriptive_grades(hass) -> None:
+    entry = await setup_integration(hass, _client())
+    data = dataclasses.replace(
+        entry.runtime_data.data,
+        descriptive_grades=[
+            DescriptiveGradeData(
+                id=1, subject_id=None, value="6", skill_id=55, category_id=None,
+                add_date="2026-10-02 10:00:00", skill="Rytmika", date="2026-10-02",
+                comments=["Brawo"],
+            ),
+            # Last week - not in this summary.
+            DescriptiveGradeData(
+                id=2, subject_id=None, value="5", skill_id=56, category_id=None,
+                add_date="2026-09-20 10:00:00", skill="Śpiew", date="2026-09-20",
+            ),
+        ],
+    )
+
+    context = build_context(data, _TODAY, weighted=True, include_news=False, student=None)
+
+    descriptive = [g for g in context["grades"] if g.get("kind") == "descriptive"]
+    assert descriptive == [
+        {"date": "2026-10-02 Fri", "value": "6", "category": "Rytmika", "comment": "Brawo", "kind": "descriptive"}
+    ]
 
 
 async def test_build_context_has_revision_topics_and_missed_lessons(hass) -> None:

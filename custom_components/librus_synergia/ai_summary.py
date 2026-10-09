@@ -94,7 +94,8 @@ _LANGUAGE_NAMES = {
 SECTIONS: dict[str, str] = {
     "grades": "Grades: every grade from this week (subject, value, category, weight,"
     " teacher comment), what went well and what did not, and how the averages moved"
-    " (averages[].now against averages[].week_ago).",
+    " (averages[].now against averages[].week_ago). A grade with kind 'descriptive' is"
+    " for a skill (in category) and doesn't count towards any average.",
     "attendance": "Attendance: this week's lessons, absences (excused or not), lates,"
     " which subjects were missed, and what is still waiting to be excused overall.",
     "behaviour": "Behaviour: notes (uwagi) from this week - positive, negative,"
@@ -362,6 +363,22 @@ def build_context(
                     "category": text_grade.category,
                     "teacher": teacher(text_grade.teacher_id),
                     "kind": "text",
+                }
+            )
+        )
+    for descriptive in sorted(data.descriptive_grades, key=lambda d: d.date or d.add_date or ""):
+        if not _in(_day(descriptive.date or descriptive.add_date), week_from, today):
+            continue
+        grades.append(
+            _compact(
+                {
+                    "date": _dated(descriptive.date or descriptive.add_date),
+                    "subject": subject(descriptive.subject_id),
+                    "value": _cut(descriptive.value),
+                    "category": descriptive.skill,
+                    "teacher": teacher(descriptive.teacher_id),
+                    "comment": _cut("; ".join(descriptive.comments)) if descriptive.comments else None,
+                    "kind": "descriptive",
                 }
             )
         )

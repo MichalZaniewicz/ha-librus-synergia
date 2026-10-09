@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **A new descriptive grade sends the "new grade" notification too** (#13).
+  `librus_synergia_new_grade` fires with `kind: descriptive`, the skill as
+  `category` (and `skill`), the teacher and the comments; the *New grade*
+  event entity and the New Grade Notification blueprint pick it up. Existing
+  grades are recorded silently, also when descriptive grades are switched on
+  later.
+- **The weekly AI summary includes the week's descriptive grades**, with the
+  skill, teacher and comment.
+
 ## 0.12.3-beta.1
 
 ### Fixed

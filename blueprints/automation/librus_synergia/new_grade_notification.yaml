@@ -13,7 +13,8 @@ blueprint:
     `{{ trigger.event.data.category }}`, `{{ trigger.event.data.weight }}`,
     `{{ trigger.event.data.comments }}` (a list), `{{ trigger.event.data.date }}`
     or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
-    semester / final_proposition / final).
+    semester / final_proposition / final / text / descriptive - a descriptive
+    grade's category is the skill it is for).
     With "Include details" on, `grade_summary` gets a second line with the
     category, weight, date, teacher and the teacher's comment. If you use this
     blueprint for more than one child, `grade_summary` is already prefixed
