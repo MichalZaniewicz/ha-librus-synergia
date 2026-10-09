@@ -208,6 +208,7 @@ _EXTRA_LABELS = (
 _READ_RECEIPT_DAYS = 30
 _READ_RECEIPT_MESSAGES = 5
 # Lesson topics, trips and school documents change a few times a day.
+_MESSAGES_QUICK_RECHECKS = 3
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
 _DAILY = timedelta(days=1)
@@ -572,6 +573,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # non-fatal (see _async_get_messages).
         self._messages_bootstrapped = False
         self._messages_available = False
+        # A "no access" bootstrap answer is checked again: right after a
+        # restart it can come from a session another request was just
+        # replacing, not from a school without Wiadomości. The first few
+        # answers are rechecked every cycle, then once an hour.
+        self._messages_denials = 0
+        self._messages_recheck_at: datetime | None = None
+        # Forced relogins one at a time (see _async_relogin).
+        self._login_lock = asyncio.Lock()
+        self._login_count = 0
         # Mailboxes Librus answered 404 for - this account doesn't have
         # them (the Messages card hides their chips).
         self.missing_mailboxes: set[str] = set()
@@ -1015,10 +1025,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._fetch_timetable_or_unpublished(week_start)
         except LibrusSessionExpiredError:
+            await self._async_relogin()
+            return await self._fetch_timetable_or_unpublished(week_start)
+
+    async def _async_relogin(self) -> None:
+        """Force a fresh login after Librus rejected the session - one at a
+        time. A dashboard asking for two timetable weeks while the poll runs
+        used to log in two or three times at once; each login replaced the
+        session the others had just made, so all of them failed again (seen
+        live right after a restart). A caller that waited while another one
+        logged in uses that login instead of making its own."""
+        assert self.config_entry is not None
+        seen = self._login_count
+        async with self._login_lock:
+            if self._login_count != seen:
+                return
             await self._client.async_ensure_session_valid(
                 self.config_entry.data[CONF_PASSWORD], force=True
             )
-            return await self._fetch_timetable_or_unpublished(week_start)
+            self._login_count += 1
 
     async def async_fetch_message(self, mailbox: str, message_id: str) -> Any:
         """Fetch one message's full body on demand, for `services.py`'s
@@ -1044,9 +1069,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._client.async_get_message(mailbox, message_id)
         except LibrusSessionExpiredError:
-            await self._client.async_ensure_session_valid(
-                self.config_entry.data[CONF_PASSWORD], force=True
-            )
+            await self._async_relogin()
             self._messages_bootstrapped = False
             self._messages_available = await self._client.async_bootstrap_messages()
             self._messages_bootstrapped = True
@@ -1157,7 +1180,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """One real fetch from Librus, with the new-item events."""
         assert self.config_entry is not None
         try:
-            await self._client.async_ensure_session_valid(self.config_entry.data[CONF_PASSWORD])
+            async with self._login_lock:
+                await self._client.async_ensure_session_valid(
+                    self.config_entry.data[CONF_PASSWORD]
+                )
         except LibrusAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except LibrusError as err:
@@ -1179,9 +1205,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # bothering the user with Home Assistant's reauth flow - never
             # retry more than once per cycle (avoid hammering Librus).
             try:
-                await self._client.async_ensure_session_valid(
-                    self.config_entry.data[CONF_PASSWORD], force=True
-                )
+                await self._async_relogin()
                 core_payloads = await self._async_fetch_core_payloads(week_start, next_week_start)
             except LibrusAuthError as err:
                 raise ConfigEntryAuthFailed(str(err)) from err
@@ -2040,9 +2064,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._client.async_download_message_attachment(attachment_id, message_id)
         except LibrusSessionExpiredError:
-            await self._client.async_ensure_session_valid(
-                self.config_entry.data[CONF_PASSWORD], force=True
-            )
+            await self._async_relogin()
             self._messages_bootstrapped = False
             self._messages_available = await self._client.async_bootstrap_messages()
             self._messages_bootstrapped = True
@@ -2056,9 +2078,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._client.async_download_homework_attachment(attachment_id)
         except LibrusSessionExpiredError:
-            await self._client.async_ensure_session_valid(
-                self.config_entry.data[CONF_PASSWORD], force=True
-            )
+            await self._async_relogin()
             return await self._client.async_download_homework_attachment(attachment_id)
 
     async def async_download_school_file(self, file_id: str) -> Any:
@@ -2073,9 +2093,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._client.async_download_school_file(path)
         except LibrusSessionExpiredError:
-            await self._client.async_ensure_session_valid(
-                self.config_entry.data[CONF_PASSWORD], force=True
-            )
+            await self._async_relogin()
             return await self._client.async_download_school_file(path)
 
     async def _async_get_justifications(self) -> list[JustificationData]:
@@ -2210,9 +2228,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for this school) is NOT an error - sets `_messages_available =
         False` and returns an empty result instead of raising, same as
         always."""
-        if not self._messages_bootstrapped:
+        now = dt_util.utcnow()
+        recheck = not self._messages_available and (
+            self._messages_denials < _MESSAGES_QUICK_RECHECKS
+            or self._messages_recheck_at is None
+            or now >= self._messages_recheck_at
+        )
+        if not self._messages_bootstrapped or recheck:
             self._messages_available = await self._client.async_bootstrap_messages()
             self._messages_bootstrapped = True
+            if self._messages_available:
+                self._messages_denials = 0
+            else:
+                self._messages_denials += 1
+                self._messages_recheck_at = now + _HOURLY
         if not self._messages_available:
             return 0, {}, []
         unread_payload, inbox_payload = await asyncio.gather(

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Messages stuck as "module not enabled" after a restart.** Right after a
+  restart several requests could log in to Librus at the same time, each
+  replacing the session the others had just made; the Wiadomości check then
+  saw "no access" and the integration kept that until the next login, so
+  the Messages card said the module was off. Forced logins now happen one at
+  a time (a request that waited reuses the fresh login), and a "no access"
+  answer is checked again on the next cycles (then hourly) instead of being
+  kept.
+
 ## 0.12.5-beta.3
 
 ### Added

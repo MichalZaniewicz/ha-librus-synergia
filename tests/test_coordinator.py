@@ -1973,3 +1973,55 @@ async def test_new_homework_assignment_event_seeds_silently_then_fires(hass) -> 
     assert data["teacher"] == "Barbara Woźniak"
     assert data["subject"] == "Chemia"
     assert data["student"] == "Ola Kowalska"
+
+
+async def test_messages_no_access_is_checked_again_next_cycle(hass) -> None:
+    """A "no access" bootstrap answer right after a restart can come from a
+    session being replaced at that moment, not from a school without
+    Wiadomości - it must not stick until the next login (seen live)."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.side_effect = [False, True]
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_messages.return_value = {"data": []}
+    coordinator = _make_coordinator(hass, client)
+
+    first = await coordinator._async_update_data()
+    assert first.messages_available is False
+
+    second = await coordinator._async_update_data()
+    assert second.messages_available is True
+    assert second.unread_message_count == 1
+
+
+async def test_concurrent_session_recoveries_log_in_once(hass) -> None:
+    """Two timetable weeks requested together on a dead session: one forced
+    login, shared - two logins at once would replace each other's session
+    and both requests would fail again (seen live after a restart)."""
+    import asyncio
+
+    client = build_mock_client()
+    calls = {"n": 0}
+
+    async def timetable(*_args, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise LibrusSessionExpiredError("session dead", status_code=401)
+        return {"Timetable": {}}
+
+    async def slow_login(*_args, **_kwargs):
+        await asyncio.sleep(0)
+
+    client.async_get_timetable.side_effect = timetable
+    client.async_ensure_session_valid.side_effect = slow_login
+    coordinator = _make_coordinator(hass, client)
+    monday = date(2026, 10, 12)
+
+    await asyncio.gather(
+        coordinator.async_fetch_timetable_week(monday),
+        coordinator.async_fetch_timetable_week(monday + timedelta(days=7)),
+    )
+
+    force_calls = [
+        c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
+    ]
+    assert len(force_calls) == 1
