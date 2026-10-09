@@ -9,7 +9,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.librus_synergia.const import DOMAIN
 
-from .conftest import build_mock_client, setup_integration
+from .conftest import build_mock_client, messages_by_mailbox, setup_integration
 
 
 def _entity_id(hass, entry, key: str) -> str | None:
@@ -637,9 +637,10 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
     user request the same day, via the identical mechanism."""
     client = build_mock_client(async_bootstrap_messages=True)
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
-    client.async_get_messages.side_effect = [
-        {"data": []},
+    client.async_get_messages.side_effect = messages_by_mailbox(
         {
+            "inbox": {"data": []},
+            "substitutions": {
             "data": [
                 {
                     "messageId": "1",
@@ -652,7 +653,7 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
                 }
             ]
         },
-        {
+            "alerts": {
             "data": [
                 {
                     "messageId": "2",
@@ -665,7 +666,7 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
                 }
             ]
         },
-        {
+            "justifications": {
             "data": [
                 {
                     "messageId": "3",
@@ -678,7 +679,8 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
                 }
             ]
         },
-    ]
+        }
+    )
     entry = await setup_integration(hass, client)
 
     entity_id = _entity_id(hass, entry, "unread_messages")
@@ -691,6 +693,9 @@ async def test_unread_messages_sensor_exposes_secondary_mailbox_content(hass) ->
     assert state.attributes["justifications_recent"][0]["id"] == "3"
     assert state.attributes["justifications_recent"][0]["mailbox"] == "justifications"
     assert state.attributes["justifications_recent"][0]["topic"] == "Usprawiedliwienie"
+    assert state.attributes["justifications_recent"][0]["receiver"] is None
+    assert state.attributes["outbox_recent"] == []
+    assert state.attributes["archive_recent"] == []
 
 
 async def test_school_and_class_sensors(hass) -> None:
@@ -743,6 +748,7 @@ async def test_homework_assignments_sensor(hass) -> None:
                     "Teacher": {"Id": 200},
                     "Date": "2026-09-01",
                     "DueDate": "2026-09-08",
+                    "HomeworkAssigmentFiles": [{"Id": 31, "Name": "karta pracy.pdf"}],
                 }
             ]
         },
@@ -756,6 +762,9 @@ async def test_homework_assignments_sensor(hass) -> None:
     assert state.attributes["recent"][0]["id"] == 1
     assert state.attributes["recent"][0]["topic"] == "Zadanie 5"
     assert state.attributes["recent"][0]["teacher"] == "Jan Kowalski"
+    assert state.attributes["recent"][0]["attachments"] == [
+        {"id": "31", "filename": "karta pracy.pdf"}
+    ]
 
 
 async def test_behaviour_grade_sensor(hass) -> None:

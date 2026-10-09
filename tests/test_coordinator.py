@@ -44,7 +44,7 @@ from librus_synergia.models import (
     NoteData,
 )
 
-from .conftest import build_mock_client, make_config_entry
+from .conftest import build_mock_client, make_config_entry, messages_by_mailbox
 
 GRADE_PAYLOAD = {
     "Grades": [
@@ -505,11 +505,10 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = True
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
-    # asyncio.gather(inbox, substitutions, alerts, justifications) -
-    # side_effect consumed in call order, which matches that argument order.
-    client.async_get_messages.side_effect = [
-        {"data": []},
+    client.async_get_messages.side_effect = messages_by_mailbox(
         {
+            "inbox": {"data": []},
+            "substitutions": {
             "data": [
                 {
                     "messageId": "1",
@@ -522,7 +521,7 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
                 }
             ]
         },
-        {
+            "alerts": {
             "data": [
                 {
                     "messageId": "2",
@@ -535,7 +534,7 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
                 }
             ]
         },
-        {
+            "justifications": {
             "data": [
                 {
                     "messageId": "3",
@@ -548,7 +547,8 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
                 }
             ]
         },
-    ]
+        }
+    )
     coordinator = _make_coordinator(hass, client)
 
     data = await coordinator._async_update_data()
@@ -565,6 +565,71 @@ async def test_secondary_mailbox_messages_parsed_with_mailbox_tag(hass) -> None:
     assert data.justification_messages[0].topic == "Usprawiedliwienie"
 
 
+async def test_sent_and_archived_messages_and_missing_mailbox(hass) -> None:
+    """Sent messages (outbox, with the receiver) and the archive come along
+    with the other mailboxes; a 404 means the account has no such mailbox
+    and isn't a failure; the archive is read once a day."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {
+            "alerts": LibrusUnexpectedResponseError("HTTP 404", status_code=404),
+            "outbox": {
+                "data": [
+                    {
+                        "messageId": "9",
+                        "receiverName": "Anna Nowak",
+                        "topic": "Pytanie",
+                        "content": "",
+                        "sendDate": "2026-10-01 08:00:00",
+                    }
+                ]
+            },
+            "archive/inbox": {
+                "data": [{"messageId": "8", "senderName": "Sekretariat", "topic": "Stary rok"}]
+            },
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert data.sent_messages[0].receiver_name == "Anna Nowak"
+    assert data.sent_messages[0].mailbox == "outbox"
+    assert data.archived_messages[0].mailbox == "archive/inbox"
+    assert data.alert_messages == []
+    assert "Messages/Secondary" not in coordinator._optional_endpoint_first_failure
+
+    data = await coordinator._async_update_data()
+
+    archive_calls = [
+        c
+        for c in client.async_get_messages.call_args_list
+        if c.kwargs.get("mailbox") == "archive/inbox"
+    ]
+    assert len(archive_calls) == 1
+    assert data.archived_messages[0].topic == "Stary rok"
+
+
+async def test_one_failing_mailbox_keeps_the_others(hass) -> None:
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {
+            "alerts": LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+            "outbox": {"data": [{"messageId": "9", "receiverName": "Anna Nowak"}]},
+        }
+    )
+    coordinator = _make_coordinator(hass, client)
+
+    data = await coordinator._async_update_data()
+
+    assert len(data.sent_messages) == 1
+    assert "Messages/Secondary" in coordinator._optional_endpoint_first_failure
+
+
 async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
     """BUG FIX (2026-09-06, found live): substitutions/alerts used to be
     fetched in the SAME asyncio.gather() as the core inbox/unread-count
@@ -579,8 +644,9 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
     client = build_mock_client()
     client.async_bootstrap_messages.return_value = True
     client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
-    client.async_get_messages.side_effect = [
+    client.async_get_messages.side_effect = messages_by_mailbox(
         {
+            "inbox": {
             "data": [
                 {
                     "messageId": "42",
@@ -593,10 +659,11 @@ async def test_secondary_mailbox_failure_does_not_wipe_inbox_data(hass) -> None:
                 }
             ]
         },
-        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
-        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
-        LibrusUnexpectedResponseError("Expected a JSON object, got list"),
-    ]
+            "substitutions": LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+            "alerts": LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+            "justifications": LibrusUnexpectedResponseError("Expected a JSON object, got list"),
+        }
+    )
     coordinator = _make_coordinator(hass, client)
 
     data = await coordinator._async_update_data()

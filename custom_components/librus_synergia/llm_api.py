@@ -35,6 +35,7 @@ from librus_synergia.models import LibrusData
 from librus_synergia.parsers import plan_differences
 
 from .ai_summary import _compact, _cut, _dated, _day
+from .catch_up import catch_up
 from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
 from .coordinator import (
     LibrusDataUpdateCoordinator,
@@ -484,6 +485,8 @@ class UpcomingTool(_LibrusTool):
                         "teacher": _teacher_name(data, item.teacher_id),
                         "topic": _cut(item.topic, 120),
                         "text": _cut(item.text),
+                        "attached_files": [f.filename or "file" for f in item.attachments]
+                        or None,
                     }
                 )
             )
@@ -562,8 +565,10 @@ class AttendanceTool(_LibrusTool):
     description = (
         "Attendance: absences (excused and not yet excused), late arrivals, attendance "
         "percentage overall and per subject (below 50% in a subject risks not being "
-        "classified), the dates of absences that still need an excuse, and the "
-        "justifications the parent sent with the school's decision."
+        "classified), the dates of absences that still need an excuse, the "
+        "justifications the parent sent with the school's decision, and what to catch "
+        "up on after the latest absence (missed lessons with their topics, homework "
+        "given meanwhile)."
     )
     parameters = _schema(
         {
@@ -645,8 +650,39 @@ class AttendanceTool(_LibrusTool):
                     for j in data.justifications[:8]
                 ]
                 or None,
+                "catch_up_after_latest_absence": _catch_up_summary(data, today),
             }
         )
+
+
+def _catch_up_summary(data: LibrusData, today: date) -> dict[str, Any] | None:
+    period = catch_up(data, today)
+    if period is None:
+        return None
+    return _compact(
+        {
+            "absent_from": period["from"],
+            "absent_to": period["to"],
+            "school_days": period["days"],
+            "back_on": period["back_on"],
+            "missed_lessons": [
+                _compact({**lesson, "topic": _cut(lesson["topic"], 160)})
+                for lesson in period["lessons"][:25]
+            ],
+            "homework_given_meanwhile": [
+                _compact(
+                    {
+                        "given": item["date"],
+                        "due": item["due_date"],
+                        "subject": item["subject"],
+                        "topic": _cut(item["topic"], 120),
+                    }
+                )
+                for item in period["homework"]
+            ]
+            or None,
+        }
+    )
 
 
 class BehaviourTool(_LibrusTool):
@@ -761,8 +797,8 @@ class MessagesTool(_LibrusTool):
     name = "librus_get_messages"
     description = (
         "Recent private messages from teachers and the school (sender, subject line, the "
-        "start of the text, whether it is unread) and school announcements. Listing does "
-        "not mark anything as read."
+        "start of the text, whether it is unread), messages the parent sent (to whom) and "
+        "school announcements. Listing does not mark anything as read."
     )
     parameters = _schema(
         {
@@ -787,6 +823,18 @@ class MessagesTool(_LibrusTool):
             for m in sorted(data.messages, key=lambda m: m.send_date or "", reverse=True)
             if (_day(m.send_date) or date.min) >= since
         ][:15]
+        sent = [
+            _compact(
+                {
+                    "date": _dated(m.send_date),
+                    "to": m.receiver_name,
+                    "topic": _cut(m.topic, 120),
+                    "text": _cut(m.content, 200),
+                }
+            )
+            for m in sorted(data.sent_messages, key=lambda m: m.send_date or "", reverse=True)
+            if (_day(m.send_date) or date.min) >= since
+        ][:10]
         announcements = [
             _compact(
                 {
@@ -806,6 +854,7 @@ class MessagesTool(_LibrusTool):
                 "messages_available": True if data.messages_available else None,
                 "unread_messages": data.unread_message_count,
                 "messages": messages,
+                "sent_messages": sent,
                 "announcements": announcements,
             }
         )

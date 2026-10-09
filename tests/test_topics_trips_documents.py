@@ -16,6 +16,7 @@ from custom_components.librus_synergia.const import (
     EVENT_NEW_SCHOOL_TRIP,
 )
 from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from librus_synergia import LibrusSessionExpiredError
 from librus_synergia.models import AttachmentFileData
 
 from .conftest import build_mock_client, make_config_entry, setup_integration
@@ -174,3 +175,22 @@ async def test_attachment_view_streams_the_file(hass, hass_client) -> None:
 
     missing = await http.get(f"/api/{DOMAIN}/attachment/unknown-device/99/55")
     assert missing.status == 404
+
+
+async def test_homework_attachment_view_retries_after_session_expiry(hass, hass_client) -> None:
+    client = build_mock_client()
+    client.async_download_homework_attachment.side_effect = [
+        LibrusSessionExpiredError("gone", status_code=401),
+        AttachmentFileData(filename="karta.pdf", content_type="application/pdf", content=b"%PDF"),
+    ]
+    entry = await setup_integration(hass, client)
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    http = await hass_client()
+
+    response = await http.get(f"/api/{DOMAIN}/homework_attachment/{device.id}/31")
+
+    assert response.status == 200
+    assert await response.read() == b"%PDF"
+    assert 'filename="karta.pdf"' in response.headers["Content-Disposition"]
+    assert client.async_download_homework_attachment.await_count == 2
+    client.async_download_homework_attachment.assert_awaited_with("31")

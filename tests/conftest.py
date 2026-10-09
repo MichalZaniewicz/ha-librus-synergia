@@ -148,6 +148,19 @@ def build_mock_client(**overrides) -> AsyncMock:
     return client
 
 
+def messages_by_mailbox(payloads: dict) -> object:
+    """A `side_effect` for `async_get_messages` answering per mailbox: a
+    payload dict, or an exception to raise. Unlisted mailboxes are empty."""
+
+    async def _get(mailbox: str = "inbox", **_kwargs):
+        result = payloads.get(mailbox, {"data": []})
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    return _get
+
+
 def make_config_entry(*, options: dict | None = None, **data) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,

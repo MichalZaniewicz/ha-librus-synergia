@@ -261,7 +261,7 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
 # degrades (see CORE_ENDPOINT_LABELS' own note above for why the two
 # per-week labels there are dead weight). "Messages" covers the bootstrap
 # + inbox/unread-count fetch; "Messages/Secondary" covers the
-# substitutions/alerts/justifications mailboxes, tracked separately since
+# substitutions/alerts/justifications/outbox mailboxes, tracked separately since
 # `_async_get_messages` already isolates that failure from the primary
 # inbox fetch (see its own docstring - the v0.4.13 all-or-nothing bug).
 MISC_DEGRADABLE_ENDPOINT_LABELS = (

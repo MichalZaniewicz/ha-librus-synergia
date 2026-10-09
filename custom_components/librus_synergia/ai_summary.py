@@ -468,6 +468,7 @@ def build_context(
                 "teacher": teacher(item.teacher_id),
                 "topic": _cut(item.topic, 120),
                 "text": _cut(item.text),
+                "attached_files": [f.filename or "file" for f in item.attachments] or None,
             }
         )
         for item in sorted(data.homework_assignments, key=lambda h: h.due_date or "")

@@ -33,6 +33,7 @@ from librus_synergia import (
     LibrusSessionExpiredError,
 )
 from librus_synergia.changes import Changes, ChangeTracker, SeenIds
+from librus_synergia.exceptions import LibrusUnexpectedResponseError
 from librus_synergia.changes import absences as tracked_absences
 from librus_synergia.changes import timetable_changes as tracked_timetable_changes
 from librus_synergia.models import (
@@ -174,6 +175,9 @@ STUDENT_INFO_LABEL = "Informacja"
 # long to wait before trying again after finding nothing, and how many
 # candidate LIDs to probe per attempt.
 _KINDERGARTEN_DISCOVERY_RETRY = timedelta(hours=24)
+_ARCHIVE_REFRESH_INTERVAL = timedelta(hours=24)
+# Wiadomości mailbox for past school years.
+ARCHIVE_MAILBOX = "archive/inbox"
 _KINDERGARTEN_MAX_CANDIDATES = 6
 
 # The order of `_async_fetch_core_payloads`' result: Me, tier 1, tier 2.
@@ -196,7 +200,7 @@ def school_file_url(path: str | None) -> str | None:
 # Labels of the two point-grade requests (const.MISC_DEGRADABLE_ENDPOINT_LABELS).
 _POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
 # `_async_get_messages`' result when nothing was fetched.
-_NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [])
+_NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [], [], [])
 
 
 # Agenda fields whose change fires EVENT_AGENDA_CHANGED (names resolved
@@ -566,6 +570,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # non-fatal (see _async_get_messages).
         self._messages_bootstrapped = False
         self._messages_available = False
+        # The archive (past school years) is read once a day.
+        self._archived_messages: list[MessageData] = []
+        self._archive_fetched_at: datetime | None = None
 
         # New-item bus events: the library's ChangeTracker remembers what
         # has been seen and reports what's new. The first cycle only seeds
@@ -1278,6 +1285,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             substitution_messages,
             alert_messages,
             justification_messages,
+            sent_messages,
+            archived_messages,
         ) = messages_result
 
         me = parse_me(me_payload)
@@ -1311,6 +1320,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             substitution_messages=substitution_messages,
             alert_messages=alert_messages,
             justification_messages=justification_messages,
+            sent_messages=sent_messages,
+            archived_messages=archived_messages,
             school=self._cached_school,
             school_class=self._cached_class,
             free_days=self._cached_free_days,
@@ -1905,6 +1916,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._messages_bootstrapped = True
             return await self._client.async_download_message_attachment(attachment_id, message_id)
 
+    async def async_download_homework_attachment(self, attachment_id: str) -> Any:
+        """Download one homework-assignment attachment for the attachment
+        view. Lives on the main Synergia session, so a rejected session gets
+        one forced relogin + retry, like `async_fetch_timetable_week`."""
+        assert self.config_entry is not None
+        try:
+            return await self._client.async_download_homework_attachment(attachment_id)
+        except LibrusSessionExpiredError:
+            await self._client.async_ensure_session_valid(
+                self.config_entry.data[CONF_PASSWORD], force=True
+            )
+            return await self._client.async_download_homework_attachment(attachment_id)
+
     async def _async_get_justifications(self) -> list[JustificationData]:
         """The parent's submitted absence justifications. A failure keeps
         the last good copy, like any optional endpoint."""
@@ -2111,7 +2135,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # Turned off in the options flow - don't bootstrap the separate
             # wiadomosci.librus.pl session or make any messages calls.
             self._messages_available = False
-            return 0, {}, [], [], [], []
+            return _NO_MESSAGES
 
         try:
             unread_count, unread_by_mailbox, inbox_messages = (
@@ -2138,49 +2162,84 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 # Still leave a fresh bootstrap scheduled for NEXT cycle too,
                 # in case this keeps failing beyond just one retry.
                 self._messages_bootstrapped = False
-                return 0, {}, [], [], [], []
+                return _NO_MESSAGES
         if not self._messages_available:
-            return 0, {}, [], [], [], []
+            return _NO_MESSAGES
         self._note_optional_endpoint_recovery("Messages")
 
-        # BUG FIX (2026-09-06, found live): substitutions/alerts used to be
-        # fetched in the SAME asyncio.gather() as the two calls above -
+        # BUG FIX (2026-09-06, found live): the secondary mailboxes used to
+        # be fetched in the SAME asyncio.gather() as the inbox -
         # asyncio.gather() fails as a whole the moment ANY one of its
-        # awaitables raises, so a failure fetching these two bonus
-        # mailboxes was silently wiping out the otherwise-working
-        # inbox/unread-count data too (confirmed live: mailbox_breakdown
-        # went from real per-mailbox counts to an empty {} the moment this
-        # was added in v0.4.13). Isolated into its own try/except so it can
-        # only ever degrade to "no substitutions/alerts/justifications
-        # shown", never take the core inbox data down with it.
-        substitution_messages: list[MessageData] = []
-        alert_messages: list[MessageData] = []
-        justification_messages: list[MessageData] = []
-        try:
-            substitutions_payload, alerts_payload, justifications_payload = await asyncio.gather(
-                self._client.async_get_messages(mailbox="substitutions", limit=10),
-                self._client.async_get_messages(mailbox="alerts", limit=10),
-                self._client.async_get_messages(mailbox="justifications", limit=10),
-            )
-            substitution_messages = parse_message_list(substitutions_payload, "substitutions")
-            alert_messages = parse_message_list(alerts_payload, "alerts")
-            justification_messages = parse_message_list(justifications_payload, "justifications")
-            self._note_optional_endpoint_recovery("Messages/Secondary")
-        except LibrusError:
-            _LOGGER.debug(
-                "Secondary mailbox (substitutions/alerts/justifications) fetch failed (non-fatal)",
-                exc_info=True,
-            )
-            self._note_optional_endpoint_failure("Messages/Secondary")
+        # awaitables raises, so a failure fetching a bonus mailbox wiped
+        # out the otherwise-working inbox/unread-count data too (confirmed
+        # live in v0.4.13). They're fetched separately, and each one on its
+        # own (return_exceptions), so one mailbox can't empty the others.
+        # A 404 means this account doesn't have that mailbox (confirmed
+        # live for alerts/substitutions on some accounts) - empty, not a
+        # failure.
+        secondary = await self._async_get_secondary_mailboxes(
+            ("substitutions", "alerts", "justifications", "outbox")
+        )
+        await self._async_refresh_archived_messages()
 
         return (
             unread_count,
             unread_by_mailbox,
             inbox_messages,
-            substitution_messages,
-            alert_messages,
-            justification_messages,
+            secondary["substitutions"],
+            secondary["alerts"],
+            secondary["justifications"],
+            secondary["outbox"],
+            list(self._archived_messages),
         )
+
+    async def _async_get_secondary_mailboxes(
+        self, mailboxes: tuple[str, ...]
+    ) -> dict[str, list[MessageData]]:
+        results = await asyncio.gather(
+            *(self._client.async_get_messages(mailbox=box, limit=10) for box in mailboxes),
+            return_exceptions=True,
+        )
+        messages: dict[str, list[MessageData]] = {}
+        failed = False
+        for box, result in zip(mailboxes, results, strict=True):
+            if isinstance(result, LibrusUnexpectedResponseError) and result.status_code == 404:
+                messages[box] = []
+            elif isinstance(result, BaseException):
+                if not isinstance(result, LibrusError):
+                    raise result
+                _LOGGER.debug("Mailbox %s fetch failed (non-fatal)", box, exc_info=result)
+                messages[box] = []
+                failed = True
+            else:
+                messages[box] = parse_message_list(result, box)
+        if failed:
+            self._note_optional_endpoint_failure("Messages/Secondary")
+        else:
+            self._note_optional_endpoint_recovery("Messages/Secondary")
+        return messages
+
+    async def _async_refresh_archived_messages(self) -> None:
+        """The archive of past school years barely changes - read it once a
+        day. A failure keeps the last list."""
+        now = dt_util.utcnow()
+        if (
+            self._archive_fetched_at is not None
+            and now - self._archive_fetched_at < _ARCHIVE_REFRESH_INTERVAL
+        ):
+            return
+        try:
+            payload = await self._client.async_get_messages(mailbox=ARCHIVE_MAILBOX, limit=10)
+        except LibrusUnexpectedResponseError as err:
+            if err.status_code != 404:
+                _LOGGER.debug("Archived messages fetch failed (non-fatal)", exc_info=True)
+                return
+            payload = {}
+        except LibrusError:
+            _LOGGER.debug("Archived messages fetch failed (non-fatal)", exc_info=True)
+            return
+        self._archived_messages = parse_message_list(payload, ARCHIVE_MAILBOX)
+        self._archive_fetched_at = now
 
     def _fire_change_events(self, changes: Changes, data: LibrusData) -> None:
         """Fire one bus event per new item the tracker reported.

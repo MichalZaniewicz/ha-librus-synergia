@@ -1462,6 +1462,11 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
                     "due_date": a.due_date,
                     "date": a.date,
                     "teacher": teachers.get(a.teacher_id) if a.teacher_id else None,
+                    # Files the teacher attached; the attachment view
+                    # (attachment_view.py) downloads one by id.
+                    "attachments": [
+                        {"id": f.id, "filename": f.filename} for f in a.attachments
+                    ],
                 }
                 for a in recent
             ]
@@ -1592,12 +1597,14 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
 def _message_list_attr(messages: list[MessageData]) -> list[dict[str, Any]]:
     """Same shape used for every mailbox's `*_recent` attribute - `id` +
     `mailbox` together are what a card needs to pass to the `get_message`
-    service to load a specific message's full content."""
+    service to load a specific message's full content. `receiver` is set
+    only for sent messages."""
     return [
         {
             "id": m.id,
             "mailbox": m.mailbox,
             "sender": m.sender_name,
+            "receiver": m.receiver_name,
             "topic": m.topic,
             "content": m.content[:200],
             "date": m.send_date,
@@ -1621,7 +1628,14 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
 
     _attr_translation_key = "unread_messages"
     _unrecorded_attributes = frozenset(
-        {"recent", "substitutions_recent", "alerts_recent", "justifications_recent"}
+        {
+            "recent",
+            "substitutions_recent",
+            "alerts_recent",
+            "justifications_recent",
+            "outbox_recent",
+            "archive_recent",
+        }
     )
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:email-outline"
@@ -1661,6 +1675,10 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "substitutions_recent": _message_list_attr(data.substitution_messages),
             "alerts_recent": _message_list_attr(data.alert_messages),
             "justifications_recent": _message_list_attr(data.justification_messages),
+            # Sent messages (with `receiver`) and the archive of past
+            # school years.
+            "outbox_recent": _message_list_attr(data.sent_messages),
+            "archive_recent": _message_list_attr(data.archived_messages),
         }
 
 

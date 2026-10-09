@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Sent messages and the archive.** The *Unread messages* sensor has
+  `outbox_recent` (messages you sent, each with a `receiver`) and
+  `archive_recent` (past school years, read once a day). `get_message` opens
+  them with `mailbox: outbox` / `archive/inbox`.
+- **Homework attachments.** *Homework assignments* `recent[].attachments`
+  lists the files a teacher attached (`id`, `filename`), and
+  `/api/librus_synergia/homework_attachment/<device id>/<attachment id>`
+  passes one straight from Librus to the browser. Not tried live yet - no
+  teacher has attached a file on the test account.
+- **Assist:** the attendance tool says what to catch up on after the latest
+  absence (missed lessons with topics, homework given meanwhile); the
+  messages tool lists sent messages; homework comes with the names of its
+  files (also in the weekly AI summary).
+
+### Fixed
+- A mailbox the account doesn't have (Librus answers 404, seen for alerts and
+  substitutions) no longer marks messages as degraded, and one failing
+  mailbox no longer empties the others.
+
+### Changed
+- Requires librus-synergia 0.3.9.
+
 ## 0.12.2-beta.1
 
 ### Added

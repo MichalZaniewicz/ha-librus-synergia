@@ -9,7 +9,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.librus_synergia.llm_api import LLM_API_ID
 
-from .conftest import build_mock_client, setup_integration
+from .conftest import build_mock_client, messages_by_mailbox, setup_integration
 
 _FROZEN = "2026-09-09T12:00:00+00:00"  # ~05:00 US/Pacific, clear of midnight
 
@@ -185,6 +185,43 @@ async def test_upcoming_tool_lists_topics_to_revise(hass, freezer) -> None:
     assert test["is_test"] is True
     assert [t["topic"] for t in test["topics_to_revise"]] == ["Ułamki", "Procenty"]
     assert test["topics_to_revise"][1]["student_was_absent"] is True
+
+
+async def test_attendance_tool_says_what_to_catch_up_on(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    await setup_integration(hass, _topics_client())
+
+    data = await _call(hass, "librus_get_attendance")
+    catch_up = data["catch_up_after_latest_absence"]
+    assert catch_up["absent_from"] == catch_up["absent_to"] == _shifted(-1)
+    assert [lesson["topic"] for lesson in catch_up["missed_lessons"]] == ["Procenty"]
+
+
+async def test_messages_tool_lists_sent_messages(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = build_mock_client(async_bootstrap_messages=True)
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 0}}
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {
+            "outbox": {
+                "data": [
+                    {
+                        "messageId": "9",
+                        "receiverName": "Anna Nowak",
+                        "topic": "Nieobecność",
+                        "content": "",
+                        "sendDate": f"{_shifted(-2)} 08:00:00",
+                    }
+                ]
+            }
+        }
+    )
+    await setup_integration(hass, client)
+
+    data = await _call(hass, "librus_get_messages")
+    assert data["sent_messages"] == [
+        {"date": data["sent_messages"][0]["date"], "to": "Anna Nowak", "topic": "Nieobecność"}
+    ]
 
 
 async def test_unknown_student_is_an_error(hass) -> None:
