@@ -122,6 +122,7 @@ from .const import (
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
+    CONF_STUDENT_NUMBER,
     CONF_SMART_POLLING,
     CORE_ENDPOINT_LABELS,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
@@ -168,6 +169,7 @@ from .const import (
     STATUS_OK,
     STATUS_STALE,
 )
+from .achievements import Badge, compute_badges, key_title
 from .forecast import average_sums, forecast_basis, parse_thresholds, subject_forecasts
 
 if TYPE_CHECKING:
@@ -387,33 +389,6 @@ def days_since_last_negative_note(
     return _days_since(dates, school_class, today)
 
 
-# Milestone thresholds for the streak-based achievements fired by
-# `LibrusDataUpdateCoordinator._check_achievements` - crossing one fires
-# EVENT_ACHIEVEMENT_UNLOCKED exactly once.
-_GOOD_GRADE_STREAK_MILESTONES = (5, 10, 20)
-_STREAK_DAY_MILESTONES = (7, 30, 90)
-
-# Human-readable Polish titles carried in the event payload
-# (`{{ trigger.event.data.title }}`). Achievements are this integration's
-# own invention - Librus has no such concept, so there's no "real" name to
-# resolve from account data the way EVENT_NEW_GRADE etc. resolve a subject
-# name - hardcoded Polish, matching every blueprint's own briefing/digest
-# text elsewhere in this codebase (this integration is Poland-only by
-# nature, Librus itself being Polish-schools-only).
-_ACHIEVEMENT_TITLES: dict[str, str] = {
-    "first_six": "Pierwsza szóstka!",
-    "good_grade_streak_5": "5 dobrych ocen z rzędu",
-    "good_grade_streak_10": "10 dobrych ocen z rzędu",
-    "good_grade_streak_20": "20 dobrych ocen z rzędu",
-    "attendance_streak_7": "Tydzień bez nieobecności",
-    "attendance_streak_30": "Miesiąc bez nieobecności",
-    "attendance_streak_90": "3 miesiące bez nieobecności",
-    "behaviour_streak_7": "Tydzień bez uwagi",
-    "behaviour_streak_30": "Miesiąc bez uwagi",
-    "behaviour_streak_90": "3 miesiące bez uwagi",
-}
-
-
 def teacher_subject_ids(timetable: dict[date, list[LessonData]]) -> dict[Any, set[Any]]:
     """teacher id -> every subject id that teacher has in the cached
     (current + next week) timetable, counting every teacher of a split
@@ -619,11 +594,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # of them it is recorded silently instead of being announced as a
         # whole batch of "new" items.
         self._unseeded_kinds: set[str] = set()
-        # Achievement keys already unlocked (e.g. "good_grade_streak_10") -
-        # same seed-silently-then-union pattern as the tracker above, for
-        # a small fixed vocabulary of milestones (the library knows nothing
-        # about achievements). See _check_achievements.
-        self._known_achievements: set[str] | None = None
+        # Earned badge key ("sixes_10") -> date earned (YYYY-MM-DD). None =
+        # not seeded yet: the first computation records everything silently
+        # (badges are dated from the whole school year, so an install or an
+        # upgrade must not announce them all). Never revoked once earned.
+        # See _check_achievements and achievements.py.
+        self._achievement_dates: dict[str, str] | None = None
+        # Badges from the last cycle, for the Rank sensor.
+        self.badges: list[Badge] = []
+        # Homework ever ticked in the to-do list (the to-do itself forgets
+        # ticks once Librus drops the homework) - for the homework badge.
+        self.homework_done_ever: set[str] = set()
         # subject id -> forecast grade at the previous poll (None = not
         # seeded yet), and the basis it was computed on.
         self._known_forecast: dict[int, int] | None = None
@@ -714,8 +695,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     self._known_items[kind] = set(ids)
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
-        if isinstance(keys := stored.get("achievements"), list):
-            self._known_achievements = {str(k) for k in keys}
+        if isinstance(dates := stored.get("achievement_dates"), dict):
+            self._achievement_dates = {str(k): str(v) for k, v in dates.items()}
+        if isinstance(done := stored.get("homework_done_ever"), list):
+            self.homework_done_ever = {str(uid) for uid in done}
         forecast = stored.get("forecast")
         if isinstance(forecast, dict) and isinstance(forecast.get("values"), dict):
             self._known_forecast = {
@@ -749,9 +732,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 if self._known_homework_assignment_ids is not None
                 else None
             ),
-            "achievements": (
-                sorted(self._known_achievements) if self._known_achievements is not None else None
-            ),
+            "achievement_dates": self._achievement_dates,
+            "homework_done_ever": sorted(self.homework_done_ever),
             "forecast": (
                 {
                     "basis": self._known_forecast_basis,
@@ -1278,14 +1260,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         data = self._build_data(
             core_payloads, lucky_number, messages_result, point_grades, justifications, extras
         )
-        me, grades, notes = data.me, data.grades, data.notes
-        attendances, attendance_types = data.attendances, data.attendance_types
         self._fire_change_events(self._update_change_tracker(data, today), data)
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
         self._fire_justification_events(data)
         self._fire_extra_item_events(data)
-        self._check_achievements(grades, attendances, attendance_types, notes, today, me.display_name)
+        self._check_achievements(data, today)
         self._fire_forecast_events(data, today)
         return data
 
@@ -1403,14 +1383,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     @property
     def achievements(self) -> list[dict[str, str]]:
-        """Every achievement earned so far (kept across restarts), for the
-        Rank sensor's `achievements` attribute - the first sync records
-        them silently, so the bus event alone never reaches a dashboard."""
+        """Every badge key earned so far with its title and date, oldest
+        first (kept across restarts) - the Rank sensor's `achievements`
+        attribute."""
+        dates = self._achievement_dates or {}
         return [
-            {"key": key, "title": _ACHIEVEMENT_TITLES[key]}
-            for key in sorted(self._known_achievements or ())
-            if key in _ACHIEVEMENT_TITLES
+            {"key": key, "title": key_title(key), "date": dates[key]}
+            for key in sorted(dates, key=lambda k: (dates[k], k))
         ]
+
+    def record_homework_done(self, uid: str) -> None:
+        """The homework to-do reports a tick (for the homework badge)."""
+        if uid not in self.homework_done_ever:
+            self.homework_done_ever.add(uid)
+            self._state_store.async_delay_save(self._state_to_save, STATE_SAVE_DELAY)
 
     @property
     def weighted_average(self) -> bool:
@@ -2772,72 +2758,51 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             available="HomeWorkAssignments" not in self._failed_this_cycle,
         )
 
-    def _check_achievements(
-        self,
-        grades: list[GradeData],
-        attendances: list[AttendanceData],
-        attendance_types: dict[int, AttendanceTypeData],
-        notes: list[NoteData],
-        today: date,
-        student: str,
-    ) -> None:
-        """Fires EVENT_ACHIEVEMENT_UNLOCKED for a handful of objective,
-        data-derived gamification milestones - deliberately never an
-        invented points/scoring system, which would have no basis in
-        anything Librus actually reports and would feel arbitrary/made up.
-
-        Each achievement KEY (e.g. "good_grade_streak_10") is treated as
-        an "item id" (see `_fire_for_new_ids`) that's either currently
-        unlocked or not, seeded
-        silently on the first sync, and unioned (not replaced) so nothing
-        re-fires once achieved even if the underlying streak later
-        resets (a bad grade breaking a 10-grade streak must not "revoke"
-        the achievement already earned)."""
+    def _check_achievements(self, data: LibrusData, today: date) -> None:
+        """Badges (achievements.py) for the Rank sensor, and
+        EVENT_ACHIEVEMENT_UNLOCKED for each key earned since the last cycle.
+        A key keeps the date it was earned and is never revoked, even when
+        its streak later breaks."""
+        student_number = None
+        if self.config_entry is not None:
+            raw = self.config_entry.options.get(CONF_STUDENT_NUMBER)
+            student_number = int(raw) if raw is not None else self.student_number_from_librus
+        badges = compute_badges(
+            data,
+            today,
+            thresholds=self.grade_thresholds,
+            weighted=self.weighted_average,
+            student_number=student_number,
+            homework_done=len(self.homework_done_ever),
+        )
+        self.badges = badges
+        # Badges come from grades, notes and attendance; a failed fetch of
+        # any of them says nothing about what's earned.
+        if {"Grades", "Notes", "Attendances", "Attendances/Types"} & self._failed_this_cycle:
+            return
+        known = self._achievement_dates
+        dates = dict(known or {})
+        new: list[str] = []
+        for item in badges:
+            for key, earned_on in item.earned.items():
+                if key not in dates:
+                    dates[key] = earned_on or today.isoformat()
+                    new.append(key)
+        self._achievement_dates = dates
+        if known is None:
+            return
         entry_id = self.config_entry.entry_id if self.config_entry else None
-        unlocked: set[str] = set()
-
-        day_to_day_grades = [
-            g
-            for g in grades
-            if not g.is_semester_proposition
-            and not g.is_final_proposition
-            and not g.is_semester
-            and not g.is_final
-        ]
-        if any(parse_grade_value(g.value) == 6.0 for g in day_to_day_grades):
-            unlocked.add("first_six")
-
-        streak = good_grade_streak(grades)
-        for milestone in _GOOD_GRADE_STREAK_MILESTONES:
-            if streak >= milestone:
-                unlocked.add(f"good_grade_streak_{milestone}")
-
-        attendance_days = days_since_last_absence(
-            attendances, attendance_types, self._cached_class, today
-        )
-        if attendance_days is not None:
-            for milestone in _STREAK_DAY_MILESTONES:
-                if attendance_days >= milestone:
-                    unlocked.add(f"attendance_streak_{milestone}")
-
-        behaviour_days = days_since_last_negative_note(notes, self._cached_class, today)
-        if behaviour_days is not None:
-            for milestone in _STREAK_DAY_MILESTONES:
-                if behaviour_days >= milestone:
-                    unlocked.add(f"behaviour_streak_{milestone}")
-
-        self._known_achievements = self._fire_for_new_ids(
-            EVENT_ACHIEVEMENT_UNLOCKED,
-            entry_id,
-            self._known_achievements,
-            {key: {"title": _ACHIEVEMENT_TITLES[key]} for key in unlocked},
-            student=student,
-            # Milestones come from grades, notes and attendance; a failed
-            # fetch of any of them says nothing about what's unlocked.
-            available=not (
-                {"Grades", "Notes", "Attendances", "Attendances/Types"} & self._failed_this_cycle
-            ),
-        )
+        for key in new:
+            self.hass.bus.async_fire(
+                EVENT_ACHIEVEMENT_UNLOCKED,
+                {
+                    "entry_id": entry_id,
+                    "id": key,
+                    "student": data.me.display_name,
+                    "title": key_title(key),
+                    "date": dates[key],
+                },
+            )
 
     def _unavailable_kinds(self, data: LibrusData) -> set[str]:
         """ChangeTracker kinds whose data this cycle can't be trusted to be

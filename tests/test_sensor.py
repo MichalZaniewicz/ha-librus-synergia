@@ -1571,8 +1571,16 @@ async def test_rank_sensor_lists_achievements_earned_before_setup(hass) -> None:
     )
     entry = await setup_integration(hass, client)
 
-    achievements = hass.states.get(_entity_id(hass, entry, "rank")).attributes["achievements"]
-    assert {"key": "first_six", "title": "Pierwsza szóstka!"} in achievements
+    attributes = hass.states.get(_entity_id(hass, entry, "rank")).attributes
+    assert {"key": "first_six", "title": "Pierwsza szóstka!", "date": "2026-09-01"} in (
+        attributes["achievements"]
+    )
+    # Every badge, earned or not, with its earned dates and progress.
+    badges = {b["key"]: b for b in attributes["badges"]}
+    assert badges["first_six"]["earned"] == ["2026-09-01"]
+    assert badges["sixes"]["tiers"] == [5, 10, 25]
+    assert badges["sixes"]["earned"] == []
+    assert badges["sixes"]["value"] == 1
 
 
 async def test_homework_assignment_subject_inferred_from_teacher(hass) -> None:

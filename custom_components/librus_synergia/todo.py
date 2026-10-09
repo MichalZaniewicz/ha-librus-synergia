@@ -54,6 +54,8 @@ class LibrusHomeworkTodoList(CoordinatorEntity[LibrusDataUpdateCoordinator], Tod
         await super().async_added_to_hass()
         stored = await self._store.async_load() or {}
         self._done = {str(uid) for uid in stored.get("done", [])}
+        for uid in self._done:
+            self.coordinator.record_homework_done(uid)
 
     @property
     def todo_items(self) -> list[TodoItem] | None:
@@ -91,6 +93,7 @@ class LibrusHomeworkTodoList(CoordinatorEntity[LibrusDataUpdateCoordinator], Tod
             raise HomeAssistantError("This homework is no longer in Librus.")
         if item.status == TodoItemStatus.COMPLETED:
             self._done.add(item.uid)
+            self.coordinator.record_homework_done(item.uid)
         else:
             self._done.discard(item.uid)
         # Forget ticks for homework Librus no longer lists.

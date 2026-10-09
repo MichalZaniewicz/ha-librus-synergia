@@ -2,12 +2,30 @@
 
 ## Unreleased
 
+### Added
+- **20 badges, counted from the whole school year.** Besides the original
+  first six and the good-grade / attendance / behaviour streaks: sixes
+  collector (5/10/25), hat-trick (3 sixes in a week), a test at 5 or more,
+  subject star (average 5.5+), honours average, comeback (a correction to a
+  higher grade), a semester without a 1, a full month without absence or
+  lateness, punctuality (30 school days without being late), perfect
+  attendance in a subject (20 lessons), first praise, praises (3/5),
+  exemplary behaviour, lucky number, homework ticked in the to-do list
+  (10/25) and the finished school year. Each badge keeps the date it was
+  earned - also for ones earned before the integration was installed. Only
+  the honours average, the lucky number and ticked homework can't be dated
+  from Librus data and count from the day they're first seen. The Rank
+  sensor has a new `badges` attribute (every badge with its tiers, earned
+  dates and progress); the achievement event carries `date`. Old
+  achievement keys are unchanged. After the update the badges are recorded
+  silently once, so earlier ones don't arrive as notifications.
+
 ### Fixed
 - **Achievements already earned never showed up.** The first sync records
   them silently (no flood of old notifications), so the event never reached
   the Achievements card. The Rank sensor now lists every achievement earned
-  so far in an `achievements` attribute (`key`, `title`), which the card
-  reads.
+  so far in an `achievements` attribute (`key`, `title`, `date`), which the
+  card reads.
 
 ## 0.12.5-beta.2
 

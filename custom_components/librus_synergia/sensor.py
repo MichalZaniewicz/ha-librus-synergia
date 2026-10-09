@@ -1222,6 +1222,7 @@ class LibrusRankSensor(LibrusSensorBase):
     _attr_translation_key = "rank"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [key for _, key, _ in _RANK_TIERS]
+    _unrecorded_attributes = frozenset({"achievements", "badges"})
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "rank")
@@ -1250,9 +1251,10 @@ class LibrusRankSensor(LibrusSensorBase):
         # Earned achievements (key + title) ride along here - the companion
         # Achievements card reads them, also before there's an average.
         achievements = self.coordinator.achievements
+        badges = _badges(self.coordinator)
         average = self._average()
         if average is None:
-            return {"achievements": achievements}
+            return {"achievements": achievements, "badges": badges}
         # How far above the CURRENT tier's own threshold, and how much
         # more average is needed to reach the next one up - `None` once
         # already at Diamond, the top tier.
@@ -1263,7 +1265,28 @@ class LibrusRankSensor(LibrusSensorBase):
             if next_threshold is not None
             else None,
             "achievements": achievements,
+            "badges": badges,
         }
+
+
+def _badges(coordinator: LibrusDataUpdateCoordinator) -> list[dict[str, Any]]:
+    """Every badge for the Achievements card: tiers, the date each earned
+    key was earned (kept across restarts, never revoked) and the progress
+    towards the next tier."""
+    earned = {item["key"]: item["date"] for item in coordinator.achievements}
+    return [
+        {
+            "key": badge.key,
+            "title": badge.title,
+            "icon": badge.icon,
+            "tiers": list(badge.tiers) or None,
+            "earned": [earned[key] for key in badge.keys() if key in earned],
+            "value": badge.value,
+            "target": badge.target,
+            "unit": badge.unit,
+        }
+        for badge in coordinator.badges
+    ]
 
 
 def _student_number(
