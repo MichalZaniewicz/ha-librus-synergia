@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.2-beta.4
+
+### Fixed
+- **A homework file now downloads on the first tap.** Librus can take more
+  than 30 seconds to prepare a file the first time it's asked for;
+  librus-synergia 0.3.11 waits up to about two minutes instead of giving up
+  (before, the second tap worked).
+
+### Changed
+- Requires librus-synergia 0.3.11.
+
 ## 0.12.2-beta.3
 
 ### Fixed
