@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.2-beta.3
+
+### Fixed
+- **Homework attachments download now.** Checked with a real file: the
+  download goes through a sandbox.librus.pl waiting page, which
+  librus-synergia 0.3.9 handled the wrong way (0.3.10 fixes it).
+- A failed attachment download or timetable week now logs why.
+- No more deprecation warning about `DeviceEntry.config_entries` (it would
+  stop working in Home Assistant 2027.10).
+
+### Changed
+- Requires librus-synergia 0.3.10.
+
 ## 0.12.2-beta.2
 
 ### Added
