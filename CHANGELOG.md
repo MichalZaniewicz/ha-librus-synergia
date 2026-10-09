@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.7
 
 ### Performance
 - **About 40% fewer requests to Librus** (a normal refresh: ~24 → ~15):
