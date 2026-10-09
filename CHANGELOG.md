@@ -1,68 +1,8 @@
 # Changelog
 
-## 0.12.2-beta.5
+## 0.12.2
 
-### Fixed
-- **Homework file downloads that Librus's sandbox rejects are retried.**
-  Found live: now and then the sandbox answers `download_failed`, while a
-  new try a moment later works. librus-synergia 0.3.12 retries with a fresh
-  download key, up to three times.
-
-### Changed
-- Requires librus-synergia 0.3.12.
-
-## 0.12.2-beta.4
-
-### Fixed
-- **A homework file now downloads on the first tap.** Librus can take more
-  than 30 seconds to prepare a file the first time it's asked for;
-  librus-synergia 0.3.11 waits up to about two minutes instead of giving up
-  (before, the second tap worked).
-
-### Changed
-- Requires librus-synergia 0.3.11.
-
-## 0.12.2-beta.3
-
-### Fixed
-- **Homework attachments download now.** Checked with a real file: the
-  download goes through a sandbox.librus.pl waiting page, which
-  librus-synergia 0.3.9 handled the wrong way (0.3.10 fixes it).
-- A failed attachment download or timetable week now logs why.
-- No more deprecation warning about `DeviceEntry.config_entries` (it would
-  stop working in Home Assistant 2027.10).
-
-### Changed
-- Requires librus-synergia 0.3.10.
-
-## 0.12.2-beta.2
-
-### Added
-- **Sent messages and the archive.** The *Unread messages* sensor has
-  `outbox_recent` (messages you sent, each with a `receiver`) and
-  `archive_recent` (past school years, read once a day). `get_message` opens
-  them with `mailbox: outbox` / `archive/inbox`.
-  `missing_mailboxes` lists the mailboxes the account doesn't have (Librus
-  answers 404), so the Messages card can hide them.
-- **Homework attachments.** *Homework assignments* `recent[].attachments`
-  lists the files a teacher attached (`id`, `filename`), and
-  `/api/librus_synergia/homework_attachment/<device id>/<attachment id>`
-  passes one straight from Librus to the browser. Not tried live yet - no
-  teacher has attached a file on the test account.
-- **Assist:** the attendance tool says what to catch up on after the latest
-  absence (missed lessons with topics, homework given meanwhile); the
-  messages tool lists sent messages; homework comes with the names of its
-  files (also in the weekly AI summary).
-
-### Fixed
-- A mailbox the account doesn't have (Librus answers 404, seen for alerts and
-  substitutions) no longer marks messages as degraded, and one failing
-  mailbox no longer empties the others.
-
-### Changed
-- Requires librus-synergia 0.3.9.
-
-## 0.12.2-beta.1
+Everything from 0.12.2-beta.1 to beta.5.
 
 ### Added
 - **What to catch up after an absence.** The *Lesson topics* sensor has a
@@ -71,6 +11,23 @@
   `back_today`), the lessons missed with their topics and the homework given
   meanwhile. New blueprint **What to Catch Up After an Absence** sends it on
   the day back at school (30 blueprints).
+- **Sent messages and the archive.** The *Unread messages* sensor has
+  `outbox_recent` (messages you sent, each with a `receiver`) and
+  `archive_recent` (past school years, read once a day). `get_message` opens
+  them with `mailbox: outbox` / `archive/inbox`. `missing_mailboxes` lists
+  the mailboxes the account doesn't have (Librus answers 404), so the
+  Messages card can hide them.
+- **Homework attachments.** *Homework assignments* `recent[].attachments`
+  lists the files a teacher attached (`id`, `filename`), and
+  `/api/librus_synergia/homework_attachment/<device id>/<attachment id>`
+  passes one straight from Librus to the browser. Checked with a real file:
+  the download goes through a sandbox.librus.pl waiting page that can take
+  over 30 seconds the first time and now and then rejects a download key;
+  the integration waits up to about two minutes and retries with a fresh key.
+- **Assist:** the attendance tool says what to catch up on after the latest
+  absence (missed lessons with topics, homework given meanwhile); the
+  messages tool lists sent messages; homework comes with the names of its
+  files (also in the weekly AI summary).
 
 ### Fixed
 - New-item events: when a part of Librus is missing on the very first
@@ -78,6 +35,15 @@
   grades failing), or when messages or announcements are switched on later,
   or a timetable is published later, the items that show up then are
   recorded silently instead of arriving as a batch of "new" notifications.
+- A mailbox the account doesn't have (Librus answers 404, seen for alerts,
+  substitutions and justifications) no longer marks messages as degraded,
+  and one failing mailbox no longer empties the others.
+- A failed attachment download or timetable week now logs why.
+- No more deprecation warning about `DeviceEntry.config_entries` (it would
+  stop working in Home Assistant 2027.10).
+
+### Changed
+- Requires librus-synergia 0.3.12.
 
 ## 0.12.1
 
