@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.1
 
 ### Added
 - **Averages use the school's own `+` and `-` values.** Librus lets a school
