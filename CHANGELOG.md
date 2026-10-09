@@ -1,18 +1,9 @@
 # Changelog
 
-## 0.12.3-beta.2
+## 0.12.4
 
-### Added
-- **A new descriptive grade sends the "new grade" notification too** (#13).
-  `librus_synergia_new_grade` fires with `kind: descriptive`, the skill as
-  `category` (and `skill`), the teacher and the comments; the *New grade*
-  event entity and the New Grade Notification blueprint pick it up. Existing
-  grades are recorded silently, also when descriptive grades are switched on
-  later.
-- **The weekly AI summary includes the week's descriptive grades**, with the
-  skill, teacher and comment.
-
-## 0.12.3-beta.1
+Everything from 0.12.3-beta.1 and beta.2 (released as 0.12.4, so HACS updates
+the betas too).
 
 ### Fixed
 - **Descriptive grades show the real grade** (#13). A "6" in Synergia came
@@ -28,6 +19,14 @@
   `descriptive_grades`, and Assist's grades tool includes the skill, teacher
   and comment. The skill names and comments are only fetched for students
   who have descriptive grades (the skill list once a day).
+- **A new descriptive grade sends the "new grade" notification too** (#13).
+  `librus_synergia_new_grade` fires with `kind: descriptive`, the skill as
+  `category` (and `skill`), the teacher and the comments; the *New grade*
+  event entity and the New Grade Notification blueprint pick it up. Existing
+  grades are recorded silently, also when descriptive grades are switched on
+  later.
+- **The weekly AI summary includes the week's descriptive grades**, with the
+  skill, teacher and comment.
 
 ### Changed
 - **Lessons held at the same time are one calendar entry** (#14). A subject
