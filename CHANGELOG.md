@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.5-beta.3
 
 ### Added
 - **20 badges, counted from the whole school year.** Besides the original
