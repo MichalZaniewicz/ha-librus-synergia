@@ -756,6 +756,10 @@ async def test_school_and_class_sensors(hass) -> None:
     assert class_state.attributes["student_number"] == 25
 
 
+def _days_from_today(days: int) -> str:
+    return (dt_util.now().date() + timedelta(days=days)).isoformat()
+
+
 async def test_homework_assignments_sensor(hass) -> None:
     client = build_mock_client(
         async_get_homework_assignments={
@@ -766,7 +770,7 @@ async def test_homework_assignments_sensor(hass) -> None:
                     "Text": "Strona 42",
                     "Teacher": {"Id": 200},
                     "Date": "2026-09-01",
-                    "DueDate": "2026-09-08",
+                    "DueDate": _days_from_today(7),
                     "HomeworkAssigmentFiles": [{"Id": 31, "Name": "karta pracy.pdf"}],
                 }
             ]
@@ -1638,8 +1642,8 @@ async def test_homework_assignment_subject_inferred_from_teacher(hass) -> None:
         },
         async_get_homework_assignments={
             "HomeWorkAssignments": [
-                {"Id": 1, "Topic": "Lapbook", "Text": "x", "Teacher": {"Id": 200}, "Date": "2026-09-30", "DueDate": "2026-10-14"},
-                {"Id": 2, "Topic": "Prezentacja", "Text": "y", "Teacher": {"Id": 300}, "Date": "2026-09-30", "DueDate": "2026-10-15"},
+                {"Id": 1, "Topic": "Lapbook", "Text": "x", "Teacher": {"Id": 200}, "Date": "2026-09-30", "DueDate": _days_from_today(3)},
+                {"Id": 2, "Topic": "Prezentacja", "Text": "y", "Teacher": {"Id": 300}, "Date": "2026-09-30", "DueDate": _days_from_today(4)},
             ]
         },
     )
@@ -1663,3 +1667,18 @@ async def test_subject_average_grade_log_carries_teacher(hass) -> None:
 
     subject = hass.states.get(_entity_id(hass, entry, "subject_100_average"))
     assert subject.attributes["grades"][0]["teacher"] == "Jan Kowalski"
+
+
+async def test_homework_recent_lists_upcoming_not_the_earliest_of_the_year(hass) -> None:
+    """With many assignments, `recent` starts a month back - not with the
+    first ones of the school year."""
+    old = [
+        {"Id": i, "Topic": f"Stare {i}", "Text": "", "Date": "2026-09-01", "DueDate": _days_from_today(-60 - i)}
+        for i in range(1, 15)
+    ]
+    soon = {"Id": 99, "Topic": "Jutro", "Text": "", "Date": "2026-09-01", "DueDate": _days_from_today(1)}
+    client = build_mock_client(async_get_homework_assignments={"HomeWorkAssignments": [*old, soon]})
+    entry = await setup_integration(hass, client)
+
+    recent = hass.states.get(_entity_id(hass, entry, "homework_assignments")).attributes["recent"]
+    assert [r["id"] for r in recent] == [99]

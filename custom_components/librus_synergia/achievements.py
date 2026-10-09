@@ -3,9 +3,10 @@
 Pure functions over one cycle's `LibrusData` - no Home Assistant imports.
 Every badge is computed from the whole school year Librus returns, so one
 earned before the integration was installed still shows up, with the date
-it was really earned. Three can't be dated from Librus data (the honours
-forecast, the lucky number and ticked homework): the coordinator stamps
-those with the day it first sees them.
+it was really earned. Two can't be dated from Librus data (the lucky number
+and ticked homework): the coordinator stamps those with the day it first
+sees them. Badges belong to one school year; the coordinator starts over
+when a new one begins.
 
 A tiered badge (e.g. 5 / 10 / 25 sixes) earns one key per tier
 ("sixes_10"); a single badge earns its bare key ("first_six"). The keys of
@@ -185,15 +186,19 @@ def _streak_tiers(
         start = min(breaks) if breaks else None
     if start is None:
         return
-    gap_start = start
-    for end in [*(b for b in sorted(set(breaks)) if start <= b <= today), today]:
+    def award(gap_start: date, last_clean: date) -> None:
         for tier in badge.tiers:
             key = badge.tier_key(tier)
             reached = gap_start + timedelta(days=tier)
-            if key not in badge.earned and reached <= end:
+            if key not in badge.earned and reached <= last_clean:
                 badge.earned[key] = _iso(reached)
-        if end < today:
-            gap_start = max(gap_start, end)
+
+    gap_start = start
+    for brk in sorted(b for b in set(breaks) if start <= b <= today):
+        # The break day itself isn't clean: the gap ends the day before it.
+        award(gap_start, brk - timedelta(days=1))
+        gap_start = brk
+    award(gap_start, today)
     badge.value = max(0, (today - gap_start).days)
 
 
@@ -296,8 +301,11 @@ def compute_badges(
     honours = badge("honours", target=HONOURS_AVERAGE, unit="average")
     report = report_average(subject_forecasts(data, today, thresholds, weighted=weighted))
     honours.value = round(report, 2) if report is not None else None
-    if report is not None and report >= HONOURS_AVERAGE:
-        honours.earned["honours"] = None
+    # Earned only once the year is over: the forecast is just progress until
+    # then (one 5 in September already forecasts 5.0, and a badge is never
+    # taken back).
+    if report is not None and report >= HONOURS_AVERAGE and year_end and today >= year_end:
+        honours.earned["honours"] = _iso(year_end)
 
     comeback = badge("comeback")
     by_id = {g.id: g for g in data.grades}
@@ -314,12 +322,13 @@ def compute_badges(
         if begin is None or end is None:
             continue
         in_semester = [
-            v
-            for g, v in numeric
+            g
+            for g, _v in numeric
             if g.semester == number
             or (g.semester is None and begin <= (_day(g.add_date) or begin) <= end)
         ]
-        has_one = any(v < 2.0 for v in in_semester)
+        # A "1", "1+" or "1-" - not a 2- (worth 1.75).
+        has_one = any(g.value.strip().startswith("1") for g in in_semester)
         if end < today:
             if in_semester and not has_one and "no_ones" not in no_ones.earned:
                 no_ones.earned["no_ones"] = _iso(end)
@@ -373,23 +382,23 @@ def compute_badges(
     subject_attendance = badge(
         "subject_attendance", target=SUBJECT_ATTENDANCE_LESSONS, unit="lessons"
     )
-    per_subject: dict[Any, int] = defaultdict(int)
-    spoiled: set[Any] = set()
+    # A run of 20 lessons of one subject in a row without an absence; an
+    # absence starts that subject's run again.
+    runs: dict[Any, int] = defaultdict(int)
     for a in records:
         subject = data.lesson_subjects.get(a.lesson_id) if a.lesson_id is not None else None
-        if subject is None or subject in spoiled:
+        if subject is None:
             continue
         if is_absence(a):
-            spoiled.add(subject)
+            runs[subject] = 0
             continue
-        per_subject[subject] += 1
+        runs[subject] += 1
         if (
-            per_subject[subject] == SUBJECT_ATTENDANCE_LESSONS
+            runs[subject] == SUBJECT_ATTENDANCE_LESSONS
             and "subject_attendance" not in subject_attendance.earned
         ):
             subject_attendance.earned["subject_attendance"] = (a.date or "")[:10]
-    clean_counts = [n for s, n in per_subject.items() if s not in spoiled]
-    subject_attendance.value = min(max(clean_counts, default=0), SUBJECT_ATTENDANCE_LESSONS)
+    subject_attendance.value = min(max(runs.values(), default=0), SUBJECT_ATTENDANCE_LESSONS)
 
     # --- behaviour --------------------------------------------------
     notes = sorted((n for n in data.notes if _day(n.date)), key=lambda n: n.date or "")

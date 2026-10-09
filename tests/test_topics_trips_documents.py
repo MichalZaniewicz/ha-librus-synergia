@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.librus_synergia.const import (
@@ -177,7 +178,9 @@ async def test_homework_category_name(hass) -> None:
         async_get_homework_assignments={
             "HomeWorkAssignments": [
                 {"Id": 1, "Topic": "Ćwiczenia", "Text": "str. 12", "Teacher": {"Id": 7},
-                 "Date": "2026-10-06", "DueDate": "2026-10-09", "Category": {"Id": 9}}
+                 "Date": "2026-10-06",
+                 "DueDate": (dt_util.now().date() + timedelta(days=2)).isoformat(),
+                 "Category": {"Id": 9}}
             ]
         },
         async_get_homework_assignment_categories={"Categories": [{"Id": 9, "CategoryName": "gramatyka"}]},

@@ -150,9 +150,11 @@ def test_subject_attendance_needs_twenty_clean_lessons() -> None:
     badges = _badges(_data(attendances=records, lesson_subjects={7: 10}))
     assert badges["subject_attendance"].earned == {"subject_attendance": "2026-09-20"}
 
-    spoiled = [_attendance(0, "2026-09-01", type_id=1), *records]
-    badges = _badges(_data(attendances=spoiled, lesson_subjects={7: 10}))
+    # An absence after the 10th lesson starts the run again: 9 since then.
+    broken = [*records[:10], _attendance(0, "2026-09-10", type_id=1), *records[10:19]]
+    badges = _badges(_data(attendances=broken, lesson_subjects={7: 10}))
     assert badges["subject_attendance"].earned == {}
+    assert badges["subject_attendance"].value == 9
 
 
 def test_behaviour_badges() -> None:
@@ -205,3 +207,30 @@ def test_key_titles() -> None:
     assert key_title("good_grade_streak_10") == "10 dobrych ocen z rzędu"
     assert key_title("sixes_25") == "25 szóstek"
     assert key_title("comeback") == "Comeback"
+
+
+def test_streak_tier_not_earned_on_the_break_day() -> None:
+    # Absences on 1.09 and 8.09: only 6 clean days between them.
+    attendances = [_attendance(1, "2026-09-01", type_id=1), _attendance(2, "2026-09-08", type_id=1)]
+    badges = _badges(_data(attendances=attendances), today=date(2026, 9, 10))
+    assert badges["attendance_streak"].earned == {}
+    assert badges["attendance_streak"].value == 2
+
+
+def test_absence_today_resets_the_streak() -> None:
+    attendances = [_attendance(1, "2026-10-20", type_id=1)]
+    badges = _badges(_data(attendances=attendances))
+    assert badges["attendance_streak"].value == 0
+
+
+def test_honours_only_after_the_school_year() -> None:
+    grades = [_grade(1, "5", "2026-09-05")]
+    assert _badges(_data(grades=grades))["honours"].earned == {}
+    later = _badges(_data(grades=grades), today=date(2027, 6, 26))
+    assert later["honours"].earned == {"honours": "2027-06-25"}
+
+
+def test_a_two_minus_is_not_a_one() -> None:
+    grades = [_grade(1, "2-", "2026-10-01")]
+    badges = _badges(_data(grades=grades), today=date(2027, 2, 2))
+    assert badges["no_ones"].earned == {"no_ones": "2027-01-31"}

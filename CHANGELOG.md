@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Badges belong to one school year.** A new school year starts them over,
+  quietly.
+- **A badge is only announced when it's new.** One with an older date (its
+  data arrived only now - a section that failed before, an option switched
+  on) is recorded without an event.
+
+### Fixed
+- **Świadectwo z paskiem was awarded from the forecast** during the year
+  (one 5 in September was enough) and kept. It's now earned only after the
+  school year ends; one awarded by the betas is removed.
+- **Day streaks counted the break day as clean**: 7 days without an absence
+  could be earned on the day of an absence, and an absence today didn't
+  reset the count.
+- **Semester without a 1 counted a 2- as a one.**
+- **Perfect subject attendance** is now 20 lessons of a subject in a row;
+  one absence used to rule that subject out for the rest of the year.
+- **A badge error can't fail the whole update** any more.
+- **Two logins could still replace each other** when a request was
+  rejected just after another one logged in; and a request rejected again
+  right after a good login asked for the password (reauth) - it's now an
+  ordinary failed refresh.
+- **Read receipts were lost** when fetching sent messages failed (or after a
+  restart); they're kept and saved.
+- **Homework list**: the Homework assignments sensor's `recent` held the 10
+  earliest assignments of the whole year, so newer ones (and the cards'
+  tomorrow / month view) went missing once there were more than ten. It now
+  lists those due from a month ago on, up to 30.
+- **Grade scale closed to an account** (401/403/404) uses the default
+  `+`/`-` instead of raising a degraded-endpoint repair issue.
+- **Unknown school document** answers 404, not 502.
+- Saved state is written on unload, so a reload right after a refresh
+  doesn't announce the same items again.
+
+### Performance
+- Partial grades (grade 1 descriptive grading) are asked for once an hour
+  while the account has none, not every refresh.
+
 ## 0.12.5-beta.5
 
 ### Added

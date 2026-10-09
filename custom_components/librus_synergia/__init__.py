@@ -174,6 +174,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.async_save_state()
         # This entry's own dedicated session (see async_setup_entry) -
         # close it here or a reload leaks one aiohttp session/connector
         # per reload, since a fresh one is created on every setup.

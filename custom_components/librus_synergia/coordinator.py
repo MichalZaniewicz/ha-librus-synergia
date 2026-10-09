@@ -209,6 +209,13 @@ _READ_RECEIPT_DAYS = 30
 _READ_RECEIPT_MESSAGES = 5
 # Lesson topics, trips and school documents change a few times a day.
 _MESSAGES_QUICK_RECHECKS = 3
+# Reference endpoints for a school setting that may be closed to an account
+# (403/404): the default is used instead of a degraded-endpoint issue.
+_SCHOOL_SETTING_LABELS = frozenset({"GradingSystem"})
+# A badge earned longer ago than this is recorded without an event.
+_ACHIEVEMENT_NEWS_DAYS = timedelta(days=3)
+# A session younger than this is reused instead of logging in again.
+_FRESH_SESSION_SECONDS = 30
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
 _DAILY = timedelta(days=1)
@@ -585,6 +592,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Mailboxes Librus answered 404 for - this account doesn't have
         # them (the Messages card hides their chips).
         self.missing_mailboxes: set[str] = set()
+        # Mailboxes whose fetch failed this cycle (their list is empty then).
+        self._failed_mailboxes: set[str] = set()
         # The archive (past school years) is read once a day.
         self._archived_messages: list[MessageData] = []
         # Read receipts of recently sent messages: message id -> who it
@@ -610,11 +619,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # upgrade must not announce them all). Never revoked once earned.
         # See _check_achievements and achievements.py.
         self._achievement_dates: dict[str, str] | None = None
+        # The school year (its start date) the badges above belong to; a new
+        # school year starts them over.
+        self._achievement_year: str | None = None
         # Badges from the last cycle, for the Rank sensor.
         self.badges: list[Badge] = []
         # Homework ever ticked in the to-do list (the to-do itself forgets
         # ticks once Librus drops the homework) - for the homework badge.
         self.homework_done_ever: set[str] = set()
+        self._legacy_achievements: list[str] = []
         # subject id -> forecast grade at the previous poll (None = not
         # seeded yet), and the basis it was computed on.
         self._known_forecast: dict[int, int] | None = None
@@ -707,6 +720,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(dates := stored.get("achievement_dates"), dict):
             self._achievement_dates = {str(k): str(v) for k, v in dates.items()}
+        if isinstance(receipts := stored.get("read_receipts"), dict):
+            self.read_receipts = receipts
+        if isinstance(year := stored.get("achievement_year"), str):
+            self._achievement_year = year
+        elif self._achievement_dates is None and isinstance(
+            old := stored.get("achievements"), list
+        ):
+            # Saved by 0.12.4 or older (keys only): kept, dated today, so an
+            # achievement earned under the old rules isn't lost.
+            self._legacy_achievements = [str(k) for k in old]
         if isinstance(done := stored.get("homework_done_ever"), list):
             self.homework_done_ever = {str(uid) for uid in done}
         forecast = stored.get("forecast")
@@ -726,6 +749,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         if saved := stored.get("last_success_at"):
             self.last_success_at = dt_util.parse_datetime(saved)
 
+    async def async_save_state(self) -> None:
+        """Write the saved state now - on unload, so a reload right after a
+        cycle (an options change) doesn't start from the older file and
+        announce the same new items again."""
+        await self._state_store.async_save(self._state_to_save())
+
     def _state_to_save(self) -> dict[str, Any]:
         tracker = self._change_tracker
         return {
@@ -743,6 +772,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 else None
             ),
             "achievement_dates": self._achievement_dates,
+            "achievement_year": self._achievement_year,
+            "read_receipts": self.read_receipts,
             "homework_done_ever": sorted(self.homework_done_ever),
             "forecast": (
                 {
@@ -1034,16 +1065,23 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         used to log in two or three times at once; each login replaced the
         session the others had just made, so all of them failed again (seen
         live right after a restart). A caller that waited while another one
-        logged in uses that login instead of making its own."""
+        logged in uses that login instead of making its own, and so does one
+        whose request was rejected just after a login finished (it went out
+        with the old cookie)."""
         assert self.config_entry is not None
         seen = self._login_count
         async with self._login_lock:
-            if self._login_count != seen:
+            if self._login_count != seen or self._session_is_fresh():
                 return
             await self._client.async_ensure_session_valid(
                 self.config_entry.data[CONF_PASSWORD], force=True
             )
             self._login_count += 1
+
+    def _session_is_fresh(self) -> bool:
+        """A login or token refresh happened in the last few seconds."""
+        age = self._client.session_age_seconds
+        return isinstance(age, (int, float)) and age < _FRESH_SESSION_SECONDS
 
     async def async_fetch_message(self, mailbox: str, message_id: str) -> Any:
         """Fetch one message's full body on demand, for `services.py`'s
@@ -1181,9 +1219,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         assert self.config_entry is not None
         try:
             async with self._login_lock:
+                age = self._client.session_age_seconds
                 await self._client.async_ensure_session_valid(
                     self.config_entry.data[CONF_PASSWORD]
                 )
+                new_age = self._client.session_age_seconds
+                if isinstance(new_age, (int, float)) and (
+                    not isinstance(age, (int, float)) or new_age < age
+                ):
+                    # It logged in (or refreshed): a request still holding
+                    # the old cookie must not log in over this session.
+                    self._login_count += 1
         except LibrusAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except LibrusError as err:
@@ -1207,6 +1253,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             try:
                 await self._async_relogin()
                 core_payloads = await self._async_fetch_core_payloads(week_start, next_week_start)
+            except LibrusSessionExpiredError as err:
+                # The login itself worked (the password is fine) but Librus
+                # still rejected a request - not something to ask the user
+                # about; the next cycle tries again.
+                raise UpdateFailed(str(err)) from err
             except LibrusAuthError as err:
                 raise ConfigEntryAuthFailed(str(err)) from err
             except LibrusError as err:
@@ -1807,6 +1858,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         `REFERENCE_DATA_ENDPOINT_LABELS`' own comment (const.py) for why
         this wasn't wired in originally and why that was a real gap."""
         if isinstance(result, BaseException):
+            if (
+                label in _SCHOOL_SETTING_LABELS
+                and getattr(result, "status_code", None) in (401, 403, 404)
+            ):
+                # Not every school or account may read its grade scale: use
+                # the default one, not a degraded-endpoint repair issue.
+                return {}
             if isinstance(result, LibrusError):
                 _LOGGER.debug(
                     "Reference-data endpoint '%s' fetch failed (non-fatal): %s",
@@ -2019,11 +2077,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             try:
                 return await self._client.async_get_partial_grades(lid)
             except (LibrusSessionExpiredError, LibrusUnexpectedResponseError) as err:
-                if getattr(err, "status_code", None) in (403, 404):
+                status = getattr(err, "status_code", None)
+                if status in (403, 404) or (
+                    isinstance(err, LibrusUnexpectedResponseError) and status in (401, 405)
+                ):
                     return {"data": []}
                 raise
 
-        payload = await self._async_optional("PartialGrades", grades)
+        # Most accounts never have any: then asked once an hour, not every cycle.
+        had_grades = bool((self._last_good.get("PartialGrades") or {}).get("data"))
+        payload = await self._async_optional(
+            "PartialGrades", grades, every=None if had_grades else _HOURLY
+        )
         if not payload.get("data"):
             return {"PartialGrades": payload}
         return {
@@ -2089,7 +2154,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         files = self.data.school_files if self.data else []
         path = next((f.download_path for f in files if str(f.id) == file_id), None)
         if not path:
-            raise LibrusUnexpectedResponseError(f"Unknown school document {file_id}")
+            raise LibrusUnexpectedResponseError(
+                f"Unknown school document {file_id}", status_code=404
+            )
         try:
             return await self._client.async_download_school_file(path)
         except LibrusSessionExpiredError:
@@ -2359,7 +2426,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ("substitutions", "alerts", "justifications", "outbox")
         )
         await self._async_refresh_archived_messages()
-        await self._async_refresh_read_receipts(secondary["outbox"])
+        if "outbox" not in self._failed_mailboxes:
+            await self._async_refresh_read_receipts(secondary["outbox"])
 
         return (
             unread_count,
@@ -2381,6 +2449,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         messages: dict[str, list[MessageData]] = {}
         failed = False
+        self._failed_mailboxes = set()
         for box, result in zip(mailboxes, results, strict=True):
             if isinstance(result, LibrusUnexpectedResponseError) and result.status_code == 404:
                 messages[box] = []
@@ -2390,6 +2459,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     raise result
                 _LOGGER.debug("Mailbox %s fetch failed (non-fatal)", box, exc_info=result)
                 messages[box] = []
+                self._failed_mailboxes.add(box)
                 failed = True
             else:
                 messages[box] = parse_message_list(result, box)
@@ -2411,6 +2481,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         recent = [m for m in sent if (m.send_date or "")[:10] >= cutoff][:_READ_RECEIPT_MESSAGES]
         keep = {m.id for m in recent}
         self.read_receipts = {k: v for k, v in self.read_receipts.items() if k in keep}
+        self._receipts_fetched_at = {
+            k: v for k, v in self._receipts_fetched_at.items() if k in keep
+        }
         for message in recent:
             known = self.read_receipts.get(message.id)
             if known and known["read"] >= known["total"] > 0:
@@ -2789,28 +2862,47 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     def _check_achievements(self, data: LibrusData, today: date) -> None:
         """Badges (achievements.py) for the Rank sensor, and
-        EVENT_ACHIEVEMENT_UNLOCKED for each key earned since the last cycle.
-        A key keeps the date it was earned and is never revoked, even when
-        its streak later breaks."""
+        EVENT_ACHIEVEMENT_UNLOCKED for each key newly earned. A key keeps the
+        date it was earned and is never revoked within the school year, even
+        when its streak later breaks; a new school year starts over."""
         student_number = None
         if self.config_entry is not None:
             raw = self.config_entry.options.get(CONF_STUDENT_NUMBER)
             student_number = int(raw) if raw is not None else self.student_number_from_librus
-        badges = compute_badges(
-            data,
-            today,
-            thresholds=self.grade_thresholds,
-            weighted=self.weighted_average,
-            student_number=student_number,
-            homework_done=len(self.homework_done_ever),
-        )
+        try:
+            badges = compute_badges(
+                data,
+                today,
+                thresholds=self.grade_thresholds,
+                weighted=self.weighted_average,
+                student_number=student_number,
+                homework_done=len(self.homework_done_ever),
+            )
+        except Exception:  # noqa: BLE001 - badges must never fail the update
+            _LOGGER.exception("Could not compute the badges")
+            return
         self.badges = badges
         # Badges come from grades, notes and attendance; a failed fetch of
         # any of them says nothing about what's earned.
         if {"Grades", "Notes", "Attendances", "Attendances/Types"} & self._failed_this_cycle:
             return
+        year = data.school_class.begin_school_year if data.school_class else None
+        if year and self._achievement_year and year != self._achievement_year:
+            # A new school year: start over, quietly.
+            self._achievement_dates = None
+            self.homework_done_ever.clear()
+        if year:
+            self._achievement_year = year
         known = self._achievement_dates
         dates = dict(known or {})
+        honours = next((b for b in badges if b.key == "honours"), None)
+        if honours is not None and not honours.earned:
+            # 0.12.5-beta.3..5 awarded it from the forecast during the year;
+            # it's only earned once the year is over.
+            dates.pop("honours", None)
+        for key in self._legacy_achievements:
+            dates.setdefault(key, today.isoformat())
+        self._legacy_achievements = []
         new: list[str] = []
         for item in badges:
             for key, earned_on in item.earned.items():
@@ -2820,8 +2912,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._achievement_dates = dates
         if known is None:
             return
+        # Only a badge earned in the last few days is news. An older date
+        # means the data behind it only arrived now (a section that failed
+        # before, an option switched on) - recorded quietly.
+        cutoff = (today - _ACHIEVEMENT_NEWS_DAYS).isoformat()
         entry_id = self.config_entry.entry_id if self.config_entry else None
         for key in new:
+            if dates[key] < cutoff:
+                continue
             self.hass.bus.async_fire(
                 EVENT_ACHIEVEMENT_UNLOCKED,
                 {

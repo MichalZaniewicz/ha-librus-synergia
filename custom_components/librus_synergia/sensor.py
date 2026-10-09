@@ -1478,6 +1478,11 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
         }
 
 
+# Homework assignments listed in `recent`: due from this far back, at most this many.
+_HOMEWORK_PAST_DAYS = timedelta(days=31)
+_HOMEWORK_LISTED = 30
+
+
 class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
     """Count of real homework assignments ("zadania domowe") - distinct
     from the Agenda calendar's general `HomeWorks` feed (tests/trips/etc.
@@ -1504,10 +1509,14 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
         data = self.coordinator.data
         teachers = data.teachers
         by_teacher = teacher_subject_ids(data.timetable)
+        # Due from a month ago on, soonest first: the cards show this month,
+        # tomorrow and what's still to do. (The earliest of the whole year
+        # used to fill the list once there were more than ten.)
+        since = (dt_util.now().date() - _HOMEWORK_PAST_DAYS).isoformat()
         recent = sorted(
-            (a for a in data.homework_assignments if a.due_date),
+            (a for a in data.homework_assignments if a.due_date and a.due_date[:10] >= since),
             key=lambda a: a.due_date,
-        )[:10]
+        )[:_HOMEWORK_LISTED]
         return {
             "recent": [
                 {

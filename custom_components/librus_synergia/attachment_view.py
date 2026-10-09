@@ -71,6 +71,8 @@ async def _async_download(
     try:
         file = await download(coordinator)
     except LibrusError as err:
+        if getattr(err, "status_code", None) == 404:
+            return web.Response(status=HTTPStatus.NOT_FOUND, text=str(err))
         _LOGGER.warning("Attachment download failed (%s): %s", request.path, err)
         return web.Response(status=HTTPStatus.BAD_GATEWAY, text=f"Librus: {err}")
     return _file_response(file, fallback_name)

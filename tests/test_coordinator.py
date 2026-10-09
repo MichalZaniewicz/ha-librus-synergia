@@ -1814,7 +1814,7 @@ async def test_achievement_first_six_seeds_silently_then_fires_on_new_six(hass) 
                 "Category": {"Id": 10},
                 "Subject": {"Id": 100},
                 "Semester": 1,
-                "AddDate": "2026-09-05",
+                "AddDate": dt_util.now().date().isoformat(),
             }
         ]
     }
@@ -1873,7 +1873,7 @@ async def test_achievement_good_grade_streak_milestone_fires_once(hass) -> None:
                 "Category": {"Id": 10},
                 "Subject": {"Id": 100},
                 "Semester": 1,
-                "AddDate": f"2026-09-{i:02d}",
+                "AddDate": (dt_util.now().date() - timedelta(days=5 - i)).isoformat(),
             }
             for i in range(1, 6)  # 5 good grades in a row
         ]
@@ -2025,3 +2025,61 @@ async def test_concurrent_session_recoveries_log_in_once(hass) -> None:
         c for c in client.async_ensure_session_valid.call_args_list if c.kwargs.get("force")
     ]
     assert len(force_calls) == 1
+
+
+async def test_session_rejected_again_after_a_good_relogin_is_not_a_reauth(hass) -> None:
+    """The forced login worked (the password is fine) but Librus rejects the
+    retry too: an ordinary failed cycle, not a reauth prompt."""
+    client = build_mock_client()
+    client.async_get_grades.side_effect = LibrusSessionExpiredError("session dead")
+    coordinator = _make_coordinator(hass, client)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_fetch_live()
+
+
+
+async def test_badge_with_an_old_date_is_recorded_without_an_event(hass) -> None:
+    """A badge whose data only arrived later (a section that failed before)
+    carries its real, older date - it is recorded, not announced."""
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    client = build_mock_client(async_get_grades={"Grades": []})
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    old_day = (dt_util.now().date() - timedelta(days=20)).isoformat()
+    client.async_get_grades.return_value = {
+        "Grades": [{"Id": 1, "Grade": "6", "Subject": {"Id": 100}, "Semester": 1, "AddDate": old_day}]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert events == []
+    assert {"key": "first_six", "title": "Pierwsza szóstka!", "date": old_day} in (
+        coordinator.achievements
+    )
+
+
+async def test_new_school_year_starts_badges_over_quietly(hass) -> None:
+    events = async_capture_events(hass, EVENT_ACHIEVEMENT_UNLOCKED)
+    today = dt_util.now().date().isoformat()
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [{"Id": 1, "Grade": "6", "Subject": {"Id": 100}, "Semester": 1, "AddDate": today}]
+        },
+        async_get_classes={"Class": {"Number": 7, "Symbol": "d", "BeginSchoolYear": "2026-09-01"}},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+    assert any(a["key"] == "first_six" for a in coordinator.achievements)
+
+    client.async_get_grades.return_value = {"Grades": []}
+    client.async_get_classes.return_value = {
+        "Class": {"Number": 8, "Symbol": "d", "BeginSchoolYear": "2027-09-01"}
+    }
+    coordinator._reference_data_fetched_at = None  # force the daily reference refetch
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert all(a["key"] != "first_six" for a in coordinator.achievements)
+    assert events == []
