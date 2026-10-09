@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.3-beta.2
 
 ### Added
 - **A new descriptive grade sends the "new grade" notification too** (#13).
