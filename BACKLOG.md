@@ -50,19 +50,21 @@ roadmap; pick from here when it makes sense.
 
 ## Buildable now, just not done
 
-- **`VirtualClasses`** — the client can fetch them, but nothing references
-  a virtual-class id. Lessons themselves carry a virtual-class name/URL in
-  `Timetables` (`VirtualClass`, `SubstitutionClassUrl`), which could be
-  surfaced on the lesson sensors and the Timetable calendar instead.
+- **`VirtualClasses`** — a virtual class is a **group** (e.g. a language
+  group across classes), not an online meeting: szkolny-android uses its id
+  as a team id. Lessons carry it as `VirtualClass`/`VirtualClassName` in
+  `Timetables`, so the group name could be shown on the lesson sensors and
+  the Timetable calendar. There is no link to a remote lesson anywhere in
+  the API (checked 2026-10-09).
 - **`Units` data** — fetched daily, but only
   `GradesSettings.PointGradesEnabled` is used. The bell schedule
   (`LessonsRange`) and the school unit's own name aren't surfaced (the bell
   schedule is already derived from the timetable).
 - **Message coverage** — the `notes` / `absences` / `trash` mailboxes get
-  unread counts only; sent messages and the archive aren't fetched; no
-  `mark_message_read` service.
-- **Assist tools** — the seven tools don't cover lesson topics, school
-  trips, documents, text/point/descriptive grades or justifications yet.
+  unread counts only; opening a message from the archive was never tried;
+  no `mark_message_read` service.
+- **Assist tools** — the eight tools cover everything the sensors have
+  except point grades.
 - **Calendar weeks ahead option** — the timetable calendar fetches other
   weeks on demand; a configurable look-ahead for the Agenda isn't there.
 
@@ -83,6 +85,12 @@ roadmap; pick from here when it makes sense.
 - **Message attachment download** — done in 0.12.0 through a logged-in
   HTTP view (`attachment_view.py`); nothing is saved in Home Assistant and
   the message isn't marked read.
+- **Sent messages and the archive** — done in 0.12.2 (`outbox_recent`,
+  `archive_recent`, `missing_mailboxes` on the Unread messages sensor).
+- **Homework attachment download** — done in 0.12.2 and confirmed with a
+  real file: Synergia's `homework/downloadFile` → sandbox
+  `CSTryToDownload` → POST `CSCheckKey` until ready → GET `CSDownload`
+  (librus-synergia 0.3.10-0.3.12; a rejected key is retried with a new one).
 - **`Notes[].Positive`** — 0 negative, 1 positive, otherwise neutral.
 - **`Grades[].IsConstituent`** — a classification flag, not "counts towards
   the average"; the actual semester/year grades (`IsSemester`/`IsFinal`)

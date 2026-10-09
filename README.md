@@ -50,7 +50,7 @@ https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
 - 🏠 **The school day in your home.** *School day today/tomorrow* and *At school* sensors, school start and end times: wake the house before the first lesson, skip the alarm on a day off, remind you when to leave for pick-up. A sensor shows how this week differs from the usual timetable.
 - 🤖 **A weekly summary written by AI.** Once a week, your own AI model in Home Assistant sums up grades, attendance, behaviour and the week ahead, with 2-4 concrete to-dos.
 - 🗣️ **Ask Assist.** *"What does Ola have tomorrow?"* *"When is the next maths test?"* - by voice or in the chat.
-- 📎 **Message attachments,** straight to your device, without marking the message read in Librus.
+- 📎 **Message and homework attachments,** straight to your device, without marking the message read in Librus.
 - 🛟 **Keeps working when Librus doesn't.** The last good data stays up through an outage, the session renews itself, and a normal login needs no captcha.
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
 
