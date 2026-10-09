@@ -1402,6 +1402,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
 
     @property
+    def achievements(self) -> list[dict[str, str]]:
+        """Every achievement earned so far (kept across restarts), for the
+        Rank sensor's `achievements` attribute - the first sync records
+        them silently, so the bus event alone never reaches a dashboard."""
+        return [
+            {"key": key, "title": _ACHIEVEMENT_TITLES[key]}
+            for key in sorted(self._known_achievements or ())
+            if key in _ACHIEVEMENT_TITLES
+        ]
+
+    @property
     def weighted_average(self) -> bool:
         """The options flow's average mode (weighted unless arithmetic)."""
         if self.config_entry is None:

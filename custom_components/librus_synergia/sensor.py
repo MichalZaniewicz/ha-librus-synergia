@@ -1247,9 +1247,12 @@ class LibrusRankSensor(LibrusSensorBase):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
+        # Earned achievements (key + title) ride along here - the companion
+        # Achievements card reads them, also before there's an average.
+        achievements = self.coordinator.achievements
         average = self._average()
         if average is None:
-            return None
+            return {"achievements": achievements}
         # How far above the CURRENT tier's own threshold, and how much
         # more average is needed to reach the next one up - `None` once
         # already at Diamond, the top tier.
@@ -1259,6 +1262,7 @@ class LibrusRankSensor(LibrusSensorBase):
             "points_to_next_tier": round(next_threshold - average, 2)
             if next_threshold is not None
             else None,
+            "achievements": achievements,
         }
 
 

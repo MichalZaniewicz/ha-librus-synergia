@@ -1559,6 +1559,22 @@ async def test_rank_sensor_unknown_without_any_grades(hass) -> None:
     assert state.state == "unknown"
 
 
+async def test_rank_sensor_lists_achievements_earned_before_setup(hass) -> None:
+    """Achievements already earned are recorded silently on the first sync,
+    so no bus event ever reaches a dashboard - the Rank sensor lists them."""
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "6", "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-01"},
+            ]
+        }
+    )
+    entry = await setup_integration(hass, client)
+
+    achievements = hass.states.get(_entity_id(hass, entry, "rank")).attributes["achievements"]
+    assert {"key": "first_six", "title": "Pierwsza szóstka!"} in achievements
+
+
 async def test_homework_assignment_subject_inferred_from_teacher(hass) -> None:
     """HomeWorkAssignments has no Subject field - the subject comes from the
     teacher's lessons in the timetable, only when that teacher teaches one

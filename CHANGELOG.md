@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Achievements already earned never showed up.** The first sync records
+  them silently (no flood of old notifications), so the event never reached
+  the Achievements card. The Rank sensor now lists every achievement earned
+  so far in an `achievements` attribute (`key`, `title`), which the card
+  reads.
+
 ## 0.12.5-beta.2
 
 ### Added
