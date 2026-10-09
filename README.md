@@ -68,12 +68,12 @@ Read it on the dashboard, get it as a phone notification with a blueprint, or pr
 
 ## A dashboard in minutes
 
-**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 65 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 66 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
 
 ![Report card forecast, school trips, lesson topics, catch-up, behaviour, exam prep, school documents and attendance by subject cards](docs/cards-showcase.png)
 
 <details>
-<summary><b>All 65 cards</b></summary>
+<summary><b>All 66 cards</b></summary>
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
@@ -112,7 +112,7 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 
 ## Related projects
 
-- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 65 Lovelace cards for this integration.
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 66 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
