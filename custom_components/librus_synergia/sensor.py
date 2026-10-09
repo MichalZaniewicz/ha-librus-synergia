@@ -24,7 +24,6 @@ from librus_synergia.models import (
     BehaviourGradeData,
     GradeData,
     GradingSystemData,
-    HomeworkEventData,
     LessonData,
     LibrusData,
     MessageData,
@@ -89,7 +88,9 @@ _GRADE_IMPROVEMENTS = DataMemo()
 _SORTED_LESSONS = DataMemo()
 
 
-def _grades_by_subject(data: LibrusData) -> dict[Any, list[GradeData]]:
+def _grades_by_subject(
+    data: LibrusData, owner: Hashable | None = None
+) -> dict[Any, list[GradeData]]:
     """subject id -> that subject's grades, in the order Librus sent them."""
 
     def group() -> dict[Any, list[GradeData]]:
@@ -98,12 +99,16 @@ def _grades_by_subject(data: LibrusData) -> dict[Any, list[GradeData]]:
             result.setdefault(grade.subject_id, []).append(grade)
         return result
 
-    return _GRADES_BY_SUBJECT.get(data, None, group)
+    return _GRADES_BY_SUBJECT.get(data, None, group, owner=owner)
 
 
-def _grade_improvements(data: LibrusData) -> tuple[dict[int, str], set[int]]:
+def _grade_improvements(
+    data: LibrusData, owner: Hashable | None = None
+) -> tuple[dict[int, str], set[int]]:
     """`coordinator.grade_improvements` over all grades, once per data."""
-    return _GRADE_IMPROVEMENTS.get(data, None, lambda: grade_improvements(data.grades))
+    return _GRADE_IMPROVEMENTS.get(
+        data, None, lambda: grade_improvements(data.grades), owner=owner
+    )
 
 
 def _latest_grade(grades: list[GradeData], *, subject_id: int | None = None) -> GradeData | None:
@@ -147,13 +152,17 @@ def _lesson_bounds(day: date, lesson: LessonData) -> tuple[datetime, datetime] |
     )
 
 
-def _sorted_lessons(data: LibrusData) -> list[tuple[datetime, datetime, date, LessonData]]:
+def _sorted_lessons(
+    data: LibrusData, owner: Hashable | None = None
+) -> list[tuple[datetime, datetime, date, LessonData]]:
     """Every timetable lesson with a valid time, flattened and sorted by
     start. Keeps parallel-group lessons (a single period split into two
     language classes, say) - both appear, ordered by start then arbitrarily.
     Shared between callers (keyed by the local date, like
     `school_day.school_days`) - don't modify it."""
-    return _SORTED_LESSONS.get(data, dt_util.now().date(), lambda: _sort_lessons(data))
+    return _SORTED_LESSONS.get(
+        data, dt_util.now().date(), lambda: _sort_lessons(data), owner=owner
+    )
 
 
 def _sort_lessons(data: LibrusData) -> list[tuple[datetime, datetime, date, LessonData]]:
@@ -548,7 +557,8 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         """This subject's grades only - the averages below still filter by
         subject id too, so the result is the same as over all grades."""
         assert self.coordinator.data is not None
-        return _grades_by_subject(self.coordinator.data).get(self._subject_id, [])
+        by_subject = _grades_by_subject(self.coordinator.data, self.coordinator.memo_owner)
+        return by_subject.get(self._subject_id, [])
 
     @property
     def native_value(self) -> float | None:
@@ -587,7 +597,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         count = len(subject_grades)
         categories = self.coordinator.data.grade_categories
         # Over ALL grades: a correction points at the grade it improves by id.
-        improves, improved = _grade_improvements(self.coordinator.data)
+        improves, improved = _grade_improvements(self.coordinator.data, self.coordinator.memo_owner)
         # Full per-grade list for this one subject - lets a dashboard card
         # show the actual grade log, not just the computed average. Sorted
         # newest-first; date is a plain "YYYY-MM-DD"-prefixed string from
@@ -659,6 +669,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                     dt_util.now().date(),
                     self.coordinator.grade_thresholds,
                     weighted=self._weighted,
+                    owner=self.coordinator.memo_owner,
                 )
                 if f.subject_id == self._subject_id
             ),
@@ -700,6 +711,7 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
             dt_util.now().date(),
             self.coordinator.grade_thresholds,
             weighted=self._weighted,
+            owner=self.coordinator.memo_owner,
         )
 
     @property
@@ -1573,14 +1585,23 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
         data = self.coordinator.data
         teachers = data.teachers
         by_teacher = teacher_subject_ids(data.timetable)
-        # Due from a month ago on, soonest first: the cards show this month,
-        # tomorrow and what's still to do. (The earliest of the whole year
-        # used to fill the list once there were more than ten.)
-        since = (dt_util.now().date() - _HOMEWORK_PAST_DAYS).isoformat()
-        recent = sorted(
-            (a for a in data.homework_assignments if a.due_date and a.due_date[:10] >= since),
+        # What's still to do first (soonest first), then what was due in the
+        # last month (newest first) to fill the list. Sorting the whole
+        # month by due date and cutting at the cap dropped tomorrow's
+        # homework once a busy month had more past items than the cap.
+        today = dt_util.now().date()
+        today_iso = today.isoformat()
+        since = (today - _HOMEWORK_PAST_DAYS).isoformat()
+        dated = [a for a in data.homework_assignments if a.due_date]
+        upcoming = sorted(
+            (a for a in dated if a.due_date[:10] >= today_iso), key=lambda a: a.due_date
+        )
+        past = sorted(
+            (a for a in dated if since <= a.due_date[:10] < today_iso),
             key=lambda a: a.due_date,
-        )[:_HOMEWORK_LISTED]
+            reverse=True,
+        )
+        recent = [*upcoming, *past][:_HOMEWORK_LISTED]
         return {
             "recent": [
                 {
@@ -1946,7 +1967,8 @@ class LibrusNextLessonSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         now = dt_util.now()
-        for start, end, day, lesson in _sorted_lessons(self.coordinator.data):
+        lessons = _sorted_lessons(self.coordinator.data, self.coordinator.memo_owner)
+        for start, end, day, lesson in lessons:
             if lesson.is_canceled or start <= now:
                 continue
             return start, end, day, lesson
@@ -1985,7 +2007,8 @@ class LibrusCurrentLessonSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         now = dt_util.now()
-        for start, end, day, lesson in _sorted_lessons(self.coordinator.data):
+        lessons = _sorted_lessons(self.coordinator.data, self.coordinator.memo_owner)
+        for start, end, day, lesson in lessons:
             if lesson.is_canceled:
                 continue
             if start <= now <= end:
@@ -2055,7 +2078,8 @@ class LibrusSchoolStartSensor(_LibrusSchoolTimeSensor):
         super().__init__(coordinator, entry, "school_start")
 
     def _pick(self) -> SchoolDay | None:
-        return next_start(school_days(self.coordinator.data), dt_util.now())
+        days = school_days(self.coordinator.data, self.coordinator.memo_owner)
+        return next_start(days, dt_util.now())
 
     def _moment(self, school_day: SchoolDay) -> datetime:
         return school_day.first_start
@@ -2075,7 +2099,8 @@ class LibrusSchoolEndSensor(_LibrusSchoolTimeSensor):
         super().__init__(coordinator, entry, "school_end")
 
     def _pick(self) -> SchoolDay | None:
-        return next_end(school_days(self.coordinator.data), dt_util.now())
+        days = school_days(self.coordinator.data, self.coordinator.memo_owner)
+        return next_end(days, dt_util.now())
 
     def _moment(self, school_day: SchoolDay) -> datetime:
         return school_day.last_end

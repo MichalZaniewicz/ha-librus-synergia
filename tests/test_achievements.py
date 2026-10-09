@@ -151,10 +151,29 @@ def test_subject_attendance_needs_twenty_clean_lessons() -> None:
     assert badges["subject_attendance"].earned == {"subject_attendance": "2026-09-20"}
 
     # An absence after the 10th lesson starts the run again: 9 since then.
-    broken = [*records[:10], _attendance(0, "2026-09-10", type_id=1), *records[10:19]]
+    # (Same day and lesson number here, so the later id puts it after.)
+    broken = [*records[:10], _attendance(100, "2026-09-10", type_id=1), *records[10:19]]
     badges = _badges(_data(attendances=broken, lesson_subjects={7: 10}))
     assert badges["subject_attendance"].earned == {}
     assert badges["subject_attendance"].value == 9
+
+
+def test_subject_runs_follow_lesson_order_within_a_day() -> None:
+    """Records of one day in lesson order, not in the order they're listed:
+    an absence in lesson 1 listed after lesson 2 still breaks the run
+    before lesson 2."""
+    records = [_attendance(i, f"2026-09-{i:02d}") for i in range(1, 20)]
+    second = AttendanceData(
+        id=200, lesson_id=7, lesson_no=2, date="2026-09-20", semester=1, type_id=100
+    )
+    first_absent = AttendanceData(
+        id=201, lesson_id=7, lesson_no=1, date="2026-09-20", semester=1, type_id=1
+    )
+    badges = _badges(
+        _data(attendances=[*records, second, first_absent], lesson_subjects={7: 10})
+    )
+    assert badges["subject_attendance"].earned == {}
+    assert badges["subject_attendance"].value == 1
 
 
 def test_behaviour_badges() -> None:

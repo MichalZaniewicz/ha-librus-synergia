@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.librus_synergia.const import DOMAIN, EVENT_MESSAGE_READ, EVENT_NEW_GRADE
 from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from librus_synergia import LibrusConnectionError, LibrusUnexpectedResponseError
 
 from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, setup_integration
 
@@ -158,4 +159,41 @@ async def test_read_receipt_fires_once_when_the_recipient_reads(hass) -> None:
 
     (event,) = events
     assert (event.data["receiver"], event.data["topic"]) == ("Anna Nowak", "Pytanie")
+    # From this cycle's Me - `coordinator.data` is never set here, as on the
+    # first refresh after a restart.
+    assert coordinator.data is None
+    assert event.data["student"] == "Ola Kowalska"
     assert client.async_get_message.await_count == 2
+
+
+async def test_child_lookup_failure_keeps_the_last_lid_and_asks_again(hass) -> None:
+    """A dead session or a timeout on the child's LID lookup isn't "no
+    LID": the grades keep coming with the last known one, and the lookup is
+    asked again next cycle rather than a day later."""
+    client = _partial_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    coordinator._fetched_at.pop("StudentIdentifier")  # a day later
+
+    client.async_get_token_info.side_effect = LibrusConnectionError("timeout")
+    client.async_get_partial_grades.reset_mock()
+    await coordinator._async_update_data()
+    client.async_get_partial_grades.assert_awaited_with("LID-AUTH-USER-K")
+    asked = client.async_get_token_info.await_count
+
+    await coordinator._async_update_data()
+    assert client.async_get_token_info.await_count == asked + 1
+
+
+async def test_child_lookup_refusal_is_kept_for_the_day(hass) -> None:
+    client = _partial_client()
+    client.async_get_token_info.side_effect = LibrusUnexpectedResponseError(
+        "HTTP 404", status_code=404
+    )
+    coordinator = _coordinator(hass, client)
+
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    assert client.async_get_token_info.await_count == 1
+    client.async_get_partial_grades.assert_not_called()

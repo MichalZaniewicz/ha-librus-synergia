@@ -75,6 +75,14 @@ async def _async_download(
             return web.Response(status=HTTPStatus.NOT_FOUND, text=str(err))
         _LOGGER.warning("Attachment download failed (%s): %s", request.path, err)
         return web.Response(status=HTTPStatus.BAD_GATEWAY, text=f"Librus: {err}")
+    except ValueError as err:
+        # The library raises ValueError for an answer it can't make sense
+        # of (e.g. a sandbox key or redirect it doesn't recognise) - still
+        # Librus's side, so a short 502 rather than a 500 with a traceback.
+        _LOGGER.warning("Attachment download failed (%s): %s", request.path, err)
+        return web.Response(
+            status=HTTPStatus.BAD_GATEWAY, text="Librus: unexpected download response"
+        )
     return _file_response(file, fallback_name)
 
 

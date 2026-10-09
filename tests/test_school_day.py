@@ -214,6 +214,13 @@ def test_daily_averages_step_with_new_grades() -> None:
     ]
     overall = dict(daily_averages(grades, {}, date(2026, 9, 5)))
     assert overall[date(2026, 9, 3)] == 3.0
+    # From a later day on: the same values, just fewer days.
+    assert daily_averages(grades, {}, date(2026, 9, 5), subject_id=1, start=date(2026, 9, 4)) == (
+        points[2:]
+    )
+    assert daily_averages(grades, {}, date(2026, 9, 5), start=date(2026, 9, 3)) == [
+        (day, value) for day, value in overall.items() if day >= date(2026, 9, 3)
+    ]
 
 
 async def test_average_history_writes_statistics(hass) -> None:

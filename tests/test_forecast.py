@@ -15,6 +15,7 @@ from librus_synergia.models import (
 from custom_components.librus_synergia.forecast import (
     BASIS_SCHOOL_YEAR,
     BASIS_SEMESTER_1,
+    DataMemo,
     forecast_basis,
     parse_thresholds,
     predicted_grade,
@@ -186,3 +187,30 @@ def test_forecasts_are_worked_out_once_per_data_object() -> None:
     changed = _data([_grade(1, "2", 10)])
     assert subject_forecasts(changed, _TODAY, _THRESHOLDS)[0].average == 2.0
     assert subject_forecasts(data, _TODAY, _THRESHOLDS)[0].average == 4.5
+
+
+def test_data_memo_keeps_one_data_object_per_owner() -> None:
+    """New data replaces the owner's old results (the old snapshot isn't
+    kept alive), and more students than the old 4-entry list don't evict
+    each other."""
+    memo = DataMemo()
+    calls: list[str] = []
+
+    def compute(name: str):
+        def run() -> str:
+            calls.append(name)
+            return name
+
+        return run
+
+    old, new = object(), object()
+    assert memo.get(old, "k", compute("old"), owner="entry_a") == "old"
+    assert memo.get(new, "k", compute("new"), owner="entry_a") == "new"
+    assert all(held is not old for held, _ in memo._slots.values())
+
+    students = [object() for _ in range(6)]
+    for index, data in enumerate(students):
+        memo.get(data, "k", compute(f"s{index}"), owner=f"entry_{index}")
+    for index, data in enumerate(students):
+        memo.get(data, "k", compute("again"), owner=f"entry_{index}")
+    assert "again" not in calls

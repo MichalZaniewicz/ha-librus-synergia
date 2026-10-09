@@ -9,6 +9,7 @@ in on a day off).
 
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -50,14 +51,17 @@ def _free_dates(data: LibrusData) -> set[date]:
     return dates
 
 
-def school_days(data: LibrusData | None) -> dict[date, SchoolDay]:
+def school_days(data: LibrusData | None, owner: Hashable | None = None) -> dict[date, SchoolDay]:
     """Every day in the cached timetable that has lessons, keyed by date.
-    The dict is shared between callers - don't modify it."""
+    The dict is shared between callers - don't modify it. `owner` is the
+    config entry id (see forecast.DataMemo)."""
     if data is None:
         return {}
     # Keyed by the local date too, so a result never outlives the day it
     # was worked out on (lesson times become local datetimes).
-    return _SCHOOL_DAYS.get(data, dt_util.now().date(), lambda: _school_days(data))
+    return _SCHOOL_DAYS.get(
+        data, dt_util.now().date(), lambda: _school_days(data), owner=owner
+    )
 
 
 def _school_days(data: LibrusData) -> dict[date, SchoolDay]:

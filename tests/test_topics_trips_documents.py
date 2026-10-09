@@ -244,6 +244,23 @@ async def test_homework_attachment_view_retries_after_session_expiry(hass, hass_
     client.async_download_homework_attachment.assert_awaited_with("31")
 
 
+async def test_attachment_view_answers_502_on_an_unexpected_download_answer(
+    hass, hass_client
+) -> None:
+    """The library raises ValueError for a download answer it can't make
+    sense of - a short 502, not a 500 with a traceback."""
+    client = build_mock_client()
+    client.async_download_homework_attachment.side_effect = ValueError("bad sandbox key")
+    entry = await setup_integration(hass, client)
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    http = await hass_client()
+
+    response = await http.get(f"/api/{DOMAIN}/homework_attachment/{device.id}/31")
+
+    assert response.status == 502
+    assert "bad sandbox key" not in await response.text()
+
+
 async def test_school_file_view_downloads_through_home_assistant(hass, hass_client) -> None:
     """The document's Synergia link needs a logged-in Synergia session the
     browser doesn't have, so it goes through Home Assistant."""

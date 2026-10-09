@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from calendar import monthrange
 from collections import defaultdict
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
@@ -157,6 +158,22 @@ def _iso(value: date) -> str:
     return value.isoformat()
 
 
+def _lesson_order(record: AttendanceData) -> tuple[Any, ...]:
+    """Sort key for attendance records: day, then lesson number (records
+    without one last), then id - numeric ids by value, others ("t41685",
+    seen live) after them as text, so mixed id types still compare."""
+    try:
+        id_key: tuple[int, int, str] = (0, int(record.id), "")
+    except (TypeError, ValueError):
+        id_key = (1, 0, str(record.id))
+    return (
+        (record.date or "")[:10],
+        record.lesson_no is None,
+        record.lesson_no or 0,
+        id_key,
+    )
+
+
 def _day_to_day(grades: list[GradeData]) -> list[GradeData]:
     return [
         g
@@ -210,9 +227,11 @@ def compute_badges(
     weighted: bool = True,
     student_number: int | None = None,
     homework_done: int = 0,
+    owner: Hashable | None = None,
 ) -> list[Badge]:
     """Every badge with what's earned (and when) and the progress towards
-    the next tier. Order is the card's order."""
+    the next tier. Order is the card's order. `owner` is the config entry
+    id, for the shared forecast cache (forecast.DataMemo)."""
     grading = data.grading_system
     categories = data.grade_categories
     school_class = data.school_class
@@ -299,7 +318,9 @@ def compute_badges(
     star.value = best_average
 
     honours = badge("honours", target=HONOURS_AVERAGE, unit="average")
-    report = report_average(subject_forecasts(data, today, thresholds, weighted=weighted))
+    report = report_average(
+        subject_forecasts(data, today, thresholds, weighted=weighted, owner=owner)
+    )
     honours.value = round(report, 2) if report is not None else None
     # Earned only once the year is over: the forecast is just progress until
     # then (one 5 in September already forecasts 5.0, and a badge is never
@@ -338,9 +359,10 @@ def compute_badges(
 
     # --- attendance -------------------------------------------------
     types = data.attendance_types
-    records = sorted(
-        (a for a in data.attendances if _day(a.date)), key=lambda a: a.date or ""
-    )
+    # In lesson order within a day, not the order Librus lists them in: the
+    # subject runs below count lessons in a row, and an absence listed
+    # before an earlier lesson of the same day would break the wrong run.
+    records = sorted((a for a in data.attendances if _day(a.date)), key=_lesson_order)
 
     def is_absence(a: AttendanceData) -> bool:
         kind = types.get(a.type_id) if a.type_id is not None else None  # type: ignore[arg-type]

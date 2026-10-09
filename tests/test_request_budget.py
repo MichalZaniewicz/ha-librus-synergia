@@ -4,6 +4,7 @@ saved state is written only when something in it changed."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import timedelta
 from unittest.mock import patch
@@ -213,9 +214,9 @@ async def test_unknown_category_or_type_is_fetched_the_same_cycle(hass, freezer)
     assert data.attendance_types[1685].name == "Pobyt w sanatorium"
 
 
-async def test_id_librus_itself_does_not_know_is_asked_hourly(hass, freezer) -> None:
+async def test_id_librus_itself_does_not_know_waits_for_the_daily_refresh(hass, freezer) -> None:
     """A category id the categories endpoint doesn't list either must not
-    be asked for on every cycle."""
+    be asked for on every cycle, nor every hour - once is enough."""
     freezer.move_to(NOON)
     client = _lookup_client(async_get_grades={"Grades": [_grade(1, 99)]})
     coordinator = _coordinator(hass, client)
@@ -225,9 +226,23 @@ async def test_id_librus_itself_does_not_know_is_asked_hourly(hass, freezer) -> 
     await coordinator._async_update_data()
     assert client.async_get_grade_categories.call_count == 1
 
-    freezer.tick(timedelta(minutes=45))
+    freezer.tick(timedelta(hours=2))
+    await coordinator._async_update_data()
+    assert client.async_get_grade_categories.call_count == 1
+
+    # A different unknown id is asked for at once.
+    client.async_get_grades.return_value = {"Grades": [_grade(1, 99), _grade(2, 98)]}
+    freezer.tick(CYCLE)
     await coordinator._async_update_data()
     assert client.async_get_grade_categories.call_count == 2
+
+    # Then nothing until the daily refresh.
+    freezer.tick(timedelta(hours=3))
+    await coordinator._async_update_data()
+    assert client.async_get_grade_categories.call_count == 2
+    freezer.tick(timedelta(hours=22))
+    await coordinator._async_update_data()
+    assert client.async_get_grade_categories.call_count == 3
 
 
 async def test_failed_type_refetch_is_retried_and_holds_back_absences(hass, freezer) -> None:
@@ -486,3 +501,109 @@ async def test_old_saved_timetable_copies_are_dropped(hass, hass_storage) -> Non
     assert "Timetable (this week)" not in coordinator._last_good
     assert "Grades" in coordinator._last_good
     assert coordinator._state_dirty is True
+
+
+# ----------------------------------------------------------------------
+# Point grades
+# ----------------------------------------------------------------------
+
+
+def _point_grade(grade_id: int, category_id: int) -> dict:
+    return {
+        "Id": grade_id,
+        "Grade": "5",
+        "GradeValue": 5,
+        "Category": {"Id": category_id},
+        "Subject": {"Id": 100},
+        "Semester": 1,
+        "AddDate": "2026-10-01 10:00:00",
+    }
+
+
+async def test_point_grades_hourly_while_unknown_and_categories_on_demand(hass, freezer) -> None:
+    """While Units hasn't said whether the school grades in points, point
+    grades are asked for at most hourly; their categories once a day, or
+    in the same cycle for a category the saved copy doesn't have."""
+    freezer.move_to(NOON)
+    client = build_mock_client(
+        async_get_point_grades={"Grades": [_point_grade(1, 1)]},
+        async_get_point_grade_categories={
+            "Categories": [{"Id": 1, "Name": "Sprawdzian", "ValueTo": 10}]
+        },
+    )
+    coordinator = _coordinator(hass, client)
+
+    await coordinator._async_update_data()
+    freezer.tick(CYCLE)
+    await coordinator._async_update_data()
+    assert coordinator.point_grades_enabled is None
+    assert client.async_get_point_grades.call_count == 1
+    assert client.async_get_point_grade_categories.call_count == 1
+
+    client.async_get_point_grades.return_value = {
+        "Grades": [_point_grade(1, 1), _point_grade(2, 2)]
+    }
+    client.async_get_point_grade_categories.return_value = {
+        "Categories": [
+            {"Id": 1, "Name": "Sprawdzian", "ValueTo": 10},
+            {"Id": 2, "Name": "Kartkówka", "ValueTo": 5},
+        ]
+    }
+    freezer.tick(timedelta(minutes=45))
+    data = await coordinator._async_update_data()
+
+    assert client.async_get_point_grades.call_count == 2
+    assert client.async_get_point_grade_categories.call_count == 2
+    assert {g.id: g.max_points for g in data.point_grades} == {1: 10.0, 2: 5.0}
+
+
+# ----------------------------------------------------------------------
+# Reference data
+# ----------------------------------------------------------------------
+
+
+_REFERENCE_METHODS = (
+    "async_get_subjects",
+    "async_get_teachers",
+    "async_get_classrooms",
+    "async_get_schools",
+    "async_get_classes",
+    "async_get_homework_categories",
+    "async_get_school_free_days",
+    "async_get_class_free_days",
+    "async_get_note_categories",
+    "async_get_behaviour_grade_point_categories",
+    "async_get_lessons",
+    "async_get_text_grade_categories",
+    "async_get_homework_assignment_categories",
+    "async_get_units",
+    "async_get_grading_system",
+    "async_get_grade_categories",
+    "async_get_attendance_types",
+)
+
+
+async def test_reference_data_requests_are_capped(hass) -> None:
+    """Seventeen reference requests, at most six in flight at once."""
+    client = build_mock_client()
+    in_flight = {"now": 0, "max": 0}
+
+    for name in _REFERENCE_METHODS:
+        method = getattr(client, name)
+
+        async def call(*_args, _result=method.return_value, **_kwargs):
+            in_flight["now"] += 1
+            in_flight["max"] = max(in_flight["max"], in_flight["now"])
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            in_flight["now"] -= 1
+            return _result
+
+        method.side_effect = call
+    coordinator = _coordinator(hass, client)
+
+    assert await coordinator._async_refresh_reference_data() is True
+
+    assert in_flight["max"] == 6
+    for name in _REFERENCE_METHODS:
+        assert getattr(client, name).call_count == 1

@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+Uses [librus-synergia 0.3.17](https://pypi.org/project/librus-synergia/0.3.17/): a dead Synergia web session on a download is caught again, and the 150 s download limit covers the whole call.
+
+### Fixed
+- **Homework list kept the oldest items when there were many**: `recent`
+  now lists what's due from today on first (soonest first), then what was
+  due in the last month (newest first), 30 in all - tomorrow's homework
+  can't be pushed out.
+- **"Message read" right after a restart had no student name.**
+- **A request rejected right after a token refresh now logs in again**
+  instead of trusting the just-refreshed session; a request only skips its
+  own login when another one logged in after it was sent.
+- **Opening a message with `get_message`** makes the next refresh read that
+  mailbox's list again (a new message could otherwise wait up to an hour).
+- **The grade-scale repair issue clears itself** when the school doesn't
+  share its scale.
+- **Badge notifications** cover badges dated up to 7 days back (attendance
+  is often entered late), and the achievements kept from 0.12.4 or older
+  can no longer be lost on the first refresh after updating.
+- **Reloading the integration** can't leave a later state save behind, and
+  a disk error while saving can't fail the unload.
+- **A malformed download link** answers 502 instead of an error page.
+- **Partial grades (grade 1):** a timeout looking up the child no longer
+  hides them for a day.
+- Lessons of one day are taken in lesson order for the subject-attendance
+  badge.
+
+### Performance
+- Descriptive-grade comments and point-grade categories are read only when
+  a new one appears (and once a day); point grades are asked at most hourly
+  while it isn't known whether the school uses them; an unknown category
+  that Librus itself doesn't list is asked again once a day, not hourly.
+- The daily school-data refresh sends at most 6 requests at a time.
+- Grade-average history recalculates from the first changed day, not from
+  the start of the year.
+- Cached forecasts keep only each student's current data.
+
 ## 0.12.5-beta.7
 
 ### Performance

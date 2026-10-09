@@ -370,7 +370,11 @@ class GradesTool(_LibrusTool):
                         }
                     )
                     for f in subject_forecasts(
-                        data, today, coordinator.grade_thresholds, weighted=weighted
+                        data,
+                        today,
+                        coordinator.grade_thresholds,
+                        weighted=weighted,
+                        owner=coordinator.memo_owner,
                     )
                     if subject_ids is None or f.subject_id in subject_ids
                 ]

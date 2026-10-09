@@ -7,7 +7,6 @@ from datetime import date, timedelta
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_capture_events
@@ -1169,8 +1168,25 @@ async def test_descriptive_grade_skills_fetched_once_a_day(hass) -> None:
     data = await coordinator._async_update_data()
 
     assert client.async_get_descriptive_grade_skills.call_count == 1
-    assert client.async_get_descriptive_grade_comments.call_count == 2
+    # The comments too: the saved copy already has comment 44.
+    assert client.async_get_descriptive_grade_comments.call_count == 1
     assert data.descriptive_grades[0].skill == "Ekspresja muzyczna. Śpiew"
+    assert data.descriptive_grades[0].comments == ["Piosenka - dwie zwrotki"]
+
+    # A new grade with a comment the saved copy doesn't have: asked again
+    # in the same cycle.
+    client.async_get_descriptive_grades.return_value = {
+        "Grades": [
+            *client.async_get_descriptive_grades.return_value["Grades"],
+            {"Id": 2, "Subject": {"Id": 100}, "Map": "5", "Date": "2026-10-01", "Comments": [{"Id": 45}]},
+        ]
+    }
+    client.async_get_descriptive_grade_comments.return_value = {
+        "Comments": [{"Id": 44, "Text": "Piosenka - dwie zwrotki"}, {"Id": 45, "Text": "Rytm"}]
+    }
+    data = await coordinator._async_update_data()
+    assert client.async_get_descriptive_grade_comments.call_count == 2
+    assert {g.id: g.comments for g in data.descriptive_grades}[2] == ["Rytm"]
 
 
 def _timetable_with_disruption(day_iso: str, *, canceled: bool = False, substitution: bool = False) -> dict:

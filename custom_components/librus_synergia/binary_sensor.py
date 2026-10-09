@@ -69,7 +69,8 @@ class LibrusSchoolDayTodaySensor(LibrusSchoolBinarySensor):
         super().__init__(coordinator, entry, "school_day_today")
 
     def _school_day(self) -> SchoolDay | None:
-        return school_days(self.coordinator.data).get(dt_util.now().date())
+        days = school_days(self.coordinator.data, self.coordinator.memo_owner)
+        return days.get(dt_util.now().date())
 
     @property
     def is_on(self) -> bool | None:
@@ -87,7 +88,7 @@ class LibrusSchoolDayTomorrowSensor(LibrusSchoolBinarySensor):
         super().__init__(coordinator, entry, "school_day_tomorrow")
 
     def _school_day(self) -> SchoolDay | None:
-        return school_days(self.coordinator.data).get(
+        return school_days(self.coordinator.data, self.coordinator.memo_owner).get(
             dt_util.now().date() + timedelta(days=1)
         )
 
@@ -110,13 +111,15 @@ class LibrusInSchoolSensor(LibrusSchoolBinarySensor):
         super().__init__(coordinator, entry, "in_school")
 
     def _school_day(self) -> SchoolDay | None:
-        return school_days(self.coordinator.data).get(dt_util.now().date())
+        days = school_days(self.coordinator.data, self.coordinator.memo_owner)
+        return days.get(dt_util.now().date())
 
     @property
     def is_on(self) -> bool | None:
         if self.coordinator.data is None:
             return None
-        return in_school(school_days(self.coordinator.data), dt_util.now())
+        days = school_days(self.coordinator.data, self.coordinator.memo_owner)
+        return in_school(days, dt_util.now())
 
 
 class LibrusGradeRiskSensor(
@@ -143,6 +146,7 @@ class LibrusGradeRiskSensor(
             dt_util.now().date(),
             self.coordinator.grade_thresholds,
             weighted=self.coordinator.weighted_average,
+            owner=self.coordinator.memo_owner,
         )
 
     @property

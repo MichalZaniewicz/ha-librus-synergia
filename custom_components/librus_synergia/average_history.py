@@ -9,11 +9,13 @@ can then chart the year, picked by name ("Ola Kowalska - średnia
 Matematyka").
 
 The averages are worked out again whenever the grades change and once a
-day (so today gets its point), but only the rows whose value changed are
-written: on a new day just that day, after a new or changed grade the days
-from that grade on. Everything is written again at startup and when the
-average mode, the school's grade scale or a series name changes. Writing a
-day again replaces it. Nothing is fetched from Librus for this.
+day (so today gets its point) - from the earliest day that can differ (a
+new day, or the day of a new, changed or removed grade), not from the first
+grade of the year - and only the rows whose value changed are written.
+Everything is worked out and written again at startup and when the average
+mode, the school's grade scale or a series name changes (a category's
+weight: worked out again, only changed rows written). Writing a day again
+replaces it. Nothing is fetched from Librus for this.
 """
 
 from __future__ import annotations
@@ -47,10 +49,12 @@ def daily_averages(
     subject_id: Any = None,
     weighted: bool = True,
     grading: GradingSystemData | None = None,
+    start: date | None = None,
 ) -> list[tuple[date, float]]:
     """(day, average of the grades added up to and including that day),
     from the first grade's day to `today`; days with no average yet are
-    left out."""
+    left out. With `start`, only the days from `start` on (the same values
+    - the grades before it are taken in at once)."""
     dated = sorted(
         ((d, g) for g in grades if (d := _day(g.add_date)) is not None and d <= today),
         key=lambda item: item[0],
@@ -65,6 +69,13 @@ def daily_averages(
     index = 0
     day = first
     average: float | None = None
+    if start is not None and start > first:
+        while index < len(dated) and dated[index][0] < start:
+            included.append(dated[index][1])
+            index += 1
+        if included:
+            average = calculate_average(included, categories, weighted=weighted, grading=grading)
+        day = start
     while day <= today:
         changed = False
         while index < len(dated) and dated[index][0] <= day:
@@ -116,6 +127,12 @@ class LibrusAverageHistory:
         # that differ are written (a year of rows for ~17 series used to be
         # rewritten every day).
         self._written: dict[str, dict[date, float]] = {}
+        # What the last computation was made from: each series' grades, the
+        # categories and the day - so the next one starts at the earliest
+        # day that can differ instead of at the first grade of the year.
+        self._series_grades: dict[str, frozenset[tuple[Any, ...]]] = {}
+        self._computed_categories: Any = None
+        self._computed_today: date | None = None
         self._unsub: Callable[[], None] | None = None
 
     @property
@@ -189,13 +206,26 @@ class LibrusAverageHistory:
             # reaches the recorder with a write, so write them all again.
             self._written.clear()
             self._full_signature = full_signature
+        categories = _categories_signature(data)
+        # A category's weight changes grades on any day, and a clock that
+        # went back can't be trusted: then every day is worked out again
+        # (still only the rows that differ are written).
+        recompute_all = (
+            categories != self._computed_categories
+            or self._computed_today is None
+            or today < self._computed_today
+        )
         for statistic_id, name, subject_id in series:
+            keys = frozenset(
+                _grade_key(g)
+                for g in data.grades
+                if subject_id is None or g.subject_id == subject_id
+            )
+            start = None if recompute_all else self._first_changed_day(statistic_id, keys)
             points = daily_averages(
                 data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted,
-                grading=data.grading_system
+                grading=data.grading_system, start=start
             )
-            if not points:
-                continue
             written = self._written.get(statistic_id, {})
             rows = [
                 {
@@ -207,34 +237,53 @@ class LibrusAverageHistory:
                 for day, value in points
                 if written.get(day) != value
             ]
-            if not rows:
-                continue
-            async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
-            self._written[statistic_id] = dict(points)
+            if rows:
+                async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
+            # The days before `start` are unchanged by definition; from it on
+            # the new values replace the old ones.
+            kept = {d: v for d, v in written.items() if start is not None and d < start}
+            self._written[statistic_id] = {**kept, **dict(points)}
+            self._series_grades[statistic_id] = keys
+        self._computed_categories = categories
+        self._computed_today = today
+
+    def _first_changed_day(
+        self, statistic_id: str, keys: frozenset[tuple[Any, ...]]
+    ) -> date | None:
+        """The earliest day whose average can differ from the last
+        computation: the day of any grade added, changed or removed since,
+        or else the first day after the last computation. None = all."""
+        before = self._series_grades.get(statistic_id)
+        if before is None or statistic_id not in self._written or self._computed_today is None:
+            return None
+        start = self._computed_today + timedelta(days=1)
+        for key in keys ^ before:
+            day = _day(key[2])
+            if day is not None and day < start:
+                start = day
+        return start
+
+
+def _grade_key(g: GradeData) -> tuple[Any, ...]:
+    """Everything about one grade an average depends on: value, day,
+    category, subject and the semester/final flags (those don't count).
+    The day is at index 2 (`_first_changed_day` reads it)."""
+    return (
+        g.id,
+        g.value,
+        g.add_date or "",
+        g.category_id or 0,
+        g.subject_id,
+        g.is_semester_proposition,
+        g.is_final_proposition,
+        g.is_semester,
+        g.is_final,
+    )
 
 
 def _grades_signature(data: LibrusData) -> tuple[Any, ...]:
-    """Everything about the grades an average depends on: value, day,
-    category, subject and the semester/final flags (those don't count)."""
-    return tuple(
-        sorted(
-            (
-                (
-                    g.id,
-                    g.value,
-                    g.add_date or "",
-                    g.category_id or 0,
-                    g.subject_id,
-                    g.is_semester_proposition,
-                    g.is_final_proposition,
-                    g.is_semester,
-                    g.is_final,
-                )
-                for g in data.grades
-            ),
-            key=lambda item: str(item[0]),
-        )
-    )
+    """Every grade's `_grade_key`, in a stable order."""
+    return tuple(sorted((_grade_key(g) for g in data.grades), key=lambda item: str(item[0])))
 
 
 def _categories_signature(data: LibrusData) -> tuple[Any, ...]:

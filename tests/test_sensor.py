@@ -1687,6 +1687,29 @@ async def test_homework_recent_lists_upcoming_not_the_earliest_of_the_year(hass)
     assert [r["id"] for r in recent] == [99]
 
 
+async def test_homework_recent_keeps_upcoming_when_the_month_is_full(hass) -> None:
+    """More than 30 assignments due in the last month must not push
+    tomorrow's homework out of `recent`: upcoming first (soonest first),
+    then the most recent past ones (newest first), 30 in all."""
+    past = [
+        {"Id": i, "Topic": f"Było {i}", "Text": "", "Date": "2026-09-01", "DueDate": _days_from_today(-(i % 30) - 1)}
+        for i in range(1, 41)
+    ]
+    later = {"Id": 98, "Topic": "Za tydzień", "Text": "", "Date": "2026-09-01", "DueDate": _days_from_today(7)}
+    tomorrow = {"Id": 99, "Topic": "Jutro", "Text": "", "Date": "2026-09-01", "DueDate": _days_from_today(1)}
+    client = build_mock_client(
+        async_get_homework_assignments={"HomeWorkAssignments": [*past, later, tomorrow]}
+    )
+    entry = await setup_integration(hass, client)
+
+    recent = hass.states.get(_entity_id(hass, entry, "homework_assignments")).attributes["recent"]
+    assert len(recent) == 30
+    assert [r["id"] for r in recent[:2]] == [99, 98]
+    past_dates = [r["due_date"] for r in recent[2:]]
+    assert past_dates == sorted(past_dates, reverse=True)
+    assert past_dates[0] == _days_from_today(-1)
+
+
 def test_changing_attributes_are_kept_out_of_the_recorder() -> None:
     """Values that change on (almost) every write - countdowns, timestamps,
     error text - and long text are only useful live, not in history."""

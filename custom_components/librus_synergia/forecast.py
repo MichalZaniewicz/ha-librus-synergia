@@ -13,6 +13,7 @@ semester grade is given for), in the second semester the whole school year
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -25,35 +26,61 @@ _T = TypeVar("_T")
 
 
 class DataMemo:
-    """The last few results of a calculation over one `LibrusData`.
+    """Results of a calculation over one `LibrusData`, per owner.
 
     Many entities read the same derived figures (forecasts, school days)
     from the same coordinator data - every subject sensor, every minute
     tick - and the data only changes when the coordinator builds a NEW
-    `LibrusData` object (it never edits one in place). So a result is kept
+    `LibrusData` object (it never edits one in place). So results are kept
     per data object (compared with `is`; the object itself is held so a
-    recycled `id()` can't match) plus a small key for anything else it
-    depends on (today's date, the options). A few entries rather than one,
-    so several students (config entries) don't keep evicting each other -
-    but only a few, since each entry keeps its data object in memory.
+    recycled `id()` can't match), each under a small key for anything else
+    it depends on (today's date, the options).
+
+    `owner` is the config entry the data belongs to: each owner keeps the
+    results for its CURRENT data object only - new data replaces the old
+    one's results, so an old snapshot isn't kept alive, and students don't
+    evict each other (a list of the last few results shared by everyone
+    did both once there were more students than entries). A call without
+    an owner gets a slot of its own per data object. `size` caps the slots
+    overall, least recently used out first.
 
     Callers share the returned object - they must not modify it."""
 
-    def __init__(self, size: int = 4) -> None:
-        self._size = size
-        self._entries: list[tuple[object, Hashable, Any]] = []
+    # Results per data object (one per date/options key) - several only
+    # when one data object outlives a day or the options differ per caller.
+    _KEYS_PER_DATA = 8
 
-    def get(self, data: object, key: Hashable, compute: Callable[[], _T]) -> _T:
-        for held, held_key, value in self._entries:
-            if held is data and held_key == key:
-                return value  # type: ignore[no-any-return]
+    def __init__(self, size: int = 16) -> None:
+        self._size = size
+        self._slots: OrderedDict[Hashable, tuple[object, dict[Hashable, Any]]] = OrderedDict()
+
+    def get(
+        self,
+        data: object,
+        key: Hashable,
+        compute: Callable[[], _T],
+        *,
+        owner: Hashable | None = None,
+    ) -> _T:
+        slot = owner if owner is not None else ("data", id(data))
+        held = self._slots.get(slot)
+        if held is None or held[0] is not data:
+            held = (data, {})
+            self._slots[slot] = held
+        self._slots.move_to_end(slot)
+        values = held[1]
+        if key in values:
+            return values[key]  # type: ignore[no-any-return]
         value = compute()
-        self._entries.insert(0, (data, key, value))
-        del self._entries[self._size :]
+        if len(values) >= self._KEYS_PER_DATA:
+            values.clear()
+        values[key] = value
+        while len(self._slots) > self._size:
+            self._slots.popitem(last=False)
         return value
 
     def clear(self) -> None:
-        self._entries.clear()
+        self._slots.clear()
 
 # Minimum average for a 2, 3, 4, 5 and 6 - a common setup, but schools
 # differ (see the option's description).
@@ -219,13 +246,16 @@ def subject_forecasts(
     thresholds: tuple[float, ...],
     *,
     weighted: bool = True,
+    owner: Hashable | None = None,
 ) -> list[SubjectForecast]:
     """One forecast per subject with at least one counted grade, worst
-    first. The list is shared between callers - don't modify it."""
+    first. The list is shared between callers - don't modify it. `owner`
+    is the config entry id (see DataMemo)."""
     return _FORECASTS.get(
         data,
         (today, tuple(thresholds), weighted),
         lambda: _subject_forecasts(data, today, tuple(thresholds), weighted=weighted),
+        owner=owner,
     )
 
 
