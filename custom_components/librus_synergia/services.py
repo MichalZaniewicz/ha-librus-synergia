@@ -63,10 +63,14 @@ def resolve_coordinator(hass: HomeAssistant, device_id: str) -> LibrusDataUpdate
     if device is None:
         raise ServiceValidationError(f"Unknown device: {device_id}")
 
+    # Newer Home Assistant: one config entry per device (`config_entry_id`);
+    # older: the `config_entries` set (deprecated, gone in 2027.10).
+    single = getattr(device, "config_entry_id", None)
+    entry_ids = [single] if single else device.config_entries
     entry = next(
         (
             e
-            for entry_id in device.config_entries
+            for entry_id in entry_ids
             if (e := hass.config_entries.async_get_entry(entry_id)) is not None
             and e.domain == DOMAIN
         ),

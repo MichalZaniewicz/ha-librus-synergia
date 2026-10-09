@@ -286,7 +286,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             return cached[0]
         try:
             payload = await self.coordinator.async_fetch_timetable_week(week_start)
-        except LibrusError:
+        except LibrusError as err:
             # Forced re-login (inside async_fetch_timetable_week) also
             # failed - don't crash the whole calendar REST request over one
             # week's worth of lessons. Prefer stale cached data over none if
@@ -296,16 +296,18 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             if cached is not None:
                 _LOGGER.warning(
                     "Failed to refresh timetable for week starting %s "
-                    "(session recovery also failed) - serving stale cached "
+                    "(session recovery also failed: %s) - serving stale cached "
                     "data instead",
                     week_start,
+                    err,
                 )
                 return cached[0]
             _LOGGER.warning(
                 "Failed to fetch timetable for week starting %s "
-                "(session recovery also failed) - returning no lessons "
+                "(session recovery also failed: %s) - returning no lessons "
                 "for this week",
                 week_start,
+                err,
             )
             return {}
         merged = merge_timetables(payload)

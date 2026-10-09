@@ -12,6 +12,7 @@ does the same for a homework assignment's file (the Homework checklist card).
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any
@@ -25,6 +26,8 @@ from homeassistant.exceptions import HomeAssistantError
 from librus_synergia import LibrusError
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 URL = f"/api/{DOMAIN}/attachment/{{device_id}}/{{message_id}}/{{attachment_id}}"
 HOMEWORK_URL = f"/api/{DOMAIN}/homework_attachment/{{device_id}}/{{attachment_id}}"
@@ -64,6 +67,7 @@ async def _async_download(
     try:
         file = await download(coordinator)
     except LibrusError as err:
+        _LOGGER.warning("Attachment download failed (%s): %s", request.path, err)
         return web.Response(status=HTTPStatus.BAD_GATEWAY, text=f"Librus: {err}")
     return _file_response(file, fallback_name)
 
