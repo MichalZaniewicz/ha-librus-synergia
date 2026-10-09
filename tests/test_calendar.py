@@ -490,3 +490,103 @@ async def test_parent_teacher_conference_already_in_homeworks_not_duplicated(has
     assert len(summaries) == 2
     assert not any("Omówienie" in s for s in summaries)
     assert any("Konsultacje" in s for s in summaries)
+
+
+def _parallel_lesson(subject_id: str, teacher_id: str, classroom_id: str, **extra) -> dict:
+    return {
+        "LessonNo": "2",
+        "HourFrom": "08:50",
+        "HourTo": "09:35",
+        "Subject": {"Id": subject_id},
+        "Teacher": {"Id": teacher_id},
+        "Classroom": {"Id": classroom_id},
+        "IsCanceled": False,
+        "IsSubstitutionClass": False,
+        **extra,
+    }
+
+
+def _parallel_client(slot: list[dict]):
+    return build_mock_client(
+        async_get_subjects={
+            "Subjects": [
+                {"Id": 10, "Name": "Edukacja wczesnoszkolna"},
+                {"Id": 11, "Name": "Wspomaganie"},
+            ]
+        },
+        async_get_teachers={
+            "Users": [
+                {"Id": 20, "FirstName": "Anna", "LastName": "Nowak"},
+                {"Id": 21, "FirstName": "Jan", "LastName": "Kowalski"},
+            ]
+        },
+        async_get_classrooms={"Classrooms": [{"Id": 30, "Name": "12"}, {"Id": 31, "Name": "14"}]},
+        # Tomorrow in the test time zone (set by the hass fixture, unlike
+        # the module-level _TOMORROW).
+        async_get_timetable={
+            "Timetable": {(dt_util.now().date() + timedelta(days=1)).isoformat(): [[], slot]}
+        },
+    )
+
+
+async def _tomorrow_events(hass, entity_id: str) -> list[dict]:
+    # Start and end on the same date, so exactly one week is fetched
+    # whatever weekday the tests run on.
+    start = dt_util.start_of_local_day() + timedelta(days=1)
+    response = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {
+            "entity_id": entity_id,
+            "start_date_time": start,
+            "end_date_time": start.replace(hour=23, minute=59, second=59),
+        },
+        blocking=True,
+        return_response=True,
+    )
+    return response[entity_id]["events"]
+
+
+async def test_timetable_merges_lessons_held_at_the_same_time(hass) -> None:
+    """Issue #14: a subject plus "Wspomaganie" (support teacher) in the
+    same slot is one event by default, with both teachers and rooms."""
+    client = _parallel_client(
+        [_parallel_lesson("10", "20", "30"), _parallel_lesson("11", "21", "31")]
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    state = hass.states.get(entity_id)
+    assert state.attributes["message"] == "Edukacja wczesnoszkolna + Wspomaganie"
+    assert state.attributes["description"] == "Anna Nowak, Jan Kowalski"
+    assert state.attributes["location"] == "12, 14"
+    assert len(await _tomorrow_events(hass, entity_id)) == 1
+
+
+async def test_timetable_keeps_parallel_lessons_apart_when_merging_is_off(hass) -> None:
+    client = _parallel_client(
+        [_parallel_lesson("10", "20", "30"), _parallel_lesson("11", "21", "31")]
+    )
+    entry = await setup_integration(hass, client, options={"merge_parallel_lessons": False})
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert sorted(e["summary"] for e in events) == ["Edukacja wczesnoszkolna", "Wspomaganie"]
+
+
+async def test_timetable_never_merges_cancelled_lesson_with_its_substitution(hass) -> None:
+    """A cancelled lesson and the substitution in the same slot stay two
+    entries even with merging on - it shows what was cancelled and what
+    replaced it."""
+    client = _parallel_client(
+        [
+            _parallel_lesson("10", "20", "30", IsCanceled=True),
+            _parallel_lesson("11", "21", "30", IsSubstitutionClass=True),
+        ]
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert len(events) == 2
+    assert any("(odwołane)" in e["summary"] for e in events)

@@ -73,6 +73,7 @@ from .const import (
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
     CONF_HIDE_EMPTY_SUBJECTS,
+    CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
@@ -90,6 +91,7 @@ from .const import (
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_HIDE_EMPTY_SUBJECTS,
+    DEFAULT_MERGE_PARALLEL_LESSONS,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
@@ -412,6 +414,12 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_HIDE_EMPTY_SUBJECTS,
                     default=options.get(CONF_HIDE_EMPTY_SUBJECTS, DEFAULT_HIDE_EMPTY_SUBJECTS),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_MERGE_PARALLEL_LESSONS,
+                    default=options.get(
+                        CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS
+                    ),
                 ): BooleanSelector(),
                 vol.Required(
                     CONF_SMART_POLLING,

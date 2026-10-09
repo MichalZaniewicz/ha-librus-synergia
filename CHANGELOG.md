@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Lessons held at the same time are one calendar entry** (#14). A subject
+  plus Wspomaganie (a support teacher), or split groups, used to show as two
+  entries with the same hours. The Timetable calendar now shows one entry,
+  e.g. "Edukacja wczesnoszkolna + Wspomaganie", with all teachers and rooms.
+  On by default; turn off *Merge lessons held at the same time* under
+  Configure to keep them apart. A cancelled lesson and its substitution
+  always stay two entries.
+
 ## 0.12.2
 
 Everything from 0.12.2-beta.1 to beta.5.

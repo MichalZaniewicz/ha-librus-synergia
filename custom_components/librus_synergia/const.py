@@ -81,6 +81,11 @@ STATUS_OPTIONS = [STATUS_OK, STATUS_DEGRADED, STATUS_STALE, STATUS_ERROR]
 CONF_HIDE_EMPTY_SUBJECTS = "hide_empty_subjects"
 DEFAULT_HIDE_EMPTY_SUBJECTS = False
 
+# Lessons held at the same time (a subject plus "Wspomaganie", split groups)
+# become one timetable calendar event - issue #14. On by default.
+CONF_MERGE_PARALLEL_LESSONS = "merge_parallel_lessons"
+DEFAULT_MERGE_PARALLEL_LESSONS = True
+
 # When False (set via the options flow), the coordinator skips the whole
 # Wiadomości (private messages) subsystem - its separate wiadomosci.librus.pl
 # session bootstrap plus the per-cycle unread-count/list calls. The Unread

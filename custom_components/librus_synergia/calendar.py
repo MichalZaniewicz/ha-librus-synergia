@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -21,7 +22,12 @@ from librus_synergia.models import (
 )
 
 from . import LibrusConfigEntry, librus_device_info
-from .const import CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED
+from .const import (
+    CONF_FREE_DAYS_ENABLED,
+    CONF_MERGE_PARALLEL_LESSONS,
+    DEFAULT_FREE_DAYS_ENABLED,
+    DEFAULT_MERGE_PARALLEL_LESSONS,
+)
 from .coordinator import LibrusDataUpdateCoordinator, lesson_change, merge_timetables
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,7 +106,80 @@ def _lesson_topic(day: date, lesson: LessonData, data: LibrusData) -> str | None
     return index.get((day.isoformat(), lesson.lesson_no))
 
 
+@dataclass(frozen=True)
+class _LessonParts:
+    """One lesson ready for the calendar; `teacher` and `details` become
+    the event description (teacher on the first line - the companion cards
+    read it from there)."""
+
+    start: datetime
+    end: datetime
+    summary: str
+    location: str | None
+    teacher: str | None
+    details: list[str]
+    changed: bool
+
+    def to_event(self) -> CalendarEvent:
+        description = "\n".join([self.teacher or "", *self.details]).strip() or None
+        return CalendarEvent(
+            start=self.start,
+            end=self.end,
+            summary=self.summary,
+            location=self.location,
+            description=description,
+        )
+
+
 def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> CalendarEvent | None:
+    parts = _lesson_parts(day, lesson, data)
+    return parts.to_event() if parts is not None else None
+
+
+def _join_unique(values: list[str | None], separator: str) -> str | None:
+    return separator.join(dict.fromkeys(v for v in values if v)) or None
+
+
+def _merge_parts(group: list[_LessonParts]) -> CalendarEvent:
+    """One event for lessons held at the same time (issue #14 - e.g. a
+    subject plus "Wspomaganie", a support teacher in the same room, or
+    split groups): "Edukacja wczesnoszkolna + Wspomaganie", all teachers
+    and rooms."""
+    return _LessonParts(
+        start=group[0].start,
+        end=group[0].end,
+        summary=_join_unique([p.summary for p in group], " + ") or "",
+        location=_join_unique([p.location for p in group], ", "),
+        teacher=_join_unique([p.teacher for p in group], ", "),
+        details=list(dict.fromkeys(line for p in group for line in p.details)),
+        changed=False,
+    ).to_event()
+
+
+def _day_events(
+    day: date, lessons: list[LessonData], data: LibrusData, merge: bool
+) -> list[CalendarEvent]:
+    """Calendar events for one day. With `merge`, lessons with the same
+    start and end become one event. Changed lessons (cancelled,
+    substitution, room change, moved) always stay separate, so a
+    cancelled lesson and its substitution still show as two entries."""
+    events: list[CalendarEvent] = []
+    groups: dict[tuple[datetime, datetime], list[_LessonParts]] = {}
+    for lesson in lessons:
+        parts = _lesson_parts(day, lesson, data)
+        if parts is None:
+            continue
+        if merge and not parts.changed:
+            groups.setdefault((parts.start, parts.end), []).append(parts)
+        else:
+            events.append(parts.to_event())
+    for group in groups.values():
+        events.append(group[0].to_event() if len(group) == 1 else _merge_parts(group))
+    events.sort(key=lambda event: event.start)
+    return events
+
+
+def _lesson_parts(day: date, lesson: LessonData, data: LibrusData) -> _LessonParts | None:
     if lesson.hour_from is None or lesson.hour_to is None:
         return None
     try:
@@ -129,8 +208,8 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
         data.classrooms.get(lesson.classroom_id) if lesson.classroom_id is not None else None
     )
 
-    # First line the teacher (as before), then what a substitution changes.
-    lines = [teacher_name or ""]
+    # After the teacher (first description line), what a substitution changes.
+    lines: list[str] = []
     # The original subject only when it differs ("Zastępstwo za: Jan Kowal"
     # for the same subject with another teacher).
     original_subject = change["original_subject"]
@@ -149,14 +228,15 @@ def _lesson_to_event(day: date, lesson: LessonData, data: LibrusData) -> Calenda
         when = f"{when[8:10]}.{when[5:7]}" if len(when) >= 10 else when
         number = change["original_lesson_no"]
         lines.append(f"Przeniesiona z: {when}" + (f", lekcja {number}" if number is not None else ""))
-    description = "\n".join(lines).strip() or None
 
-    return CalendarEvent(
+    return _LessonParts(
         start=dt_util.as_local(datetime.combine(day, start_time)),
         end=dt_util.as_local(datetime.combine(day, end_time)),
         summary=summary,
         location=classroom_name,
-        description=description,
+        teacher=teacher_name,
+        details=lines,
+        changed=change["kind"] is not None or bool(change["room_changed"]),
     )
 
 
@@ -278,6 +358,10 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_timetable"
         self._attr_device_info = librus_device_info(entry)
+        # Changing the option reloads the entry, so reading it once is enough.
+        self._merge = bool(
+            entry.options.get(CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS)
+        )
         self._week_cache: dict[date, tuple[dict[date, list[LessonData]], datetime]] = {}
 
     async def _async_get_week(self, week_start: date) -> dict[date, list[LessonData]]:
@@ -322,9 +406,8 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         upcoming = [
             event
             for day, lessons in self.coordinator.data.timetable.items()
-            for lesson in lessons
-            if (event := _lesson_to_event(day, lesson, self.coordinator.data)) is not None
-            and event.end >= now
+            for event in _day_events(day, lessons, self.coordinator.data, self._merge)
+            if event.end >= now
         ]
         return min(upcoming, key=lambda event: event.start) if upcoming else None
 
@@ -342,8 +425,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
 
         events: list[CalendarEvent] = []
         for day, lessons in merged.items():
-            for lesson in lessons:
-                event = _lesson_to_event(day, lesson, self.coordinator.data)
+            for event in _day_events(day, lessons, self.coordinator.data, self._merge):
                 # BUG FIX (2026-09-06, found live): compare the lesson's
                 # OWN start/end datetimes against the real [start_date,
                 # end_date) window, not a day-level filter derived from
@@ -354,7 +436,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
                 # "today's lessons" query wrongly returned tomorrow's whole
                 # timetable too. Confirmed live via
                 # ha_config_get_calendar_events on a real Sunday.
-                if event is not None and event.start < end_date and event.end > start_date:
+                if event.start < end_date and event.end > start_date:
                     events.append(event)
         return events
 
