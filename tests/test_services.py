@@ -296,6 +296,7 @@ async def test_get_grades_service_includes_descriptive_grades(hass) -> None:
             "value": "6",
             "skill": "Rytmika",
             "comments": ["Brawo"],
+            "requirements": [],
             "date": "2026-09-30",
             "semester": 1,
             "teacher": "Anna Nowak",
