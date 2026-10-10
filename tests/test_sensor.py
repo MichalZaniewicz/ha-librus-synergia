@@ -1733,3 +1733,19 @@ def test_changing_attributes_are_kept_out_of_the_recorder() -> None:
     assert "content" in sensor.LibrusNextExamSensor._unrecorded_attributes
     assert "text_grades" in sensor.LibrusSubjectAverageSensor._unrecorded_attributes
     assert "comment" in sensor.LibrusBehaviourGradeSensor._unrecorded_attributes
+
+
+async def test_long_term_statistics_only_where_a_trend_matters(hass) -> None:
+    """Absences, subject attendance and the forecast keep `state_class`
+    (a school-year trend is useful); averages (already written as their own
+    statistics) and "right now" counters and streaks don't."""
+    entry = await setup_integration(hass, build_mock_client())
+
+    for key in ("attendance", "unexcused_absences", "grade_forecast"):
+        entity_id = _entity_id(hass, entry, key)
+        assert entity_id is not None, key
+        assert hass.states.get(entity_id).attributes.get("state_class") == "measurement", key
+    for key in ("overall_average", "unread_messages", "attendance_streak", "homework_assignments"):
+        entity_id = _entity_id(hass, entry, key)
+        assert entity_id is not None, key
+        assert "state_class" not in hass.states.get(entity_id).attributes, key

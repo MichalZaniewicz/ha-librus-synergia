@@ -525,7 +525,6 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
     average mode says arithmetic."""
 
     _attr_translation_key = "overall_average"
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -610,7 +609,6 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
     _unrecorded_attributes = frozenset(
         {"grades", "latest_grade_comments", "point_grades", "text_grades"}
     )
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
     def __init__(
@@ -1072,7 +1070,6 @@ class LibrusJustificationsSensor(LibrusSensorBase):
 
     _attr_translation_key = "justifications"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:file-document-check-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1208,7 +1205,6 @@ class LibrusAttendanceStreakSensor(LibrusSensorBase):
     record so far, rather than showing `unknown`."""
 
     _attr_translation_key = "attendance_streak"
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
     _attr_icon = "mdi:fire"
 
@@ -1235,7 +1231,6 @@ class LibrusBehaviourStreakSensor(LibrusSensorBase):
     streak above."""
 
     _attr_translation_key = "behaviour_streak"
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
     _attr_icon = "mdi:fire"
 
@@ -1257,7 +1252,6 @@ class LibrusGoodGradeStreakSensor(LibrusSensorBase):
     `coordinator.good_grade_streak`'s own docstring for why."""
 
     _attr_translation_key = "good_grade_streak"
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:fire"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1458,7 +1452,6 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
 
     _attr_translation_key = "unread_announcements"
     _unrecorded_attributes = frozenset({"recent", "notices"})
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:bullhorn"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1537,7 +1530,6 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
 
     _attr_translation_key = "behaviour_notices"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:alert-circle-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1584,7 +1576,6 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
 
     _attr_translation_key = "homework_assignments"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:notebook-edit-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1726,7 +1717,6 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
 
     _attr_translation_key = "descriptive_grades"
     _unrecorded_attributes = frozenset({"recent", "grades"})
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:text-box-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1830,7 +1820,6 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "archive_recent",
         }
     )
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:email-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -2276,7 +2265,6 @@ class LibrusPointGradesSensor(LibrusSensorBase):
     _attr_translation_key = "point_grades"
     _unrecorded_attributes = frozenset({"subjects", "recent"})
     _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 1
     _attr_icon = "mdi:percent-circle-outline"
 

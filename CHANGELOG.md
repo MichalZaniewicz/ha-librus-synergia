@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Long-term statistics only where a trend over the school year makes
+  sense.** Absences, unexcused absences, the lowest subject attendance and
+  the grade forecast keep them. The overall and subject averages (whose
+  history the integration already writes as its own statistics - the ones a
+  Statistics graph card uses) and the "right now" counters and streaks
+  (unread messages and announcements, homework, notes, justifications,
+  descriptive and point grades, the three streaks) no longer add an hourly
+  statistics row each, forever. Home Assistant may list them under
+  Developer tools → Statistics as no longer having a state class; their old
+  statistics can be deleted there.
+
 ## 0.12.6
 
 Everything from 0.12.5-beta.1 to beta.11 (released as 0.12.6, so HACS
