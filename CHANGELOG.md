@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.12.7-beta.1
 
 ### Changed
 - **A new README**: an animated banner, a new 45-second trailer and 3-minute
   tour, a stats strip, feature tiles, and the weekly AI summary, card wall and
   get-started sections redone from the real cards. The SVG graphics are built
-  by `tools/readme_graphics.py`.
+  by `tools/readme_graphics.py`. Every graphic fills the full width, also in
+  HACS, and the film's banner links to the video (HACS shows no player).
 - **Long-term statistics only where a trend over the school year makes
   sense.** Absences, unexcused absences, the lowest subject attendance and
   the grade forecast keep them. The overall and subject averages (whose

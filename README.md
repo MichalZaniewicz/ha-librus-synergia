@@ -1,7 +1,7 @@
 # Librus Synergia (unofficial) for Home Assistant
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant" width="100%">
 </p>
 
 <p align="center">
@@ -33,24 +33,17 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/trailer.webp" alt="Librus Synergia for Home Assistant - the 45-second trailer">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/trailer.webp" alt="Librus Synergia for Home Assistant - the 45-second trailer" width="100%">
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha" width="100%">
 </p>
 
 ## What it does
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-register.svg" alt="Everything from the e-register" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-forecast.svg" alt="Report card forecast" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-notifications.svg" alt="30 ready-made notifications" width="32%">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-home.svg" alt="The school day at home" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-ai.svg" alt="Weekly AI summary" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-assist.svg" alt="Ask Assist" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/features.svg" alt="Everything from the e-register, report card forecast, 30 ready-made notifications, the school day at home, weekly AI summary, Ask Assist" width="100%">
 </p>
 
 <details>
@@ -71,7 +64,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </details>
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour"></a>
+  <a href="https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour" width="100%"></a>
 </p>
 
 <p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
@@ -81,7 +74,7 @@ https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff
 ## Weekly AI summary
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ai-summary.webp" alt="Weekly AI summary: every Sunday, the week in a minute">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ai-summary.webp" alt="Weekly AI summary: every Sunday, the week in a minute" width="100%">
 </p>
 
 Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Claude, or a local Ollama) sums up the school week: the grades and how the averages moved, attendance, behaviour, what's coming next week and, if you want, the important points from the school's messages. Read it on the dashboard, get it as a phone notification with a blueprint, or press *Generate* any time. **[Setting it up](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary)**
@@ -89,7 +82,7 @@ Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Cla
 ## A dashboard in minutes
 
 <p align="center">
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="66 cards, one school dashboard"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="66 cards, one school dashboard" width="100%"></a>
 </p>
 
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 66 cards made for this integration - add it in HACS as a *Dashboard*.
@@ -104,7 +97,7 @@ Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Cla
 ## Get started
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/steps.svg" alt="Get started: download in HACS, restart, add the integration, log in">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/steps.svg" alt="Get started: download in HACS, restart, add the integration, log in" width="100%">
 </p>
 
 <p align="center">

@@ -279,22 +279,33 @@ def _chips(svg: Svg, x: float, y: float, chips: list[tuple[str, str]]) -> None:
         cx += width + 8
 
 
-def tile(fonts: Path, name: str, icon: str, title: str, lines: list[str], extra) -> None:
-    svg = Svg(400, 250, title)
-    svg.defs.append(f'<linearGradient id="tbg" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#1d1a3d"/><stop offset="1" stop-color="#120f28"/></linearGradient>')
+TILE_W, TILE_H, TILE_GAP, TILE_SCALE = 400, 250, 24, 0.96
+
+
+def tile(svg: Svg, slot: int, icon: str, title: str, lines: list[str], extra) -> None:
+    """One feature tile, drawn at 400x250 and placed in a 3x2 grid (slot 0-5)
+    scaled to fill the 1200 px width with even gaps."""
+    col, row = slot % 3, slot // 3
+    step_x = TILE_W * TILE_SCALE + TILE_GAP
+    step_y = TILE_H * TILE_SCALE + TILE_GAP
+    svg.add(f'<g transform="translate({col * step_x:.1f} {row * step_y:.1f}) scale({TILE_SCALE})">')
     svg.add(f'<rect x="1" y="1" width="398" height="248" rx="20" fill="url(#tbg)" stroke="{LINE}"/>')
     svg.add(f'<rect x="24" y="24" width="44" height="44" rx="13" fill="{VIOLET}" fill-opacity=".18"/>')
-    svg.add(f'<g transform="translate(34 34) scale(1)"><path d="{ICONS[icon]}" fill="{VIOLET2}"/></g>')
+    svg.add(f'<g transform="translate(34 34)"><path d="{ICONS[icon]}" fill="{VIOLET2}"/></g>')
     svg.add(svg.text(24, 104, title, 21, 800, PAPER))
     for i, line in enumerate(lines):
         svg.add(svg.text(24, 132 + i * 21, line, 15, 500, MUTED))
     extra(svg)
-    svg.write(name, fonts)
+    svg.add("</g>")
 
 
 def features(fonts: Path) -> None:
+    height = round(2 * TILE_H * TILE_SCALE + TILE_GAP)
+    svg = Svg(1200, height, "Everything from the e-register, report card forecast, 30 notifications, "
+              "the school day at home, weekly AI summary, Ask Assist")
+    svg.defs.append('<linearGradient id="tbg" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#1d1a3d"/><stop offset="1" stop-color="#120f28"/></linearGradient>')
     tile(
-        fonts, "feature-register.svg", "register", "Everything from the e-register",
+        svg, 0, "register", "Everything from the e-register",
         ["Grades, attendance, timetable, tests,", "messages and the lucky number."],
         lambda s: _chips(s, 24, 196, [("grades", "v"), ("attendance", "v"), ("messages", "v")]),
     )
@@ -306,20 +317,20 @@ def features(fonts: Path) -> None:
             s.add(f'<rect x="{24 + i * 30}" y="{224 - h}" width="22" height="{h}" rx="5" fill="{colour}" fill-opacity="{1 if i == 4 else .75}"/>')
         s.add(s.text(186, 216, "predicted 6", 13, 700, AMBER, mono=True))
 
-    tile(fonts, "feature-forecast.svg", "forecast", "Report card forecast",
+    tile(svg, 1, "forecast", "Report card forecast",
          ["Every subject's grade before it's", "written, and how many 6s lift it."], bars)
     tile(
-        fonts, "feature-notifications.svg", "bell", "30 ready-made notifications",
+        svg, 2, "bell", "30 ready-made notifications",
         ["New grade, cancelled lesson, test", "tomorrow - one click to import."],
         lambda s: _chips(s, 24, 196, [("new grade", "g"), ("cancelled", "r"), ("test", "a")]),
     )
     tile(
-        fonts, "feature-home.svg", "home", "The school day at home",
+        svg, 3, "home", "The school day at home",
         ["Wake the house before the first", "lesson, skip the alarm on a day off."],
         lambda s: _chips(s, 24, 196, [("school day", "v"), ("at school", "v"), ("pick-up", "a")]),
     )
     tile(
-        fonts, "feature-ai.svg", "ai", "Weekly AI summary",
+        svg, 4, "ai", "Weekly AI summary",
         ["Your own AI model sums up the week", "with 2-4 concrete to-dos."],
         lambda s: _chips(s, 24, 196, [("grades ok", "g"), ("attendance", "a"), ("2 to-dos", "v")]),
     )
@@ -328,8 +339,9 @@ def features(fonts: Path) -> None:
         s.add(f'<rect x="24" y="190" width="300" height="36" rx="13" fill="{VIOLET}"/>')
         s.add(s.text(40, 213, "When is the next maths test?", 14, 700, "#ffffff"))
 
-    tile(fonts, "feature-assist.svg", "mic", "Ask Assist",
+    tile(svg, 5, "mic", "Ask Assist",
          ["Ask by voice or in the chat - it", "answers from your child's data."], chat)
+    svg.write("features.svg", fonts)
 
 
 CHAPTERS = [("Setup", "v"), ("The school day", "v"), ("Grades & forecast", "v"), ("Tests", "v"),
