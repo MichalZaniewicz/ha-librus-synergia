@@ -76,7 +76,11 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 <p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
 
-https://github.com/user-attachments/assets/796b6f2a-a94b-4f04-8412-ba2ad1195813
+
+
+https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff
+
+
 
 ## Weekly AI summary
 
