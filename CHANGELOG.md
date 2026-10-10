@@ -16,7 +16,8 @@ Uses [librus-synergia 0.3.19](https://pypi.org/project/librus-synergia/0.3.19/):
   a failed week waits 15 minutes, nothing is fetched while Librus is down,
   no second forced login within 10 minutes, and only weeks within ±12 weeks
   of today are fetched. Fetches still running when the integration unloads
-  are cancelled.
+  are cancelled, and a finished fetch is never handed out again in place of
+  a new one.
 - **Diagnostics** also hide justification messages, teacher names,
   substitution notes, descriptive-grade requirements, the school's e-mail
   and phone, and ids inside error texts.
