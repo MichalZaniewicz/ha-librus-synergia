@@ -11,6 +11,11 @@ the same inside GitHub's <img> and HACS, where no web font can load. The
 animations are CSS inside the SVG - GitHub and browsers play them in <img>;
 `prefers-reduced-motion` stops them. Needs fontTools (pip install fonttools).
 
+ai-summary.webp and cards-wall.webp are not built here: they are screenshots
+of the real cards, composed inside the cards repo's dev harness (dark theme,
+English, viewport 1200x700 / 1200x720 at device scale 2), corners rounded and
+saved as WebP with Pillow. Re-shoot them when the cards change notably.
+
 Colours follow the existing banners: deep navy, violet, amber, green, red.
 Numbers in stats.svg are hand-kept: update STATS when they change.
 """
