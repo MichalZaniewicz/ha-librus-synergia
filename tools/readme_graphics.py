@@ -332,17 +332,9 @@ def features(fonts: Path) -> None:
          ["Ask by voice or in the chat - it", "answers from your child's data."], chat)
 
 
-def _window(svg: Svg, x: float, y: float, w: float, h: float, title: str) -> None:
-    svg.add(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="16" fill="{INK}" stroke="{EDGE}"/>')
-    svg.add(f'<path d="M{x} {y + 16}a16 16 0 0 1 16-16h{w - 32}a16 16 0 0 1 16 16v26H{x}z" fill="{DEEP}"/>')
-    svg.add(f'<line x1="{x}" y1="{y + 42}" x2="{x + w}" y2="{y + 42}" stroke="{LINE}"/>')
-    for i, colour in enumerate((RED, AMBER, GREEN)):
-        svg.add(f'<circle cx="{x + 22 + i * 18}" cy="{y + 21}" r="5.5" fill="{colour}"/>')
-    svg.add(svg.text(x + 86, y + 26, title, 13, 700, MUTED, mono=True, spacing=.5))
-
-
-CHAPTERS = [("Setup", "v"), ("The school day", "v"), ("Grades & forecast", "v"), ("Attendance", "v"),
-            ("Notifications", "a"), ("AI summary", "v"), ("Assist", "v"), ("Cards", "g")]
+CHAPTERS = [("Setup", "v"), ("The school day", "v"), ("Grades & forecast", "v"), ("Tests", "v"),
+            ("Attendance", "v"), ("Notifications", "a"), ("AI summary", "v"), ("Assist", "v"),
+            ("Cards", "g"), ("Several children", "v")]
 
 
 def video_header(fonts: Path) -> None:
@@ -354,21 +346,6 @@ def video_header(fonts: Path) -> None:
     svg.add(svg.text(116, 88, "English voice-over, Polish subtitles. The player starts muted - click the speaker.", 15, 500, LILAC))
     _chips(svg, 38, 118, CHAPTERS)
     svg.write("video-header.svg", fonts)
-
-
-def video_soon(fonts: Path) -> None:
-    svg = Svg(1200, 675, "New 3-minute tour coming soon")
-    svg.add(f'<rect width="1200" height="675" rx="14" fill="#000000"/>')
-    svg.defs.append(f'<radialGradient id="vsg" cx="50%" cy="40%" r="70%"><stop offset="0" stop-color="#2a2470"/><stop offset="1" stop-color="#05040c"/></radialGradient>')
-    svg.add(f'<rect width="1200" height="675" rx="14" fill="url(#vsg)"/>')
-    svg.add('<circle cx="600" cy="300" r="52" fill="#000000" fill-opacity=".45" stroke="#ffffff" stroke-opacity=".85" stroke-width="3"/>')
-    svg.add('<path d="M585 274v52l44-26z" fill="#ffffff"/>')
-    svg.add(svg.text(600, 400, "New 3-minute tour coming soon", 32, 800, PAPER, anchor="middle"))
-    svg.add(svg.text(600, 434, "Setup, the school day, grades, notifications, the AI summary, Assist and the cards.", 16, 500, LILAC, anchor="middle"))
-    svg.add('<rect x="0" y="625" width="1200" height="50" fill="#000000" fill-opacity=".55"/>')
-    svg.add(svg.text(24, 656, "0:00 / 3:00", 14, 600, "#ffffff"))
-    svg.add('<rect x="130" y="648" width="960" height="4" rx="2" fill="#ffffff" fill-opacity=".35"/>')
-    svg.write("video-soon.svg", fonts)
 
 
 STEP_ICONS = {
@@ -415,7 +392,6 @@ def main() -> None:
     stats(fonts)
     features(fonts)
     video_header(fonts)
-    video_soon(fonts)
     steps(fonts)
 
 
