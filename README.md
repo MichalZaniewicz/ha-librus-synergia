@@ -74,6 +74,8 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
 </p>
 
+<p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
+
 https://github.com/user-attachments/assets/796b6f2a-a94b-4f04-8412-ba2ad1195813
 
 ## Weekly AI summary
