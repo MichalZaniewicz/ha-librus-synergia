@@ -51,7 +51,7 @@ Uses [librus-synergia 0.3.18](https://pypi.org/project/librus-synergia/0.3.18/):
 - Blueprints: "Time to leave" fires only before the first lesson; the
   morning briefing says "first" or "next" lesson and only for today; trip
   reminder only for tomorrow's trips; the unexcused-absence notice sends
-  one message a day; new optional inputs `school_start_entity` and
+  one message per batch of absences (30 s); new optional inputs `school_start_entity` and
   `unexcused_absences_entity`.
 - `get_message` accepts `outbox` and `archive/inbox`.
 
