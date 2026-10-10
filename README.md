@@ -1,14 +1,12 @@
 # Librus Synergia (unofficial) for Home Assistant
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/hero-banner.svg" alt="Librus Synergia">
 </p>
 
 <p align="center">
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&label=release&labelColor=2a2470&color=7c6cff"></a>
-  <a href="https://hacs.xyz"><img alt="HACS" src="https://img.shields.io/badge/HACS-custom-f6b14a?style=for-the-badge&labelColor=2a2470"></a>
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/MichalZaniewicz/ha-librus-synergia/test.yml?branch=main&style=for-the-badge&label=tests&labelColor=2a2470&color=5fc98a"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&labelColor=2a2470&color=948cf2"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia"></a>
 </p>
 
 Your child's [Librus Synergia](https://synergia.librus.pl/) e-register, inside Home Assistant. Grades, attendance, the timetable, tests, homework, messages and the lucky number become sensors and calendars, with notifications and automations that actually help a family's school week.
@@ -32,29 +30,17 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <b><a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki">Documentation (wiki)</a></b> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation">Installation</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration">Configuration</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities">Entities</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints">Blueprints</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards">Cards</a>
 </p>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/trailer-soon.svg" alt="Trailer - 45 seconds of what it does">
-</p>
+## Don't want to read? Watch the 3-minute video
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha">
-</p>
+Setup, the school day, grades and the report card forecast, attendance, notifications, the weekly AI summary, Assist and the companion cards. English voice-over, Polish subtitles.
+
+🔊 The player starts muted, so click the speaker icon for the voice-over.
+
+https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
 
 ## What it does
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-register.svg" alt="Everything from the e-register" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-forecast.svg" alt="Report card forecast" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-notifications.svg" alt="30 ready-made notifications" width="32%">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-home.svg" alt="The school day at home" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-ai.svg" alt="Weekly AI summary" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-assist.svg" alt="Ask Assist" width="32%">
-</p>
-
-<details>
-<summary><b>Every feature, in detail</b></summary>
+![Librus Synergia for Home Assistant - trailer](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/trailer.webp)
 
 - 📚 **Everything from the e-register.** Grades with comments and categories, averages per subject, attendance, behaviour notes and grade, the timetable, tests and homework, messages, announcements, the lucky number - and what was actually taught in each lesson.
 - 📝 **Know what to revise.** For every upcoming test, the topics taught in that subject since the previous test, with the lessons your child missed marked - on a card, in a reminder a few days before, and in Assist's answers.
@@ -67,17 +53,6 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 - 📎 **Message and homework attachments,** straight to your device, without marking the message read in Librus.
 - 🛟 **Keeps working when Librus doesn't.** The last good data stays up through an outage, the session renews itself, and a normal login needs no captcha.
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
-
-</details>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
-</p>
-
-<!-- The 3-minute tour (GitHub video attachment) goes here once the new version is recorded. -->
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-soon.svg" alt="New 3-minute tour coming soon">
-</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/ai-summary-banner.svg" alt="Weekly AI summary">

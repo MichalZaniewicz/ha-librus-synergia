@@ -1,11 +1,8 @@
 # Changelog
 
-## 0.12.7-beta.1
+## Unreleased
 
 ### Changed
-- **A new README**: an animated banner, a stats strip, a feature grid and
-  places for the new trailer and 3-minute tour (coming next). The graphics
-  are built by `tools/readme_graphics.py`.
 - **Long-term statistics only where a trend over the school year makes
   sense.** Absences, unexcused absences, the lowest subject attendance and
   the grade forecast keep them. The overall and subject averages (whose
