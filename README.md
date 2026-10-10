@@ -71,7 +71,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </details>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
+  <a href="https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour"></a>
 </p>
 
 <p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
