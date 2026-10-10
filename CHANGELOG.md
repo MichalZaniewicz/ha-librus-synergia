@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Changed
+- **A new README**: an animated banner, a new 45-second trailer and 3-minute
+  tour, a stats strip, feature tiles, and the weekly AI summary, card wall and
+  get-started sections redone from the real cards. The SVG graphics are built
+  by `tools/readme_graphics.py`.
 - **Long-term statistics only where a trend over the school year makes
   sense.** Absences, unexcused absences, the lowest subject attendance and
   the grade forecast keep them. The overall and subject averages (whose

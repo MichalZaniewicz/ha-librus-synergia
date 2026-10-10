@@ -1,12 +1,14 @@
 # Librus Synergia (unofficial) for Home Assistant
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/hero-banner.svg" alt="Librus Synergia">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant">
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia"></a>
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&label=release&labelColor=2a2470&color=7c6cff"></a>
+  <a href="https://hacs.xyz"><img alt="HACS" src="https://img.shields.io/badge/HACS-custom-f6b14a?style=for-the-badge&labelColor=2a2470"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/actions/workflows/test.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/MichalZaniewicz/ha-librus-synergia/test.yml?branch=main&style=for-the-badge&label=tests&labelColor=2a2470&color=5fc98a"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/MichalZaniewicz/ha-librus-synergia?style=for-the-badge&labelColor=2a2470&color=948cf2"></a>
 </p>
 
 Your child's [Librus Synergia](https://synergia.librus.pl/) e-register, inside Home Assistant. Grades, attendance, the timetable, tests, homework, messages and the lucky number become sensors and calendars, with notifications and automations that actually help a family's school week.
@@ -30,17 +32,29 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
   <b><a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki">Documentation (wiki)</a></b> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Installation">Installation</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Configuration">Configuration</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Entities">Entities</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints">Blueprints</a> · <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards">Cards</a>
 </p>
 
-## Don't want to read? Watch the 3-minute video
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/trailer.webp" alt="Librus Synergia for Home Assistant - the 45-second trailer">
+</p>
 
-Setup, the school day, grades and the report card forecast, attendance, notifications, the weekly AI summary, Assist and the companion cards. English voice-over, Polish subtitles.
-
-🔊 The player starts muted, so click the speaker icon for the voice-over.
-
-https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha">
+</p>
 
 ## What it does
 
-![Librus Synergia for Home Assistant - trailer](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/trailer.webp)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-register.svg" alt="Everything from the e-register" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-forecast.svg" alt="Report card forecast" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-notifications.svg" alt="30 ready-made notifications" width="32%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-home.svg" alt="The school day at home" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-ai.svg" alt="Weekly AI summary" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-assist.svg" alt="Ask Assist" width="32%">
+</p>
+
+<details>
+<summary><b>Every feature, in detail</b></summary>
 
 - 📚 **Everything from the e-register.** Grades with comments and categories, averages per subject, attendance, behaviour notes and grade, the timetable, tests and homework, messages, announcements, the lucky number - and what was actually taught in each lesson.
 - 📝 **Know what to revise.** For every upcoming test, the topics taught in that subject since the previous test, with the lessons your child missed marked - on a card, in a reminder a few days before, and in Assist's answers.
@@ -54,46 +68,54 @@ https://github.com/user-attachments/assets/d9163635-7444-43a3-9ca2-2f1e1957a16e
 - 🛟 **Keeps working when Librus doesn't.** The last good data stays up through an outage, the session renews itself, and a normal login needs no captcha.
 - 👨‍👩‍👧 **Several children.** One entry per child; every notification says whose news it is.
 
+</details>
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/ai-summary-banner.svg" alt="Weekly AI summary">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
 </p>
+
+<p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
+
+https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff
 
 ## Weekly AI summary
 
-Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Claude, or a local Ollama) sums up the school week: the grades and how the averages moved, attendance, behaviour, what's coming next week and, if you want, the important points from the school's messages. You get a one-line headline, a status per section, a warning only when something needs attention, and 2-4 concrete to-dos. No API key in this integration and no extra Librus requests.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ai-summary.webp" alt="Weekly AI summary: every Sunday, the week in a minute">
+</p>
 
-![Weekly AI summary card](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/librus-ai-summary-card-wide.png)
-
-Read it on the dashboard, get it as a phone notification with a blueprint, or press *Generate* any time. **[Setting it up](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary)**
+Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Claude, or a local Ollama) sums up the school week: the grades and how the averages moved, attendance, behaviour, what's coming next week and, if you want, the important points from the school's messages. Read it on the dashboard, get it as a phone notification with a blueprint, or press *Generate* any time. **[Setting it up](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Weekly-AI-summary)**
 
 ## A dashboard in minutes
 
-**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 66 cards made for this integration. They find your child's device on their own, follow your theme and speak English and Polish.
+<p align="center">
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="66 cards, one school dashboard"></a>
+</p>
 
-![Report card forecast, school trips, lesson topics, catch-up, behaviour, exam prep, school documents and attendance by subject cards](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/cards-showcase.png)
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 66 cards made for this integration - add it in HACS as a *Dashboard*.
 
 <details>
-<summary><b>All 66 cards</b></summary>
+<summary><b>See all 66 cards</b></summary>
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
 </details>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/installation-banner.svg" alt="Installation">
-</p>
-
 ## Get started
 
-1. **HACS:** click the button below (or add this repository in HACS as an *Integration*) and download **Librus Synergia (unofficial)**.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/steps.svg" alt="Get started: download in HACS, restart, add the integration, log in">
+</p>
 
-   <p align="center"><a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open this repository in HACS" src="https://my.home-assistant.io/badges/hacs_repository.svg" height="28"></a></p>
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=MichalZaniewicz&repository=ha-librus-synergia&category=integration"><img alt="Open this repository in HACS" src="https://my.home-assistant.io/badges/hacs_repository.svg" height="32"></a>
+  &nbsp;
+  <a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=librus_synergia"><img alt="Add the Librus Synergia integration to Home Assistant" src="https://my.home-assistant.io/badges/config_flow_start.svg" height="32"></a>
+</p>
 
+1. **Download** *Librus Synergia (unofficial)* in HACS - the first button opens it (or add this repository in HACS as an *Integration*).
 2. **Restart** Home Assistant.
-3. **Add the integration:** click the button below (or Settings → Devices & services → **Add integration** → **Librus Synergia**).
-
-   <p align="center"><a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=librus_synergia"><img alt="Add the Librus Synergia integration to Home Assistant" src="https://my.home-assistant.io/badges/config_flow_start.svg" height="28"></a></p>
-
+3. **Add the integration** - the second button, or Settings → Devices & services → **Add integration** → **Librus Synergia**.
 4. **Log in** with your child's Librus login (e.g. `1234567u`) and password. One entry per child.
 
 Then pick the [blueprints](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Blueprints) you want and add [the cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards). Full instructions, every option and every entity are in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki)**.
