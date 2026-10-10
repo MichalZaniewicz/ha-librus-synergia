@@ -399,7 +399,9 @@ async def test_diagnostics_redact_free_text_names_and_lids_in_errors(hass, freez
 # ----------------------------------------------------------------------
 
 
-async def test_empty_kindergarten_timetable_for_a_day_drops_the_lid(hass, freezer) -> None:
+async def test_empty_kindergarten_timetable_for_three_weeks_drops_the_lid(hass, freezer) -> None:
+    """Empty for a day is a school break, not a reason (review round 5) -
+    the LID goes only after three weeks without a lesson."""
     freezer.move_to(_FROZEN)
     client = build_mock_client()
     coordinator = _coordinator(hass, client)
@@ -412,6 +414,11 @@ async def test_empty_kindergarten_timetable_for_a_day_drops_the_lid(hass, freeze
     client.async_get_timetable.assert_not_called()
 
     freezer.tick(timedelta(hours=25))
+    await coordinator._async_update_data()
+    assert coordinator.is_kindergarten
+    client.async_get_timetable.assert_not_called()
+
+    freezer.tick(timedelta(days=21))
     await coordinator._async_update_data()
 
     assert not coordinator.is_kindergarten

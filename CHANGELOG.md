@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.5-beta.11
+
+Uses [librus-synergia 0.3.20](https://pypi.org/project/librus-synergia/0.3.20/).
+
+### Fixed
+- **A restart after a quiet spell refetched all daily data** (about 25-30
+  extra Librus requests): saved fetch times were distrusted whenever the
+  saved responses were older than them, which is normal when nothing
+  changed. They are now distrusted only when the saved responses really
+  missed a change.
+- **Kindergarten accounts keep the child through school breaks**: the
+  child id is dropped only after its timetable was refused for a day, had
+  no lessons for three weeks, or at a new school year (it used to be
+  dropped and found again every day of a break). Finding the same child
+  again logs nothing and refetches nothing.
+- Diagnostics no longer show the account number in the kindergarten
+  `source`; new `refused_since` there.
+
 ## 0.12.5-beta.10
 
 Uses [librus-synergia 0.3.19](https://pypi.org/project/librus-synergia/0.3.19/): no password logins during a Wiadomości outage, parsers that survive odd records, downloads in their own lane.
