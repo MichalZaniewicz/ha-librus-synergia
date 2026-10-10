@@ -278,6 +278,74 @@ _KINDERGARTEN_EMPTY_RESET = timedelta(days=21)
 # Read receipts: at most this many sent messages asked for at once.
 _READ_RECEIPT_CONCURRENCY = 3
 
+# Kindergarten entry summary for diagnostics (issue #14): only `"planned"`
+# has been seen live, so a substitution's entries are described by type -
+# field names and value shapes, never names or ids. A string is shown as is
+# only when it looks like an enum (starts lowercase, letters only); a LID is
+# "lid", or "ref:<type>" when it is another entry's own `identifier` (how a
+# substitution would point at the block it replaces).
+_KG_ENUM_RE = re.compile(r"^[a-z][A-Za-z_]{0,31}$")
+_KG_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+_KG_TIME_RE = re.compile(r"^\d{1,2}:\d{2}(:\d{2})?$")
+_KG_EXAMPLE_KEYS = ("date", "startTime", "endTime")
+_KG_MAX_EXAMPLES = 3
+
+
+def _kindergarten_value_shape(value: Any, own_ids: dict[str, str], own: str | None) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        if value in own_ids and value != own:
+            return f"ref:{own_ids[value]}"
+        if value.startswith("LID-") or value == own:
+            return "lid"
+        if _KG_DATE_RE.match(value):
+            return "date"
+        if _KG_TIME_RE.match(value):
+            return "time"
+        if _KG_ENUM_RE.match(value):
+            return f"'{value}'"
+        return "text"
+    if isinstance(value, list):
+        inner = sorted({_kindergarten_value_shape(item, own_ids, own) for item in value})
+        return f"list[{', '.join(inner)}]"
+    if isinstance(value, dict):
+        return f"object{{{', '.join(sorted(str(key) for key in value))}}}"
+    return type(value).__name__
+
+
+def summarize_kindergarten_entries(entries: Any) -> dict[str, Any]:
+    """Per entry `type`: how many, every field's value shapes, and a few
+    examples (date and times only) - see `_KG_ENUM_RE`."""
+    if not isinstance(entries, list):
+        return {}
+    items = [entry for entry in entries if isinstance(entry, dict)]
+    own_ids = {
+        entry["identifier"]: str(entry.get("type") or "planned")
+        for entry in items
+        if isinstance(entry.get("identifier"), str)
+    }
+    summary: dict[str, Any] = {}
+    for entry in items:
+        kind = str(entry.get("type") or "planned")
+        bucket = summary.setdefault(kind, {"count": 0, "fields": {}, "examples": []})
+        bucket["count"] += 1
+        own = entry.get("identifier") if isinstance(entry.get("identifier"), str) else None
+        for key, value in entry.items():
+            shapes = bucket["fields"].setdefault(str(key), [])
+            shape = _kindergarten_value_shape(value, own_ids, own)
+            if shape not in shapes:
+                shapes.append(shape)
+        if len(bucket["examples"]) < _KG_MAX_EXAMPLES:
+            bucket["examples"].append(
+                {key: entry.get(key) for key in _KG_EXAMPLE_KEYS if isinstance(entry.get(key), str)}
+            )
+    return summary
+
 
 def _week_start(day: date) -> date:
     """The Monday of `day`'s ISO week."""
@@ -806,6 +874,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # False: refused or failed) - set by `_fetch_timetable_or_unpublished`,
         # read and cleared by `_kindergarten_lid_stale`.
         self._kindergarten_week_ok: dict[date, bool] = {}
+        # The polled kindergarten weeks' entries by type, for diagnostics
+        # (`summarize_kindergarten_entries`). In memory only.
+        self._kindergarten_entry_summary: dict[str, dict[str, Any]] = {}
         # The LID `_forget_kindergarten` just dropped, with its empty clock and
         # the reference-data time - so the discovery finding the same LID
         # again doesn't count as a new one (no INFO log, no reference refresh,
@@ -1656,6 +1727,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 if self._kindergarten_next_discovery
                 else None
             ),
+            # Week start -> entries by type (field shapes, no names or ids).
+            "entries_by_week": dict(sorted(self._kindergarten_entry_summary.items())),
         }
 
     @property
@@ -1773,6 +1846,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return payload
         if kindergarten:
             self._kindergarten_week_ok[week_start] = True
+            summaries = self._kindergarten_entry_summary
+            summaries[week_start.isoformat()] = summarize_kindergarten_entries(
+                payload.get("timetableEntries")
+            )
+            for stale in sorted(summaries)[:-2]:
+                del summaries[stale]
         self._timetable_forbidden = False
         self._note_optional_endpoint_recovery("Timetable")
         self._remember_timetable_week(week_start, payload)
@@ -1908,6 +1987,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._kindergarten_refused_since = None
         self._kindergarten_confirmed_at = None
         self._kindergarten_next_discovery = None
+        self._kindergarten_entry_summary = {}
         # The ordinary lookups (the kindergarten ones were merged into them).
         self._reference_data_fetched_at = None
 

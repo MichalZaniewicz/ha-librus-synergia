@@ -1,6 +1,18 @@
 # Changelog
 
-## 0.12.7-beta.1
+## 0.12.8
+
+Everything from 0.12.7-beta.1 (released as 0.12.8, so HACS updates the beta
+too), plus:
+
+### Added
+- **Kindergarten timetable entries in diagnostics.** A substitution on a
+  kindergarten account shows up twice, both marked as a substitution: so far
+  only the ordinary `planned` entry type has been seen, so the replaced block
+  and the one replacing it can't be told apart yet. The diagnostics file's
+  `kindergarten` section now lists the polled weeks' entries by type: how
+  many, every field's value shape and a few dates and times. No names or
+  ids; a link to another entry shows as `ref:<type>`.
 
 ### Changed
 - **A new README**: an animated banner, a new 45-second trailer and 3-minute

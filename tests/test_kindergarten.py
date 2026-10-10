@@ -15,7 +15,10 @@ from librus_synergia.parsers import (
     parse_kindergarten_teachers,
 )
 
-from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from custom_components.librus_synergia.coordinator import (
+    LibrusDataUpdateCoordinator,
+    summarize_kindergarten_entries,
+)
 
 from .conftest import build_mock_client, make_config_entry
 
@@ -154,6 +157,55 @@ async def test_kindergarten_discovered_and_resolved_in_first_cycle(hass) -> None
     await coordinator._async_update_data()
     assert client.async_get_timetable.call_count == calls_before
     assert "Timetable" not in coordinator.degraded_endpoints
+    # Diagnostics describe the polled weeks' entries by type, without ids.
+    weeks = coordinator.kindergarten_diagnostics["entries_by_week"]
+    assert weeks
+    assert all(week["planned"]["count"] >= 1 for week in weeks.values())
+    assert "LID-" not in str(weeks)
+    assert TEACHER_LID not in str(weeks)
+
+
+def test_kindergarten_entry_summary_shows_shapes_not_ids() -> None:
+    """Issue #14: a substitution's entries described by type - the link to
+    the replaced block shows as `ref:<type>`, names never appear."""
+    summary = summarize_kindergarten_entries(
+        [
+            {
+                "identifier": "LID-E1",
+                "type": "substituted",
+                "date": "2026-10-05",
+                "startTime": "07:00",
+                "endTime": "09:00",
+                "teachers": [TEACHER_LID],
+                "note": "Pani Kowalska chora",
+                "isVisible": True,
+            },
+            {
+                "identifier": "LID-E2",
+                "type": "substitution",
+                "date": "2026-10-05",
+                "startTime": "07:00",
+                "endTime": "09:00",
+                "substitutedEntryIdentifier": "LID-E1",
+                "status": "active",
+            },
+        ]
+    )
+    original, substitute = summary["substituted"], summary["substitution"]
+    assert original["count"] == 1
+    assert original["fields"]["identifier"] == ["lid"]
+    assert original["fields"]["teachers"] == ["list[lid]"]
+    assert original["fields"]["note"] == ["text"]
+    assert original["fields"]["isVisible"] == ["true"]
+    assert original["fields"]["startTime"] == ["time"]
+    assert substitute["fields"]["substitutedEntryIdentifier"] == ["ref:substituted"]
+    assert substitute["fields"]["status"] == ["'active'"]
+    assert substitute["examples"] == [
+        {"date": "2026-10-05", "startTime": "07:00", "endTime": "09:00"}
+    ]
+    assert "Kowalska" not in str(summary)
+    assert "LID-" not in str(summary)
+    assert summarize_kindergarten_entries(None) == {}
 
 
 async def test_forbidden_discovery_probes_never_fail_the_update(hass) -> None:
