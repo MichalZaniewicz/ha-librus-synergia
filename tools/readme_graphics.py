@@ -341,22 +341,6 @@ def _window(svg: Svg, x: float, y: float, w: float, h: float, title: str) -> Non
     svg.add(svg.text(x + 86, y + 26, title, 13, 700, MUTED, mono=True, spacing=.5))
 
 
-def trailer_soon(fonts: Path) -> None:
-    svg = Svg(1200, 720, "New trailer coming soon")
-    svg.css.append(".pulse{animation:pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}"
-                   "@keyframes pulse{50%{transform:scale(1.08);opacity:.75}}")
-    _background(svg, "tbg2", cx="50%", cy="0%", glow=(600, 380, 330))
-    _window(svg, 40, 34, 1120, 610, "Home Assistant · Librus Synergia")
-    svg.add(f'<circle class="pulse" cx="600" cy="320" r="62" fill="{AMBER}" fill-opacity=".16"/>')
-    svg.add(f'<circle cx="600" cy="320" r="46" fill="{AMBER}"/>')
-    svg.add(f'<path d="M588 296v48l38-24z" fill="{INK}"/>')
-    svg.add(svg.text(600, 430, "New trailer coming soon", 34, 800, PAPER, anchor="middle"))
-    svg.add(svg.text(600, 466, "45 seconds of what it does - the new cards included.", 17, 500, LILAC, anchor="middle"))
-    svg.add(svg.text(80, 690, "45 SECONDS: WHAT IT DOES", 13, 700, AMBER, mono=True, spacing=2))
-    svg.add(svg.text(1120, 690, "grades · tests · notifications · AI summary · cards", 13, 600, MUTED, mono=True, anchor="end"))
-    svg.write("trailer-soon.svg", fonts)
-
-
 CHAPTERS = [("Setup", "v"), ("The school day", "v"), ("Grades & forecast", "v"), ("Attendance", "v"),
             ("Notifications", "a"), ("AI summary", "v"), ("Assist", "v"), ("Cards", "g")]
 
@@ -430,7 +414,6 @@ def main() -> None:
     hero(fonts)
     stats(fonts)
     features(fonts)
-    trailer_soon(fonts)
     video_header(fonts)
     video_soon(fonts)
     steps(fonts)

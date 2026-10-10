@@ -33,7 +33,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/trailer-soon.svg" alt="Trailer - 45 seconds of what it does">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/trailer.webp" alt="Librus Synergia for Home Assistant - the 45-second trailer">
 </p>
 
 <p align="center">
