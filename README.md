@@ -1,7 +1,7 @@
 # Librus Synergia (unofficial) for Home Assistant
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/hero.svg" alt="Your child's school day, inside Home Assistant">
 </p>
 
 <p align="center">
@@ -33,24 +33,24 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/trailer-soon.svg" alt="Trailer - 45 seconds of what it does">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/trailer-soon.svg" alt="Trailer - 45 seconds of what it does">
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/stats.svg" alt="33 sensors, 15 event entities, 30 blueprints, 66 cards, no captcha">
 </p>
 
 ## What it does
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-register.svg" alt="Everything from the e-register" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-forecast.svg" alt="Report card forecast" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-notifications.svg" alt="30 ready-made notifications" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-register.svg" alt="Everything from the e-register" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-forecast.svg" alt="Report card forecast" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-notifications.svg" alt="30 ready-made notifications" width="32%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-home.svg" alt="The school day at home" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-ai.svg" alt="Weekly AI summary" width="32%">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/feature-assist.svg" alt="Ask Assist" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-home.svg" alt="The school day at home" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-ai.svg" alt="Weekly AI summary" width="32%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/feature-assist.svg" alt="Ask Assist" width="32%">
 </p>
 
 <details>
@@ -71,12 +71,12 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </details>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/video-header.svg" alt="Don't want to read? Watch the 3-minute tour">
 </p>
 
 <!-- The 3-minute tour (GitHub video attachment) goes here once the new version is recorded. -->
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/video-soon.svg" alt="New 3-minute tour coming soon">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/beta/docs/readme/video-soon.svg" alt="New 3-minute tour coming soon">
 </p>
 
 <p align="center">

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.7-beta.1
+## Unreleased
 
 ### Changed
 - **A new README**: an animated banner, a stats strip, a feature grid and
