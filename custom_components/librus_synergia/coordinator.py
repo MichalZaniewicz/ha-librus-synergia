@@ -1931,7 +1931,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             return last_copy
         task = self._week_fetches.get(week_start)
-        if task is None:
+        # A finished task can still be listed: an eagerly started fetch ends
+        # before its done-callback (which drops it) gets a turn of the loop,
+        # and awaiting a finished task never yields - so a later request
+        # would get the old answer instead of fetching again.
+        if task is None or task.done():
             assert self.config_entry is not None
             task = self.config_entry.async_create_background_task(
                 self.hass,
@@ -1941,7 +1945,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._week_fetches[week_start] = task
             # Dropped once done (a done-callback, so an eagerly finished task
             # is dropped too) - the next request after it reads the cache.
-            task.add_done_callback(lambda _task: self._week_fetches.pop(week_start, None))
+            # Only this task: a newer fetch may already have replaced it.
+            task.add_done_callback(
+                lambda done: self._week_fetches.pop(week_start, None)
+                if self._week_fetches.get(week_start) is done
+                else None
+            )
         # Shielded: one caller giving up (a closed dashboard) must not cancel
         # the fetch another caller is waiting for.
         try:
