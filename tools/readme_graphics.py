@@ -124,7 +124,7 @@ def _subset(fonts: Path, family: str, weight: int, chars: str) -> str:
         _FONT_CACHE[key] = instancer.instantiateVariableFont(source, {"wght": weight})
     buffer = io.BytesIO()
     _FONT_CACHE[key].save(buffer)
-    font = TTFont(io.BytesIO(buffer.getvalue()))
+    font = TTFont(io.BytesIO(buffer.getvalue()), recalcTimestamp=False)
     options = subset.Options()
     options.flavor = "woff"
     options.layout_features = ["kern", "liga"]
@@ -135,6 +135,8 @@ def _subset(fonts: Path, family: str, weight: int, chars: str) -> str:
     sub.subset(font)
     out = io.BytesIO()
     font.flavor = "woff"
+    # A fixed timestamp keeps the output identical between runs.
+    font["head"].created = font["head"].modified = 0
     font.save(out)
     return base64.b64encode(out.getvalue()).decode("ascii")
 
@@ -380,6 +382,42 @@ def video_soon(fonts: Path) -> None:
     svg.write("video-soon.svg", fonts)
 
 
+STEP_ICONS = {
+    "download": "M12 3v10.6l3.3-3.3 1.4 1.4L12 16.4l-4.7-4.7 1.4-1.4 3.3 3.3V3zM5 19h14v2H5z",
+    "restart": "M12 4a8 8 0 1 0 7.7 10h-2.1A6 6 0 1 1 12 6c1.7 0 3.1.7 4.2 1.8L13 11h7V4l-2.4 2.4A8 8 0 0 0 12 4z",
+    "add": "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z",
+    "login": "M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z",
+}
+
+STEPS = [
+    ("download", "Download in HACS", ["Librus Synergia (unofficial),", "as an Integration"]),
+    ("restart", "Restart", ["Home Assistant picks up", "the new integration"]),
+    ("add", "Add the integration", ["Settings → Devices", "& services → Add"]),
+    ("login", "Log in", ["Your child's Librus login", "and password"]),
+]
+
+
+def steps(fonts: Path) -> None:
+    svg = Svg(1200, 250, "Get started: download in HACS, restart, add the integration, log in")
+    _background(svg, "stbg", cx="50%", cy="0%")
+    width, gap, top = 252, 30, 34
+    left = (1200 - (4 * width + 3 * gap)) / 2
+    for i, (icon, title, lines) in enumerate(STEPS):
+        x = left + i * (width + gap)
+        svg.add(_card(svg, x, top, width, 182, r=20))
+        svg.add(f'<rect x="{x + 22}" y="{top + 22}" width="46" height="46" rx="14" fill="{VIOLET}" fill-opacity=".18"/>')
+        svg.add(f'<g transform="translate({x + 33} {top + 33})"><path d="{STEP_ICONS[icon]}" fill="{VIOLET2}"/></g>')
+        svg.add(f'<circle cx="{x + width - 36}" cy="{top + 45}" r="17" fill="{AMBER if i == 3 else "#2a2470"}"/>')
+        svg.add(svg.text(x + width - 36, top + 51, str(i + 1), 16, 800, INK if i == 3 else LILAC, anchor="middle"))
+        svg.add(svg.text(x + 22, top + 106, title, 20, 800, PAPER))
+        for j, line in enumerate(lines):
+            svg.add(svg.text(x + 22, top + 134 + j * 21, line, 14.5, 500, MUTED))
+        if i < 3:
+            ax = x + width + 4
+            svg.add(f'<path d="M{ax} {top + 91}h{gap - 12}m-6 -6l6 6-6 6" stroke="{EDGE}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>')
+    svg.write("steps.svg", fonts)
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -390,6 +428,7 @@ def main() -> None:
     trailer_soon(fonts)
     video_header(fonts)
     video_soon(fonts)
+    steps(fonts)
 
 
 if __name__ == "__main__":
