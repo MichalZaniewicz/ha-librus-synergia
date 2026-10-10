@@ -1,327 +1,124 @@
 # Changelog
 
-## 0.12.5-beta.11
+## 0.12.6
 
-Uses [librus-synergia 0.3.20](https://pypi.org/project/librus-synergia/0.3.20/).
+Everything from 0.12.5-beta.1 to beta.11 (released as 0.12.6, so HACS
+updates the betas too). Uses [librus-synergia 0.3.20](https://pypi.org/project/librus-synergia/0.3.20/)
+(installed on its own).
 
-### Fixed
-- **A restart after a quiet spell refetched all daily data** (about 25-30
-  extra Librus requests): saved fetch times were distrusted whenever the
-  saved responses were older than them, which is normal when nothing
-  changed. They are now distrusted only when the saved responses really
-  missed a change.
-- **Kindergarten accounts keep the child through school breaks**: the
-  child id is dropped only after its timetable was refused for a day, had
-  no lessons for three weeks, or at a new school year (it used to be
-  dropped and found again every day of a break). Finding the same child
-  again logs nothing and refetches nothing.
-- Diagnostics no longer show the account number in the kindergarten
-  `source`; new `refused_since` there.
+### Added
+- **20 badges, counted from the whole school year.** Besides the first six
+  and the good-grade / attendance / behaviour streaks: sixes collector
+  (5/10/25), hat-trick (3 sixes in a week), a test at 5 or more, subject star
+  (average 5.5+), honours average (after the school year ends), comeback (a
+  correction to a higher grade), a semester without a 1, a full month without
+  absence or lateness, punctuality (30 school days without being late),
+  perfect attendance in a subject (20 lessons in a row), first praise,
+  praises (3/5), exemplary behaviour, lucky number, homework ticked in the
+  to-do list (10/25) and the finished school year. Each badge keeps the date
+  it was earned, also for ones earned before installing; badges belong to one
+  school year and start over quietly in September. The Rank sensor has
+  `badges` (tiers, earned dates, progress) and `achievements` (`key`,
+  `title`, `date`); the achievement event carries `date`. Existing badges are
+  recorded silently once, and only badges dated within the last 7 days are
+  announced.
+- **Averages use the school's own `+` and `-` values** (`GradingSystem`, read
+  once a day); averages, forecast, rank and the AI summary follow it. A
+  school that doesn't share it gets +0.5 / -0.25 as before.
+- **The new descriptive grading for grade 1** shows up in the Descriptive
+  grades sensor (with `requirements`), `get_grades`, Assist, the AI summary
+  and the new-grade event. No such grade has been seen yet, so the field
+  mapping may need a fix once one appears.
+- **Read receipts for messages you sent**: `outbox_recent` has `read_by`,
+  `read_count`, `receivers_count`; new event `librus_synergia_message_read`
+  and a *Message read* event entity; `get_message` returns `receivers`.
+  `get_message` also accepts `outbox` and `archive/inbox`.
+- **School documents download through Home Assistant**
+  (`/api/librus_synergia/school_file/<device>/<file id>`, nothing saved).
+- **The whole notice board**: the Unread announcements sensor has `notices`,
+  the latest 15 notices with a `read` flag (Librus marks a notice read once
+  it's opened anywhere, so the unread-only `recent` was usually empty).
+- Subject averages: `semester_grade` and `proposed_final_grade` (see below).
 
-## 0.12.5-beta.10
-
-Uses [librus-synergia 0.3.19](https://pypi.org/project/librus-synergia/0.3.19/): no password logins during a Wiadomości outage, parsers that survive odd records, downloads in their own lane.
-
-### Fixed
-- **After a restart, old saved school data was treated as fresh for up to a
-  day** (a new subject or free day could be missing). The saved responses
-  are now written when Home Assistant stops and carry their own time; fetch
-  times newer than the saved data are ignored. The first restart after
-  updating fetches the daily data once.
-- **Every reload kept the old coordinator in memory** (with all its data);
-  the school-day clock now lives on the coordinator and stops on unload.
-- **Calendar weeks fetched on demand can no longer cause repeated logins**:
-  a failed week waits 15 minutes, nothing is fetched while Librus is down,
-  no second forced login within 10 minutes, and only weeks within ±12 weeks
-  of today are fetched. Fetches still running when the integration unloads
-  are cancelled, and a finished fetch is never handed out again in place of
-  a new one.
-- **Diagnostics** also hide justification messages, teacher names,
-  substitution notes, descriptive-grade requirements, the school's e-mail
-  and phone, and ids inside error texts.
-- **A kindergarten child id found once is dropped** after a day without
-  lessons or at a new school year, so a child who moved to grade 1 gets the
-  normal timetable again.
-- **Unread messages stays available during a short "Brak dostępu"** from
-  Wiadomości and shows the last messages (Status "degraded").
-- The homework to-do drops ticks of homework Librus no longer lists (only
-  on live data), so last year's ticks don't count toward this year's badge.
-
-### Performance
-- A refresh whose Librus answers didn't change skips building the data,
-  the forecast and the badges.
-- Agenda and Free days events are sorted once; `calendar.get_events`
-  returns them in date order.
-- The grade-average history skips unchanged updates.
-
-## 0.12.5-beta.9
-
-Uses [librus-synergia 0.3.18](https://pypi.org/project/librus-synergia/0.3.18/): a timeout is a `LibrusConnectionError`, one login serves every waiting call, and each request has a 30 s limit.
-
-### Changed (attributes)
-- **Next lesson `minutes_until` and Current lesson `minutes_left` are
-  gone.** Use `start` / `end`; the sensors now update exactly when a lesson
-  starts or ends instead of every minute.
+### Changed
+- **Next lesson `minutes_until` and Current lesson `minutes_left` are gone.**
+  Use `start` / `end`; the sensors now change exactly when a lesson starts
+  or ends.
 - **Next exam `upcoming[].days_until` is gone** (the top-level `days_until`
-  stays) - compute it from `upcoming[].date`.
-- **Subject average `final_grade` is now the real year-end grade.** The
-  proposal moved to `proposed_final_grade`; new `semester_grade`.
+  stays) - work it out from `upcoming[].date`.
+- **Subject average `final_grade` is now the real year-end grade**; the
+  proposal is `proposed_final_grade`, new `semester_grade`.
 - **Status `last_attempt` is the last failed attempt** (empty while
   everything works); a good cycle shows in `last_success`.
+- **Unread announcements `recent` no longer carries the notice text** - it
+  is in `notices`.
+- **Timetable calendar**: this week and next come from every refresh; other
+  weeks are fetched when asked, up to 12 weeks back or ahead.
 - Assist's timetable tool reports `change` (cancelled, substitution, room
-  change, moved) instead of `substitution: true`; AI-summary dates carry
-  the weekday.
+  change, moved); AI-summary dates carry the weekday.
 - New entries get "Hide subjects without grades" on by default.
-
-### Fixed
-- **Agenda calendar** no longer shows yesterday's entry as the current one.
-- **A failed Wiadomości fetch keeps the last messages** (Status shows
-  "degraded") instead of emptying the sensor; a failed secondary mailbox
-  keeps its last list.
-- **Weeks fetched for the calendar or Assist** no longer mark the whole
-  timetable as failed or unpublished, are shared between parallel requests
-  and refresh after 2 h (24 h for far-away weeks).
-- **Room changes and moved lessons** are reported by Assist and the AI
-  summary too.
-- **Attachment downloads:** ids are checked before any request, error pages
-  don't show Librus's text, file names are cleaned.
-- **Diagnostics** hide more personal data (extra AI context, register
-  number, account ids, receivers, trip details, file names, every
-  `LID-...` id).
-- **Removing the integration** also removes its saved weekly summary,
-  saved payloads and grade-average statistics.
-- **Unloading one of several students** keeps the services and the Assist
-  API while another student is still loaded.
-- **Session cookies** are kept with the saved state; the config entry is
-  rewritten only when the cookies really change.
-- Read receipts of a message without receivers stop being checked;
-  the kindergarten group is remembered over a restart.
-- Day-dependent sensors (school day, in school, school start/end, lucky
-  number...) update at midnight and at the first lesson / last lesson
-  instead of polling every minute.
-- The good-grade streak uses the school's grade scale.
-- Subject sensors of a subject that's gone from Librus and has no grade
-  are removed.
 - Blueprints: "Time to leave" fires only before the first lesson; the
-  morning briefing says "first" or "next" lesson and only for today; trip
-  reminder only for tomorrow's trips; the unexcused-absence notice sends
-  one message per batch of absences (30 s); new optional inputs `school_start_entity` and
-  `unexcused_absences_entity`.
-- `get_message` accepts `outbox` and `archive/inbox`.
-
-### Performance
-- A refresh whose data didn't change writes no entity states.
-- The extra endpoints, messages, lucky number and school data run in
-  parallel, at most 6 requests at a time.
-- Rarely filled lists (text grades, behaviour points, empty descriptive
-  grades) are asked hourly.
-- State is saved in two files: the small one soon after a change, the
-  large cache at most every 6 hours; throttle times survive a restart, so
-  a restart doesn't refetch everything.
-- One attendance summary and one subject-average pass serve every sensor;
-  timetable events are built once per refresh.
-- A restart with unchanged grades writes no statistics.
-- Event entities subscribe only to their own student's events.
-
-## 0.12.5-beta.8
-
-Uses [librus-synergia 0.3.17](https://pypi.org/project/librus-synergia/0.3.17/): a dead Synergia web session on a download is caught again, and the 150 s download limit covers the whole call.
+  morning briefing says "first" or "next" lesson and only for today; the
+  trip reminder only covers tomorrow's trips; the unexcused-absence notice
+  sends one message per batch of absences; new optional inputs
+  `school_start_entity` and `unexcused_absences_entity`.
 
 ### Fixed
-- **Homework list kept the oldest items when there were many**: `recent`
-  now lists what's due from today on first (soonest first), then what was
-  due in the last month (newest first), 30 in all - tomorrow's homework
-  can't be pushed out.
-- **"Message read" right after a restart had no student name.**
-- **A request rejected right after a token refresh now logs in again**
-  instead of trusting the just-refreshed session; a request only skips its
-  own login when another one logged in after it was sent.
-- **Opening a message with `get_message`** makes the next refresh read that
-  mailbox's list again (a new message could otherwise wait up to an hour).
-- **The grade-scale repair issue clears itself** when the school doesn't
-  share its scale.
-- **Badge notifications** cover badges dated up to 7 days back (attendance
-  is often entered late), and the achievements kept from 0.12.4 or older
-  can no longer be lost on the first refresh after updating.
-- **Reloading the integration** can't leave a later state save behind, and
-  a disk error while saving can't fail the unload.
-- **A malformed download link** answers 502 instead of an error page.
-- **Partial grades (grade 1):** a timeout looking up the child no longer
-  hides them for a day.
-- Lessons of one day are taken in lesson order for the subject-attendance
-  badge.
-
-### Performance
-- Descriptive-grade comments and point-grade categories are read only when
-  a new one appears (and once a day); point grades are asked at most hourly
-  while it isn't known whether the school uses them; an unknown category
-  that Librus itself doesn't list is asked again once a day, not hourly.
-- The daily school-data refresh sends at most 6 requests at a time.
-- Grade-average history recalculates from the first changed day, not from
-  the start of the year.
-- Cached forecasts keep only each student's current data.
-
-## 0.12.5-beta.7
-
-### Performance
-- **About 40% fewer requests to Librus** (a normal refresh: ~24 → ~15):
-  - mailboxes the account doesn't have (404) are checked once a day, not on
-    every refresh;
-  - grade categories and attendance types are read once a day with the other
-    reference data - and at once when a grade or absence uses one that isn't
-    known yet;
-  - grade and behaviour-grade comments are read only when a new comment
-    appears (and once a day);
-  - the lucky number is asked at most hourly, not at all once the next day's
-    number is known;
-  - message lists are fetched again only when that mailbox's unread count
-    changes, or after an hour (the unread counts still every refresh).
-- **Less work inside Home Assistant:** the school-day sensors' every-minute
-  check, the grade forecast and the per-subject grade lists are worked out
-  once per refresh instead of many times; the average-history statistics
-  write only what changed (a grade-scale change now rewrites them too); the
-  saved state is written only when something changed (and no longer keeps
-  the timetable twice).
-- Fields that change every refresh or can grow large are no longer stored
-  in the history database (Status times and error, lesson countdowns, the
-  next exam's description, text grades, the behaviour grade comment).
-
-### Changed
-- **Unread announcements: `recent` no longer carries the notice text** - it
-  is in `notices` (one copy instead of two; the sensor's attributes were
-  ~20 KB).
-
-### Fixed
+- **Messages stuck as "module not enabled" after a restart** (logins
+  replacing each other); forced logins now happen one at a time, a "no
+  access" answer is checked again, and a short one keeps the last messages
+  (Status "degraded"). A failed Wiadomości fetch keeps the last messages too.
+- **Every reload kept the old copy of the integration in memory.**
+- **After a restart, school data saved hours earlier could pass as fresh**
+  for up to a day; saved data is now written when Home Assistant stops and
+  carries its own time - and a restart after a quiet spell no longer
+  refetches all daily data.
+- **Calendar weeks fetched on demand** can't cause repeated logins (15-minute
+  back-off after a failure, nothing while Librus is down, no second forced
+  login within 10 minutes) and no longer mark the whole timetable as failed.
+- **Homework list kept the oldest items**: `recent` lists what's due from
+  today first (soonest first), then the last month (newest first), 30 in all.
 - **Today's and next week's lessons in the cards come from the latest
-  refresh.** The timetable calendar kept its own copy of those weeks for up
-  to a day, so a substitution added today could show late.
-
-## 0.12.5-beta.6
-
-Uses [librus-synergia 0.3.16](https://pypi.org/project/librus-synergia/0.3.16/): "Insufficient scopes" isn't an expired session, downloads are checked and give up after 150 s.
-
-### Changed
-- **Badges belong to one school year.** A new school year starts them over,
-  quietly.
-- **A badge is only announced when it's new.** One with an older date (its
-  data arrived only now - a section that failed before, an option switched
-  on) is recorded without an event.
-
-### Fixed
-- **Świadectwo z paskiem was awarded from the forecast** during the year
-  (one 5 in September was enough) and kept. It's now earned only after the
-  school year ends; one awarded by the betas is removed.
-- **Day streaks counted the break day as clean**: 7 days without an absence
-  could be earned on the day of an absence, and an absence today didn't
-  reset the count.
-- **Semester without a 1 counted a 2- as a one.**
-- **Perfect subject attendance** is now 20 lessons of a subject in a row;
-  one absence used to rule that subject out for the rest of the year.
-- **A badge error can't fail the whole update** any more.
-- **Two logins could still replace each other** when a request was
-  rejected just after another one logged in; and a request rejected again
-  right after a good login asked for the password (reauth) - it's now an
-  ordinary failed refresh.
-- **Read receipts were lost** when fetching sent messages failed (or after a
-  restart); they're kept and saved.
-- **Homework list**: the Homework assignments sensor's `recent` held the 10
-  earliest assignments of the whole year, so newer ones (and the cards'
-  tomorrow / month view) went missing once there were more than ten. It now
-  lists those due from a month ago on, up to 30.
-- **Grade scale closed to an account** (401/403/404) uses the default
-  `+`/`-` instead of raising a degraded-endpoint repair issue.
-- **Unknown school document** answers 404, not 502.
-- Saved state is written on unload, so a reload right after a refresh
-  doesn't announce the same items again.
+  refresh** (a substitution could show up to a day late).
+- **The Agenda calendar** no longer shows yesterday's entry as the current
+  one; Agenda and Free days return entries in date order.
+- **Diagnostics hide much more**: extra AI context, register number, account
+  ids, receivers, trip details, file names, justification messages, teacher
+  names, substitution notes, descriptive-grade requirements, the school's
+  e-mail and phone, and every `LID-...` id (also inside error texts).
+- **Removing the integration** also removes its saved weekly summary, saved
+  data and grade-average statistics; unloading one of several students keeps
+  the services and the Assist API for the others.
+- **Kindergarten accounts** keep the child through school breaks, and a child
+  who moved to grade 1 gets the normal timetable again.
+- **Read receipts** survive a failed sent-mail fetch and a restart; "Message
+  read" right after a restart names the student.
+- A homework file whose Synergia web session expired is downloaded after a
+  fresh login; attachment downloads check the ids first and error pages no
+  longer repeat Librus's text.
+- Day-dependent sensors (school day, in school, school start/end, lucky
+  number) update at midnight and at the first / last lesson instead of
+  polling every minute.
+- The grade-scale repair issue clears itself when the school doesn't share
+  its scale; an unknown school document answers 404; the good-grade streak
+  uses the school's scale; subject sensors of a subject gone from Librus are
+  removed; last year's homework ticks don't count toward this year's badge.
 
 ### Performance
-- Partial grades (grade 1 descriptive grading) are asked for once an hour
-  while the account has none, not every refresh.
-
-## 0.12.5-beta.5
-
-### Added
-- **The whole notice board.** The Unread announcements sensor has a new
-  `notices` attribute: the latest 15 notices, read ones too, with a `read`
-  flag. Librus marks a notice read once it's opened anywhere (the app, the
-  website), so the unread-only `recent` list was usually empty and the
-  Announcements card said "No announcements".
-
-## 0.12.5-beta.4
-
-### Fixed
-- **Messages stuck as "module not enabled" after a restart.** Right after a
-  restart several requests could log in to Librus at the same time, each
-  replacing the session the others had just made; the Wiadomości check then
-  saw "no access" and the integration kept that until the next login, so
-  the Messages card said the module was off. Forced logins now happen one at
-  a time (a request that waited reuses the fresh login), and a "no access"
-  answer is checked again on the next cycles (then hourly) instead of being
-  kept.
-
-## 0.12.5-beta.3
-
-### Added
-- **20 badges, counted from the whole school year.** Besides the original
-  first six and the good-grade / attendance / behaviour streaks: sixes
-  collector (5/10/25), hat-trick (3 sixes in a week), a test at 5 or more,
-  subject star (average 5.5+), honours average, comeback (a correction to a
-  higher grade), a semester without a 1, a full month without absence or
-  lateness, punctuality (30 school days without being late), perfect
-  attendance in a subject (20 lessons), first praise, praises (3/5),
-  exemplary behaviour, lucky number, homework ticked in the to-do list
-  (10/25) and the finished school year. Each badge keeps the date it was
-  earned - also for ones earned before the integration was installed. Only
-  the honours average, the lucky number and ticked homework can't be dated
-  from Librus data and count from the day they're first seen. The Rank
-  sensor has a new `badges` attribute (every badge with its tiers, earned
-  dates and progress); the achievement event carries `date`. Old
-  achievement keys are unchanged. After the update the badges are recorded
-  silently once, so earlier ones don't arrive as notifications.
-
-### Fixed
-- **Achievements already earned never showed up.** The first sync records
-  them silently (no flood of old notifications), so the event never reached
-  the Achievements card. The Rank sensor now lists every achievement earned
-  so far in an `achievements` attribute (`key`, `title`, `date`), which the
-  card reads.
-
-## 0.12.5-beta.2
-
-### Added
-- **School documents download through Home Assistant.** The document's link
-  opened Synergia, which says "Brak dostępu" in a browser that isn't logged
-  in to Librus. `GET /api/librus_synergia/school_file/<device>/<file id>`
-  now fetches it like a homework file (nothing saved in Home Assistant); the
-  School documents card uses it.
-
-### Fixed
-- **A homework file sometimes failed to download** ("No download link"):
-  Synergia's web session can expire while the API keeps working. It is now
-  recognised as an expired session, so the integration logs in again and
-  retries (librus-synergia 0.3.15).
-
-## 0.12.5-beta.1
-
-### Added
-- **Averages use the school's own `+` and `-` values.** Librus lets a school
-  set how much a `+` adds and a `-` takes away (and whether a `0` counts);
-  the integration now reads it once a day (`GradingSystem`) and the averages,
-  forecast, rank and AI summary follow it. Before, every school got +0.5 and
-  -0.25 - right for the tested school, not necessarily for others.
-- **The new descriptive grading for grade 1.** Some schools moved grade 1 to
-  a new descriptive grading in 2026, which the old descriptive grades
-  endpoint doesn't contain. Those grades now show up in the Descriptive
-  grades sensor (with `requirements`), `get_grades`, Assist, the AI summary
-  and the new-grade event. The child's identifier is looked up once a day.
-  The endpoint is confirmed, but no such grade has been seen yet, so the
-  field mapping may need a fix once one appears.
-- **Read receipts for messages you sent.** `outbox_recent` of the Unread
-  messages sensor says who has read a message sent in the last 30 days
-  (`read_by`, `read_count`, `receivers_count`), a new event
-  `librus_synergia_message_read` (and a *Message read* event entity) fires
-  when someone reads it, and `get_message` returns the `receivers` of a sent
-  message. Checking a sent message changes nothing in Librus.
+- **About 40% fewer requests to Librus on a normal refresh** (~24 → ~15):
+  missing mailboxes checked daily, categories and types read daily with the
+  other school data (at once when an unknown one appears), comments only when
+  a new one appears, the lucky number at most hourly, message lists only when
+  a mailbox's unread count changes, rarely filled lists hourly, at most 6
+  requests at a time.
+- **A refresh whose Librus answers didn't change writes no entity states**
+  and skips building the data, the forecast and the badges.
+- One attendance summary and one average pass serve every sensor; timetable
+  events are built once per refresh; the grade-average history recalculates
+  only from the first changed day; saved state is written only when
+  something changed.
+- Long or fast-changing attributes are no longer stored in the history
+  database; event entities subscribe only to their own student's events.
 
 ## 0.12.4
 
