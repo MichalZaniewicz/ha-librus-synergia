@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.12.5-beta.10
+
+Uses [librus-synergia 0.3.19](https://pypi.org/project/librus-synergia/0.3.19/): no password logins during a Wiadomości outage, parsers that survive odd records, downloads in their own lane.
+
+### Fixed
+- **After a restart, old saved school data was treated as fresh for up to a
+  day** (a new subject or free day could be missing). The saved responses
+  are now written when Home Assistant stops and carry their own time; fetch
+  times newer than the saved data are ignored. The first restart after
+  updating fetches the daily data once.
+- **Every reload kept the old coordinator in memory** (with all its data);
+  the school-day clock now lives on the coordinator and stops on unload.
+- **Calendar weeks fetched on demand can no longer cause repeated logins**:
+  a failed week waits 15 minutes, nothing is fetched while Librus is down,
+  no second forced login within 10 minutes, and only weeks within ±12 weeks
+  of today are fetched. Fetches still running when the integration unloads
+  are cancelled.
+- **Diagnostics** also hide justification messages, teacher names,
+  substitution notes, descriptive-grade requirements, the school's e-mail
+  and phone, and ids inside error texts.
+- **A kindergarten child id found once is dropped** after a day without
+  lessons or at a new school year, so a child who moved to grade 1 gets the
+  normal timetable again.
+- **Unread messages stays available during a short "Brak dostępu"** from
+  Wiadomości and shows the last messages (Status "degraded").
+- The homework to-do drops ticks of homework Librus no longer lists (only
+  on live data), so last year's ticks don't count toward this year's badge.
+
+### Performance
+- A refresh whose Librus answers didn't change skips building the data,
+  the forecast and the badges.
+- Agenda and Free days events are sorted once; `calendar.get_events`
+  returns them in date order.
+- The grade-average history skips unchanged updates.
+
 ## 0.12.5-beta.9
 
 Uses [librus-synergia 0.3.18](https://pypi.org/project/librus-synergia/0.3.18/): a timeout is a `LibrusConnectionError`, one login serves every waiting call, and each request has a 30 s limit.

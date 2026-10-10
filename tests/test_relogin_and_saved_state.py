@@ -3,7 +3,6 @@ scale's repair issue, legacy badges and the last write on unload."""
 
 from __future__ import annotations
 
-import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -29,7 +28,7 @@ from librus_synergia import (
     LibrusUnexpectedResponseError,
 )
 
-from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, setup_integration
+from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, setup_integration, saved_state
 
 # 19:00 UTC is 12:00 in the test time zone (US/Pacific).
 NOON = "2026-10-07T19:00:00+00:00"
@@ -220,7 +219,7 @@ async def test_legacy_badges_survive_a_failed_first_cycle_and_a_restart(
 
     await first._async_update_data()  # Attendances/Types failed: badges not recorded
     assert "praise" in {a["key"] for a in first.achievements}
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     second_entry = make_config_entry()
     _store(hass_storage, second_entry.entry_id, saved)

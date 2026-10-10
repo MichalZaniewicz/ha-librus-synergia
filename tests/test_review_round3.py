@@ -9,6 +9,7 @@ import json
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -22,6 +23,7 @@ from custom_components.librus_synergia.calendar import _lesson_topic
 from custom_components.librus_synergia.const import (
     DOMAIN,
     EVENT_NEW_GRADE,
+    STATE_SAVE_DELAY,
     STATE_STORE_VERSION,
 )
 from custom_components.librus_synergia.coordinator import (
@@ -44,7 +46,7 @@ from librus_synergia.models import (
 )
 from librus_synergia.parsers import merge_timetables, parse_grades, parse_realizations
 
-from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, setup_integration
+from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, setup_integration, saved_state
 
 # ~05:00 in the test time zone (US/Pacific): clear of both midnights.
 _FROZEN = "2026-09-09T12:00:00+00:00"
@@ -165,9 +167,12 @@ async def test_on_demand_week_leaves_the_timetable_health_alone(hass) -> None:
         "Session rejected (HTTP 403).", status_code=403
     )
 
-    week = await coordinator.async_get_timetable_week(date(2027, 3, 1))
+    today = dt_util.now().date()
+    later = today - timedelta(days=today.weekday()) + timedelta(weeks=4)
+    week = await coordinator.async_get_timetable_week(later)
 
     assert week == {}
+    client.async_get_timetable.assert_called_with(later)
     assert coordinator._timetable_forbidden is False
     assert "Timetable" not in coordinator.degraded_endpoints
 
@@ -460,7 +465,8 @@ async def test_saved_state_stays_small(hass, freezer) -> None:
 
 async def test_state_and_payloads_are_saved_separately(hass, freezer) -> None:
     """A newly seen grade writes the small tracked state soon; the big
-    payloads file at most every few hours."""
+    payloads file is handed to its store once and written at most every few
+    hours (or when Home Assistant stops - the store's final write)."""
     freezer.move_to(_FROZEN)
     grade = {"Id": 1, "Grade": "5", "Subject": {"Id": 100}, "AddDate": "2026-09-01"}
     client = build_mock_client(async_get_grades={"Grades": [grade]})
@@ -471,15 +477,27 @@ async def test_state_and_payloads_are_saved_separately(hass, freezer) -> None:
     ):
         await coordinator._async_update_data()
         assert (state_save.call_count, payload_save.call_count) == (1, 1)
+        assert payload_save.call_args.args[1] == STATE_SAVE_DELAY  # never written yet
 
         client.async_get_grades.return_value = {"Grades": [grade, {**grade, "Id": 2}]}
         freezer.tick(timedelta(minutes=20))
         await coordinator._async_update_data()
+        # Still pending: the change goes out with the write already scheduled.
         assert (state_save.call_count, payload_save.call_count) == (2, 1)
 
-        freezer.tick(timedelta(hours=6))
+        # The store writes it (what the delayed write calls).
+        written = payload_save.call_args.args[0]()
+        assert written["payloads"]["Grades"]["Grades"][1]["Id"] == 2
+        assert written["saved_at"] == dt_util.utcnow().isoformat()
+
+        client.async_get_grades.return_value = {"Grades": [grade]}
+        freezer.tick(timedelta(minutes=20))
         await coordinator._async_update_data()
         assert payload_save.call_count == 2
+        # Due six hours after the last write, not sooner.
+        assert payload_save.call_args.args[1] == pytest.approx(
+            (timedelta(hours=6) - timedelta(minutes=20)).total_seconds()
+        )
 
 
 async def test_restart_reuses_the_daily_lookups_and_the_kindergarten(hass, hass_storage) -> None:
@@ -489,7 +507,7 @@ async def test_restart_reuses_the_daily_lookups_and_the_kindergarten(hass, hass_
     first = _coordinator(hass, build_mock_client())
     await first._async_update_data()
     first._kindergarten_lid, first._kindergarten_source = "LID-AUTH-USER-1", "Me"
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     entry = make_config_entry()
     _store(hass_storage, state_store_key(entry.entry_id), saved)

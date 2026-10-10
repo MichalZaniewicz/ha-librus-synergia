@@ -5,7 +5,6 @@ saved state is written only when something in it changed."""
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -19,7 +18,7 @@ from custom_components.librus_synergia.coordinator import (
 )
 from librus_synergia import LibrusUnexpectedResponseError
 
-from .conftest import build_mock_client, make_config_entry, messages_by_mailbox
+from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, saved_state
 
 # 19:00 UTC is 12:00 in the test time zone (US/Pacific): ticks of a few
 # hours stay on the same local day.
@@ -457,7 +456,7 @@ async def test_timetable_weeks_are_saved_once(hass) -> None:
     coordinator = _coordinator(hass, client)
     await coordinator._async_update_data()
 
-    saved = coordinator._state_to_save()
+    saved = saved_state(coordinator)
 
     assert "Timetable (this week)" not in saved["payloads"]
     assert "Timetable (next week)" not in saved["payloads"]
@@ -467,7 +466,7 @@ async def test_timetable_weeks_are_saved_once(hass) -> None:
 async def test_restart_with_unchanged_data_does_not_write(hass, hass_storage) -> None:
     first = _coordinator(hass, build_mock_client(async_get_grades={"Grades": [_grade(1)]}))
     await first._async_update_data()
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     entry = make_config_entry()
     _store(hass_storage, entry.entry_id, saved)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from typing import Any
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
@@ -19,11 +20,9 @@ from .const import CONF_AI_CONTEXT, CONF_STUDENT_NUMBER, DOMAIN
 # at any depth, once coordinator.data is converted to a plain dict via
 # dataclasses.asdict).
 #
-# Known limitation: subjects/teachers/classrooms are plain `{id: "name"}`
-# maps, so a bare resolved name isn't behind any of these dict KEYS and
-# is NOT redacted here - acceptable for a first cut since only whoever the
-# config entry's owner shares a diagnostics dump with would see it, but
-# worth tightening later if this integration gets wider use.
+# The teachers' `{id: "name"}` map is redacted as a whole (`teachers` - also
+# the teacher names on a justification); subjects and classrooms are kept
+# (school names, not people - and what a diagnostics dump is for).
 TO_REDACT = {
     "username",
     "password",
@@ -52,7 +51,19 @@ TO_REDACT = {
     "route",
     "head_teacher_name",
     "filename",
+    # People's own words and names: a justification's message, the teachers
+    # (map and justification), a substitution's note, a descriptive grade's
+    # requirements, the school's contact details.
+    "message",
+    "teachers",
+    "substitution_note",
+    "requirements",
+    "email",
+    "phone_number",
 }
+# A Librus account id inside an error text (an exception or an error message
+# can quote a request URL with the child's LID).
+_LID_IN_TEXT = re.compile(r"LID-[A-Za-z0-9-]+")
 
 # School documents: their names and Synergia links (the `name` key is too
 # common to redact everywhere - category and attendance type names are what
@@ -82,9 +93,19 @@ def _redact_lids(value: Any) -> Any:
             return [walk(v) for v in item]
         if isinstance(item, str) and item.startswith(_LID_PREFIX):
             return placeholder(item)
+        if isinstance(item, str) and _LID_PREFIX in item:
+            # One inside a longer text (a URL, a message).
+            return _LID_IN_TEXT.sub(lambda match: placeholder(match.group(0)), item)
         return item
 
     return walk(value)
+
+
+def _redact_error(text: str | None) -> str | None:
+    """An error text with every `LID-...` in it replaced."""
+    if text is None:
+        return None
+    return _LID_IN_TEXT.sub(f"{_LID_PREFIX}**REDACTED**", text)
 
 
 def _redact_school_files(data: dict[str, Any]) -> None:
@@ -163,7 +184,7 @@ async def async_get_config_entry_diagnostics(
     return {
         "integration_version": integration.version,
         "last_update_success": coordinator.last_update_success,
-        "last_exception": repr(coordinator.last_exception)
+        "last_exception": _redact_error(repr(coordinator.last_exception))
         if coordinator.last_exception
         else None,
         "update_interval_seconds": (
@@ -187,7 +208,7 @@ async def async_get_config_entry_diagnostics(
             "data_source": coordinator.data_source,
             "last_success": iso(coordinator.last_success_at),
             "last_attempt": iso(coordinator.last_attempt_at),
-            "last_error": coordinator.last_error,
+            "last_error": _redact_error(coordinator.last_error),
             "failures": coordinator.failures,
             "next_attempt": iso(coordinator.next_attempt_at),
             "fallback_sections": sorted(coordinator.fallback_sections),

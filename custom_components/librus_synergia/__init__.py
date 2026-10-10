@@ -181,7 +181,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> b
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        # The last write of the saved state; no delayed writes after it.
+        # The last write of the saved state; no delayed writes after it. Also
+        # cancels on-demand timetable fetches still running (before the
+        # session below is closed) and stops the school-day clock.
         await entry.runtime_data.async_close_state()
         # This entry's own dedicated session (see async_setup_entry) -
         # close it here or a reload leaks one aiohttp session/connector

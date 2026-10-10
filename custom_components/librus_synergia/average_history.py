@@ -141,6 +141,9 @@ class LibrusAverageHistory:
         self._computed_categories: Any = None
         self._computed_today: date | None = None
         self._unsub: Callable[[], None] | None = None
+        # The data object and day of the last update (see `_async_update`).
+        self._last_data: Any = None
+        self._last_day: date | None = None
 
     @property
     def _prefix(self) -> str:
@@ -160,6 +163,7 @@ class LibrusAverageHistory:
         if self._unsub is not None:
             self._unsub()
             self._unsub = None
+        self._last_data = None
 
     def _weighted(self) -> bool:
         entry = self._coordinator.config_entry
@@ -172,6 +176,12 @@ class LibrusAverageHistory:
         if data is None or not data.grades:
             return
         today = dt_util.now().date()
+        if data is self._last_data and today == self._last_day:
+            # The same data object on the same day (an unchanged poll, the
+            # midnight tick's other listeners): nothing to work out. The
+            # average mode can't change without a reload.
+            return
+        self._last_data, self._last_day = data, today
         weighted = self._weighted()
         signature = (
             today,

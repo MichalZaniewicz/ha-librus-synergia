@@ -3,7 +3,6 @@ data while Librus is down, per-section fallbacks and retry backoff."""
 
 from __future__ import annotations
 
-import json
 from datetime import date, timedelta
 
 from homeassistant.config_entries import ConfigEntryState
@@ -24,7 +23,7 @@ from custom_components.librus_synergia.coordinator import (
 )
 from librus_synergia import LibrusConnectionError, LibrusUnexpectedResponseError
 
-from .conftest import build_mock_client, make_config_entry
+from .conftest import build_mock_client, make_config_entry, saved_state
 
 
 def _grade(grade_id: int, value: str = "5") -> dict:
@@ -60,7 +59,7 @@ async def test_saved_state_is_json_serializable(hass) -> None:
     coordinator = _coordinator(hass, client)
     await coordinator._async_update_data()
 
-    saved = json.loads(json.dumps(coordinator._state_to_save()))
+    saved = saved_state(coordinator)
 
     assert saved["seen"]["grades"] == ["1"]
     assert saved["payloads"]["Grades"] == {"Grades": [_grade(1)]}
@@ -72,7 +71,7 @@ async def test_grade_added_while_ha_was_off_fires_after_restart(hass, hass_stora
     while HA was off never produced an event."""
     first = _coordinator(hass, build_mock_client(async_get_grades={"Grades": [_grade(1)]}))
     await first._async_update_data()
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     events = async_capture_events(hass, EVENT_NEW_GRADE)
     entry = make_config_entry()
@@ -171,7 +170,7 @@ async def test_ha_start_during_outage_uses_saved_responses(hass, hass_storage) -
         hass, build_mock_client(async_get_grades={"Grades": [_grade(1)]}, async_get_subjects=subjects)
     )
     await first._async_update_data()
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     events = async_capture_events(hass, EVENT_NEW_GRADE)
     entry = make_config_entry()
@@ -318,7 +317,7 @@ async def test_agenda_change_survives_restart(hass, hass_storage, freezer) -> No
     freezer.move_to("2026-10-07T10:00:00+00:00")
     first = _coordinator(hass, build_mock_client(async_get_homeworks=_agenda((1, "2026-10-12", "Ułamki"))))
     await first._async_update_data()
-    saved = json.loads(json.dumps(first._state_to_save()))
+    saved = saved_state(first)
 
     events = async_capture_events(hass, EVENT_AGENDA_CHANGED)
     entry = make_config_entry()

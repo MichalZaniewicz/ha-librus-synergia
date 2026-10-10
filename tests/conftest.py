@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -164,6 +165,15 @@ def messages_by_mailbox(payloads: dict) -> object:
         return result
 
     return _get
+
+
+def saved_state(coordinator) -> dict:
+    """Both parts of a coordinator's saved state as one JSON round-tripped
+    dict - the single-file shape older versions wrote (and
+    `async_restore_state` still reads), for tests that restore it."""
+    return json.loads(
+        json.dumps({**coordinator._tracked_to_save(), **coordinator._payloads_to_save()})
+    )
 
 
 def make_config_entry(*, options: dict | None = None, **data) -> MockConfigEntry:

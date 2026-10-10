@@ -29,7 +29,7 @@ from .const import (
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
 )
-from .coordinator import LibrusDataUpdateCoordinator, lesson_change
+from .coordinator import LibrusDataUpdateCoordinator, lesson_change, on_demand_week_starts
 from .forecast import DataMemo
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,10 +61,6 @@ async def async_setup_entry(
     if entry.options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED):
         entities.append(LibrusFreeDaysCalendar(coordinator, entry))
     async_add_entities(entities)
-
-
-def _iso_week_start(day: date) -> date:
-    return day - timedelta(days=day.weekday())
 
 
 def _event_overlaps(event: CalendarEvent, start: date, end: date) -> bool:
@@ -354,9 +350,16 @@ def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
     )
 
 
+def _sorted_events(events: list[CalendarEvent]) -> list[CalendarEvent]:
+    """All-day events by start (then summary) - built once per data object,
+    so the current event is the first one not over yet and range queries
+    come back in order."""
+    return sorted(events, key=lambda event: (event.start, event.summary))
+
+
 def _agenda_events(data: LibrusData) -> list[CalendarEvent]:
     """Every Agenda entry and every parent-teacher conference HomeWorks
-    doesn't already list, as all-day events."""
+    doesn't already list, as all-day events, sorted."""
     events = [
         event for item in data.homeworks if (event := _homework_to_event(item, data)) is not None
     ]
@@ -365,11 +368,19 @@ def _agenda_events(data: LibrusData) -> list[CalendarEvent]:
         for item in _pt_conferences_not_in_agenda(data)
         if (event := _pt_conference_to_event(item, data)) is not None
     ]
-    return events
+    return _sorted_events(events)
 
 
 def _free_day_events(data: LibrusData) -> list[CalendarEvent]:
-    return [event for item in data.free_days if (event := _free_day_to_event(item)) is not None]
+    return _sorted_events(
+        [event for item in data.free_days if (event := _free_day_to_event(item)) is not None]
+    )
+
+
+def _first_not_over(events: list[CalendarEvent], today: date) -> CalendarEvent | None:
+    """The first of start-sorted all-day events that isn't over by `today`
+    (`end` is exclusive: yesterday's entry ends today and is over)."""
+    return next((event for event in events if event.end > today), None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -448,12 +459,12 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         polled = self._polled_events()
         if data is None or polled is None:
             return []
-        week_starts: list[date] = []
-        week_start = _iso_week_start(start_date.date())
-        last_week_start = _iso_week_start(_inclusive_end_date(end_date))
-        while week_start <= last_week_start:
-            week_starts.append(week_start)
-            week_start += timedelta(days=7)
+        # At most ON_DEMAND_WEEKS weeks either side of this one: a whole year
+        # (or a far-off range) asked for at once used to mean a request to
+        # Librus per week.
+        week_starts = on_demand_week_starts(start_date.date(), _inclusive_end_date(end_date))
+        if not week_starts:
+            return []
         lessons_by_day = await self.coordinator.async_get_timetable_weeks(week_starts)
 
         events: list[CalendarEvent] = []
@@ -504,16 +515,10 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
     def event(self) -> CalendarEvent | None:
         if self.coordinator.data is None:
             return None
-        today = dt_util.now().date()
         # `end` of an all-day event is exclusive (the day after): `>` keeps
         # yesterday's entry (end == today) from showing as current all day,
         # same as the free-days calendar below.
-        upcoming = [
-            event
-            for event in self._events()
-            if event.end > today
-        ]
-        return min(upcoming, key=lambda event: event.start) if upcoming else None
+        return _first_not_over(self._events(), dt_util.now().date())
 
     def _events(self) -> list[CalendarEvent]:
         """Every Agenda event, built once per coordinator data object (the
@@ -566,9 +571,7 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
     def event(self) -> CalendarEvent | None:
         if self.coordinator.data is None:
             return None
-        today = dt_util.now().date()
-        upcoming = [event for event in self._events() if event.end > today]
-        return min(upcoming, key=lambda event: event.start) if upcoming else None
+        return _first_not_over(self._events(), dt_util.now().date())
 
     def _events(self) -> list[CalendarEvent]:
         data = self.coordinator.data

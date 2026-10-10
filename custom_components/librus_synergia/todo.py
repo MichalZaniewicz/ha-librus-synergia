@@ -66,6 +66,16 @@ class LibrusHomeworkTodoList(
         await super().async_added_to_hass()
         stored = await self._store.async_load() or {}
         self._done = {str(uid) for uid in stored.get("done", [])}
+        data = self.coordinator.data
+        if data is not None and self.coordinator.homework_assignments_complete:
+            # Ticks for homework Librus no longer lists are dropped here too,
+            # not only on the next tick: after a new school year cleared the
+            # homework badge's count, every restart put last year's ticks
+            # back into it.
+            known = {str(hw.id) for hw in data.homework_assignments}
+            if not self._done <= known:
+                self._done &= known
+                await self._store.async_save({"done": sorted(self._done)})
         for uid in self._done:
             self.coordinator.record_homework_done(uid)
 

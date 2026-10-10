@@ -9,7 +9,6 @@ in on a day off).
 
 from __future__ import annotations
 
-import weakref
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -159,6 +158,12 @@ class SchoolDayClock:
         self._unsub_timer = self._unsub_coordinator = None
 
     @callback
+    def async_stop(self) -> None:
+        """The entry is unloading: no listeners, no timer."""
+        self._listeners.clear()
+        self._stop()
+
+    @callback
     def _arm(self) -> None:
         if self._unsub_timer is not None:
             self._unsub_timer()
@@ -179,14 +184,16 @@ class SchoolDayClock:
             self._arm()
 
 
-_CLOCKS: weakref.WeakKeyDictionary[Any, SchoolDayClock] = weakref.WeakKeyDictionary()
-
-
 def school_day_clock(coordinator: Any) -> SchoolDayClock:
-    """The coordinator's shared SchoolDayClock (created on first use)."""
-    clock = _CLOCKS.get(coordinator)
-    if clock is None:
-        clock = _CLOCKS[coordinator] = SchoolDayClock(coordinator)
+    """The coordinator's shared SchoolDayClock (created on first use), kept
+    on the coordinator itself - a module-level map from coordinator to clock
+    kept every unloaded coordinator alive (the clock refers back to its
+    coordinator, so a weak key never went away). Stopped on unload
+    (`LibrusDataUpdateCoordinator.async_close_state`)."""
+    clock = getattr(coordinator, "school_day_clock", None)
+    if not isinstance(clock, SchoolDayClock):
+        clock = SchoolDayClock(coordinator)
+        coordinator.school_day_clock = clock
     return clock
 
 
