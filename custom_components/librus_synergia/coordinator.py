@@ -278,8 +278,9 @@ _KINDERGARTEN_EMPTY_RESET = timedelta(days=21)
 # Read receipts: at most this many sent messages asked for at once.
 _READ_RECEIPT_CONCURRENCY = 3
 
-# Kindergarten entry summary for diagnostics (issue #14): only `"planned"`
-# has been seen live, so a substitution's entries are described by type -
+# Kindergarten entry summary for diagnostics (issue #14, which it solved:
+# `planned`/`cancelled`/`substitution`/`substituted`, see librus-synergia's
+# kindergarten notes). Kept to catch types not seen yet - entries by type,
 # field names and value shapes, never names or ids. A string is shown as is
 # only when it looks like an enum (starts lowercase, letters only); a LID is
 # "lid", or "ref:<type>" when it is another entry's own `identifier` (how a

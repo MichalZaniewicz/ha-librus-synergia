@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.util import dt as dt_util
 
 from librus_synergia import LibrusSessionExpiredError
+from librus_synergia.models import LibrusData, MeData
 from librus_synergia.parsers import (
     merge_timetables,
     parse_kindergarten_classrooms,
@@ -15,8 +16,10 @@ from librus_synergia.parsers import (
     parse_kindergarten_teachers,
 )
 
+from custom_components.librus_synergia.calendar import _lesson_to_event
 from custom_components.librus_synergia.coordinator import (
     LibrusDataUpdateCoordinator,
+    lesson_change,
     summarize_kindergarten_entries,
 )
 
@@ -95,6 +98,68 @@ def test_merge_timetables_understands_kindergarten_entries() -> None:
     assert lesson.teacher_ids == (TEACHER_LID,)
     assert not lesson.is_canceled
     assert not lesson.is_substitution
+
+
+def test_kindergarten_substitution_shows_once_with_the_planned_teacher() -> None:
+    """Shape confirmed 2026-10-10: the replaced block comes as
+    "substituted" next to the "substitution" entries replacing it."""
+    day = date(2026, 10, 12)
+    substitute = "LID-AUTH-USER-5241-SUBSTITUTE"
+    planned = {
+        "identifier": "L1",
+        "activityTypeIdentifier": "ACT1",
+        "classroomIdentifier": "ROOM1",
+        "type": "substituted",
+        "date": day.isoformat(),
+        "startTime": "10:00",
+        "endTime": "13:00",
+        "teachers": [TEACHER_LID],
+    }
+
+    def replacement(ident: str, start: str, end: str) -> dict:
+        return {
+            **planned,
+            "identifier": ident,
+            "type": "substitution",
+            "startTime": start,
+            "endTime": end,
+            "teachers": [substitute],
+            "substitutedLesson": planned,
+        }
+
+    payload = {
+        "timetableEntries": [
+            {**planned, "substitutions": [{"identifier": "S1"}, {"identifier": "S2"}]},
+            replacement("S1", "10:00", "11:00"),
+            replacement("S2", "11:00", "13:00"),
+        ]
+    }
+    lessons = merge_timetables(payload)[day]
+    assert [(lesson.hour_from, lesson.teacher_id) for lesson in lessons] == [
+        ("10:00", substitute),
+        ("11:00", substitute),
+    ]
+    data = LibrusData(
+        me=MeData(account_id=1, first_name="Ola", last_name="Kowalska"),
+        grades=[],
+        grade_categories={},
+        notes=[],
+        attendances=[],
+        attendance_types={},
+        timetable={day: lessons},
+        homeworks=[],
+        school_notices=[],
+        lucky_number=None,
+        subjects={"ACT1": "Edukacja przedszkolna"},
+        teachers={TEACHER_LID: "Anna Nowak", substitute: "Jan Kowal"},
+        classrooms={"ROOM1": "sala 1"},
+    )
+    change = lesson_change(day, lessons[0], data)
+    assert change["kind"] == "substitution"
+    assert change["original_teacher"] == "Anna Nowak"
+    event = _lesson_to_event(day, lessons[0], data)
+    assert event.summary == "Edukacja przedszkolna (zastępstwo)"
+    assert "Zastępstwo za: Anna Nowak" in event.description
 
 
 def test_kindergarten_lookup_parsers() -> None:

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.9
+
+### Fixed
+- **Kindergarten substitutions no longer show twice.** On a day with a
+  substitution, Librus sends both the replaced block (`substituted`) and the
+  blocks that replace it (`substitution`), and both were shown as
+  substitutions. Now only the replacements are shown, each naming the
+  planned teacher ("Zastępstwo za: ..."); a replaced block that nothing
+  replaces shows as cancelled. Comes from
+  librus-synergia 0.3.21. (Thanks @Lucaspog for reporting and for sending the
+  diagnostics that made this fix possible)
+
 ## 0.12.8
 
 Everything from 0.12.7-beta.1 (released as 0.12.8, so HACS updates the beta
