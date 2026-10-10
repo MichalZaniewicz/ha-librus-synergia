@@ -206,7 +206,7 @@ def hero(fonts: Path) -> None:
         '<g class="f1">'
         + _card(svg, 770, 66, 340, 100)
         + svg.text(792, 96, "NOW · LESSON 3", 11, 700, MUTED, mono=True, spacing=1.5)
-        + svg.text(792, 128, "Matematyka", 23, 800, PAPER)
+        + svg.text(792, 128, "Maths", 23, 800, PAPER)
         + svg.text(1088, 128, "room 204", 14, 600, LILAC, anchor="end")
         + f'<rect x="792" y="143" width="296" height="7" rx="3.5" fill="{LINE}"/>'
         + f'<rect class="bar" x="792" y="143" width="296" height="7" rx="3.5" fill="{VIOLET}"/>'
@@ -216,7 +216,7 @@ def hero(fonts: Path) -> None:
         '<g class="f2">'
         + _card(svg, 700, 186, 256, 112)
         + svg.text(722, 216, "NEXT TEST", 11, 700, MUTED, mono=True, spacing=1.5)
-        + svg.text(722, 250, "Biologia", 23, 800, PAPER)
+        + svg.text(722, 250, "Biology", 23, 800, PAPER)
         + svg.text(722, 277, "in 2 days · 4 topics", 14, 600, AMBER)
         + "</g>"
     )
@@ -232,8 +232,8 @@ def hero(fonts: Path) -> None:
         f'<rect x="752" y="322" width="384" height="72" rx="18" fill="{PAPER}" fill-opacity=".1" stroke="#5e5a8c"/>'
         f'<rect x="770" y="339" width="38" height="38" rx="10" fill="{VIOLET}"/>'
         + svg.text(789, 364, "5", 17, 800, "#ffffff", anchor="middle")
-        + svg.text(822, 353, "Ola: nowa ocena 5 z matematyki", 13.5, 700, PAPER)
-        + svg.text(822, 375, "Kartkówka · waga 2 · just now", 12.5, 500, LILAC)
+        + svg.text(822, 353, "Ola: new grade 5 in Maths", 13.5, 700, PAPER)
+        + svg.text(822, 375, "Quiz · weight 2 · just now", 12.5, 500, LILAC)
         + "</g>"
     )
     svg.write("hero.svg", fonts)
