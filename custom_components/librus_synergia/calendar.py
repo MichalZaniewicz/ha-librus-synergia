@@ -280,12 +280,23 @@ def _homework_to_event(item: HomeworkEventData, data: LibrusData) -> CalendarEve
     if category_name:
         summary = f"[{category_name}] {summary}"
 
+    # The entry stays all-day (like every other Agenda event); a time from
+    # Librus (`TimeFrom`, e.g. a parent-teacher meeting at 17:30) leads the
+    # description, so automations and cards can read it.
+    description = " · ".join(p for p in (_hhmm(item.time_from), content) if p)
     return CalendarEvent(
         start=day,
         end=day + timedelta(days=1),
         summary=summary,
-        description=content or None,
+        description=description or None,
     )
+
+
+def _hhmm(value: str | None) -> str | None:
+    """"17:30:00" -> "17:30"; None for a missing or midnight time."""
+    if not value or len(value) < 5 or value[2] != ":" or value.startswith("00:00"):
+        return None
+    return value[:5]
 
 
 def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData) -> CalendarEvent | None:
@@ -305,13 +316,13 @@ def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData)
 
     teacher_name = data.teachers.get(item.teacher_id) if item.teacher_id is not None else None
     summary = f"[Zebranie z Rodzicami] {item.topic}".strip() if item.topic else "Zebranie z Rodzicami"
-    description_parts = [p for p in (item.time, teacher_name) if p]
+    description_parts = [p for p in (_hhmm(item.time), teacher_name) if p]
 
     return CalendarEvent(
         start=day,
         end=day + timedelta(days=1),
         summary=summary,
-        description=" - ".join(description_parts) or None,
+        description=" · ".join(description_parts) or None,
     )
 
 

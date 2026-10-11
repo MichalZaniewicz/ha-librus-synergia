@@ -500,6 +500,12 @@ async def test_parent_teacher_conference_already_in_homeworks_not_duplicated(has
     assert len(summaries) == 2
     assert not any("Omówienie" in s for s in summaries)
     assert any("Konsultacje" in s for s in summaries)
+    # the time leads the description (HH:MM), for automations and cards
+    descriptions = {e["summary"]: e.get("description") for e in response[entity_id]["events"]}
+    meeting = next(d for s, d in descriptions.items() if "Zebranie" in s)
+    assert meeting.startswith("17:00 · Zebranie z rodzicami")
+    conference = next(d for s, d in descriptions.items() if "Konsultacje" in s)
+    assert conference.startswith("18:30")
 
 
 def _parallel_lesson(subject_id: str, teacher_id: str, classroom_id: str, **extra) -> dict:

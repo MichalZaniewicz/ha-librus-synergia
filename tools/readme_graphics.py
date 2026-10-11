@@ -360,6 +360,21 @@ def video_header(fonts: Path) -> None:
     svg.write("video-header.svg", fonts)
 
 
+IDEA_CHIPS = [("Morning", "v"), ("During school", "v"), ("Afternoon & evening", "v"), ("Planning ahead", "v"),
+              ("9 blueprints", "a"), ("7 build-your-own", "g")]
+
+
+def ideas_header(fonts: Path) -> None:
+    svg = Svg(1200, 170, "16 ideas for your automations: watch the 4-minute film")
+    svg.defs.append(f'<linearGradient id="ibg" x1="0" x2="1"><stop offset="0" stop-color="{DEEP}"/><stop offset="1" stop-color="#1d1946"/></linearGradient>')
+    svg.add(f'<rect width="1200" height="170" rx="20" fill="url(#ibg)" stroke="{LINE}"/>')
+    svg.add(f'<circle cx="68" cy="66" r="30" fill="{AMBER}"/><path d="M60 50v32l25-16z" fill="{INK}"/>')
+    svg.add(svg.text(116, 60, "16 ideas for your automations - watch the 4-minute film", 26, 800, PAPER))
+    svg.add(svg.text(116, 88, "From the morning alarm to Sunday evening. The code for every recipe is in the wiki.", 15, 500, LILAC))
+    _chips(svg, 38, 118, IDEA_CHIPS)
+    svg.write("ideas-header.svg", fonts)
+
+
 STEP_ICONS = {
     "download": "M12 3v10.6l3.3-3.3 1.4 1.4L12 16.4l-4.7-4.7 1.4-1.4 3.3 3.3V3zM5 19h14v2H5z",
     "restart": "M12 4a8 8 0 1 0 7.7 10h-2.1A6 6 0 1 1 12 6c1.7 0 3.1.7 4.2 1.8L13 11h7V4l-2.4 2.4A8 8 0 0 0 12 4z",
@@ -404,6 +419,7 @@ def main() -> None:
     stats(fonts)
     features(fonts)
     video_header(fonts)
+    ideas_header(fonts)
     steps(fonts)
 
 

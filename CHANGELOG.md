@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Agenda entries show their time.** When Librus gives an Agenda entry a
+  time (a parent-teacher meeting at 17:30, say), the event description now
+  starts with it ("17:30 · Zebranie z rodzicami ..."). The entries stay
+  all-day. Parent-teacher conferences show "17:30" instead of "17:30:00".
+  Automations can read the time from the description, as in the
+  "Parent-teacher meeting: leave on time" recipe on the wiki's
+  Automation ideas page.
+
 ## 0.12.9
 
 ### Fixed

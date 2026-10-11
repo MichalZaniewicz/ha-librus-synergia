@@ -71,6 +71,14 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 
 https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff
 
+## Ideas for your automations
+
+<p align="center">
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Automation-ideas"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ideas-header.svg" alt="16 ideas for your automations: watch the 4-minute film" width="100%"></a>
+</p>
+
+Sixteen things your home can do with school data, from a wake-up light that follows the timetable to a reminder to leave for the parent-teacher meeting. Nine are ready-made blueprints, and the code for the other seven is on the **[Automation ideas](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Automation-ideas)** page in the wiki.
+
 ## Weekly AI summary
 
 <p align="center">
