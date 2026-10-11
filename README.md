@@ -74,11 +74,12 @@ https://github.com/user-attachments/assets/da3ab933-a071-472a-8dac-2e60d9a624ff
 ## Ideas for your automations
 
 <p align="center">
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Automation-ideas"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ideas-header.svg" alt="16 ideas for your automations: watch the 4-minute film" width="100%"></a>
+  <a href="https://github.com/user-attachments/assets/23d96479-4d19-40b7-97f9-d6cc70f4e341"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/ideas-header.svg" alt="16 ideas for your automations: watch the 4-minute film" width="100%"></a>
 </p>
 
-https://github.com/user-attachments/assets/23d96479-4d19-40b7-97f9-d6cc70f4e341
+<p align="center">🔊 <b>The video starts muted</b> - click the speaker icon in the player to hear the voice-over.</p>
 
+https://github.com/user-attachments/assets/23d96479-4d19-40b7-97f9-d6cc70f4e341
 
 Sixteen things your home can do with school data, from a wake-up light that follows the timetable to a reminder to leave for the parent-teacher meeting. Half of them come as ready-made blueprints, and the code for the rest is on the **[Automation ideas](https://github.com/MichalZaniewicz/ha-librus-synergia/wiki/Automation-ideas)** page in the wiki.
 
