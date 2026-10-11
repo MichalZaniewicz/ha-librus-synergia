@@ -361,7 +361,7 @@ def video_header(fonts: Path) -> None:
 
 
 IDEA_CHIPS = [("Morning", "v"), ("During school", "v"), ("Afternoon & evening", "v"), ("Planning ahead", "v"),
-              ("9 blueprints", "a"), ("7 build-your-own", "g")]
+              ("8 with a blueprint", "a"), ("8 to paste", "g")]
 
 
 def ideas_header(fonts: Path) -> None:
