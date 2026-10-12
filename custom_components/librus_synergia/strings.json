@@ -308,7 +308,7 @@
         },
         "topic": {
           "name": "Topic",
-          "description": "The subject line. With Reply to, defaults to \"Re: <topic>\"."
+          "description": "The subject line. With Reply to, defaults to \"Re:\" and the original topic."
         },
         "message": {
           "name": "Message",

@@ -308,7 +308,7 @@
         },
         "topic": {
           "name": "Temat",
-          "description": "Temat wiadomości. Przy Odpowiedz na domyślnie \"Re: <temat>\"."
+          "description": "Temat wiadomości. Przy Odpowiedz na domyślnie \"Re:\" i temat oryginału."
         },
         "message": {
           "name": "Treść",
