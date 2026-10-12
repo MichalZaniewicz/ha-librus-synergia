@@ -17,7 +17,7 @@ import copy
 import dataclasses
 import logging
 import re
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -35,9 +35,11 @@ from librus_synergia import (
     LibrusApiClient,
     LibrusAuthError,
     LibrusError,
+    LibrusMessageSendError,
     LibrusSessionData,
     LibrusSessionExpiredError,
 )
+from librus_synergia.const import MESSAGE_RECIPIENT_GROUPS
 from librus_synergia.changes import Changes, ChangeTracker, SeenIds
 from librus_synergia.exceptions import LibrusUnexpectedResponseError
 from librus_synergia.changes import absences as tracked_absences
@@ -54,9 +56,11 @@ from librus_synergia.models import (
     LibrusData,
     LuckyNumberData,
     MessageData,
+    MessageRecipientData,
     JustificationData,
     NoteData,
     PointGradeData,
+    SentMessageData,
     SchoolData,
 )
 
@@ -101,6 +105,8 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_justifications,
     parse_realizations,
     parse_library_lendings,
+    parse_message_recipients,
+    validate_message,
     parse_plan_changes,
     parse_school_files,
     parse_school_trips,
@@ -119,6 +125,7 @@ from librus_synergia.parsers import (  # noqa: F401
 )
 
 from .const import (
+    MESSAGE_SEND_LIMIT_PER_HOUR,
     AVERAGE_MODE_ARITHMETIC,
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_AVERAGE_MODE,
@@ -221,6 +228,8 @@ _EXTRA_LABELS = (
 )
 # Read receipts: the newest sent messages from the last this-many days.
 _READ_RECEIPT_DAYS = 30
+# How long the message recipient list is kept (see async_message_recipients).
+_MESSAGE_RECIPIENTS_TTL = timedelta(hours=1)
 _READ_RECEIPT_MESSAGES = 5
 # Lesson topics, trips and school documents change a few times a day.
 _MESSAGES_QUICK_RECHECKS = 3
@@ -1013,6 +1022,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Library lending id -> {title, author, lent_on} (None until the first
         # sync, which only seeds it) - see _fire_library_events.
         self._known_library: dict[str, dict[str, Any]] | None = None
+        # Message recipients (fetched at, list) and when messages were sent
+        # (the hourly sending limit) - memory only.
+        self._message_recipients: tuple[datetime, list[MessageRecipientData]] | None = None
+        self._sent_at: list[datetime] = []
         # Ids already announced per kind (text grades, descriptive grades,
         # school trips, school documents); None until the first sync, which
         # only seeds them.
@@ -2363,6 +2376,104 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # drop the copy so the next cycle asks for the list again.
         self._forget_mailbox_list(mailbox)
         return payload
+
+    async def _async_messages_read(self, request: Callable[[], Awaitable[_T]]) -> _T:
+        """One side-effect-free Wiadomości read, with the same recovery as
+        `async_fetch_message`: on a rejected session, one relogin + a fresh
+        Wiadomości bootstrap, then one more try. Raises
+        `LibrusMessageSendError` (`sent=False`) when the school has no
+        messages module."""
+        if not self._messages_bootstrapped:
+            self._messages_available = await self._client.async_bootstrap_messages()
+            self._messages_bootstrapped = True
+        if self._messages_available is False:
+            raise LibrusMessageSendError(
+                "This account has no Wiadomości (messages module).", sent=False
+            )
+        seen = self._login_count
+        try:
+            return await request()
+        except LibrusSessionExpiredError:
+            await self._async_relogin(seen)
+            self._messages_bootstrapped = False
+            self._messages_available = await self._client.async_bootstrap_messages()
+            self._messages_bootstrapped = True
+            return await request()
+
+    async def async_message_recipients(self, *, force: bool = False) -> list[MessageRecipientData]:
+        """Who a message can go to (see `librus_synergia.parsers.
+        parse_message_recipients`), kept for an hour - the staff list
+        barely changes and a send shouldn't cost a dozen extra reads."""
+        cached = self._message_recipients
+        if (
+            not force
+            and cached is not None
+            and dt_util.utcnow() - cached[0] < _MESSAGE_RECIPIENTS_TTL
+        ):
+            return cached[1]
+        types = await self._async_messages_read(self._client.async_get_message_recipient_types)
+        offered = {
+            str(item.get("id"))
+            for item in ((types.get("data") or {}).get("list") or [])
+            if isinstance(item, dict)
+        }
+
+        async def group(name: str) -> tuple[str, dict[str, Any]]:
+            payload = await self._async_messages_read(
+                lambda: self._client.async_get_message_recipients(name)
+            )
+            return name, payload
+
+        groups = await asyncio.gather(
+            *(group(name) for name in MESSAGE_RECIPIENT_GROUPS if name in offered)
+        )
+        subjects = await self._async_messages_read(
+            self._client.async_get_student_subject_teachers
+        )
+        recipients = parse_message_recipients(types, dict(groups), subjects)
+        self._message_recipients = (dt_util.utcnow(), recipients)
+        return recipients
+
+    def _check_send_limit(self) -> None:
+        """At most MESSAGE_SEND_LIMIT_PER_HOUR sends per hour."""
+        hour_ago = dt_util.utcnow() - timedelta(hours=1)
+        self._sent_at = [at for at in self._sent_at if at > hour_ago]
+        if len(self._sent_at) >= MESSAGE_SEND_LIMIT_PER_HOUR:
+            raise LibrusMessageSendError(
+                f"Sending limit reached ({MESSAGE_SEND_LIMIT_PER_HOUR} messages an hour) - not sent.",
+                sent=False,
+            )
+
+    async def async_send_message(
+        self,
+        account_ids: list[str],
+        topic: str,
+        text: str,
+        *,
+        reply_to: str | None = None,
+    ) -> SentMessageData:
+        """**Sends a message** for the `send_message` service. The
+        Wiadomości session is checked with a read first (with the usual
+        recovery), then the message goes out ONCE - never retried, not even
+        after a rejected session (`LibrusApiClient.async_send_message_checked`
+        raises `LibrusMessageSendError` and says whether it went out)."""
+        validate_message(account_ids, topic, text)
+        self._check_send_limit()
+        await self._async_messages_read(self._client.async_get_messages_me)
+        # Counted before the attempt: an unconfirmed send may still have
+        # gone out.
+        self._sent_at.append(dt_util.utcnow())
+        try:
+            return await self._client.async_send_message_checked(
+                account_ids, topic, text, reply_to=reply_to
+            )
+        finally:
+            self._forget_mailbox_list("outbox")
+
+    async def async_withdraw_message(self, message_id: str) -> None:
+        """Withdraws a message you sent (`withdraw_message` service)."""
+        await self._async_messages_read(lambda: self._client.async_withdraw_message(message_id))
+        self._forget_mailbox_list("outbox")
 
     async def _async_update_data(self) -> LibrusData:
         assert self.config_entry is not None

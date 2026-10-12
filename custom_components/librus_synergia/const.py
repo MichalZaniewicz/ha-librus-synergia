@@ -97,6 +97,17 @@ DEFAULT_MERGE_PARALLEL_LESSONS = True
 # a school that hasn't enabled the module.
 CONF_MESSAGES_ENABLED = "messages_enabled"
 DEFAULT_MESSAGES_ENABLED = True
+# Writing messages (the send_message / withdraw_message services) - off by
+# default: a sent message goes to a real teacher and can't be unsent once
+# read, so it has to be switched on deliberately under Configure.
+CONF_MESSAGE_SENDING_ENABLED = "message_sending_enabled"
+DEFAULT_MESSAGE_SENDING_ENABLED = False
+# At most this many messages per student per hour - a runaway automation
+# can't flood a teacher's inbox.
+MESSAGE_SEND_LIMIT_PER_HOUR = 10
+# Options read live wherever they're used - changing one (e.g. from the
+# "Message sending" switch) doesn't reload the integration.
+LIVE_OPTIONS = frozenset({CONF_MESSAGE_SENDING_ENABLED})
 
 # Same "skip the fetch, sensor goes unavailable" shape as CONF_MESSAGES_
 # ENABLED above, extended to the other optional (non-core) data groups.

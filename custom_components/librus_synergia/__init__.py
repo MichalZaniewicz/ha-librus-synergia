@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import logging
 from datetime import time, timedelta
 
@@ -18,6 +20,7 @@ from librus_synergia import LibrusApiClient, LibrusSessionData
 from .ai_summary import LibrusWeeklySummary
 from .average_history import LibrusAverageHistory, statistic_id_prefix
 from .const import (
+    LIVE_OPTIONS,
     CONF_AI_AUDIENCE,
     CONF_AI_CONTEXT,
     CONF_AI_INCLUDE_MESSAGES,
@@ -65,6 +68,11 @@ def librus_device_info(entry: LibrusConfigEntry) -> DeviceInfo:
         manufacturer="Librus",
         model="Synergia",
     )
+
+
+def _reload_relevant(options: Any) -> dict[str, Any]:
+    """The options whose change needs a reload (all but LIVE_OPTIONS)."""
+    return {key: value for key, value in dict(options).items() if key not in LIVE_OPTIONS}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bool:
@@ -158,7 +166,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
         `async_update_reload_and_abort`, so data-only changes never need
         this listener to do it for them.
         """
-        if dict(entry.options) == options_at_setup:
+        if _reload_relevant(entry.options) == _reload_relevant(options_at_setup):
+            # Nothing changed, or only options read live (LIVE_OPTIONS, e.g.
+            # the "Message sending" switch) - no reload needed.
             return
         await hass.config_entries.async_reload(entry.entry_id)
 

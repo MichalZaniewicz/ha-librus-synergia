@@ -75,6 +75,7 @@ from .const import (
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_ENABLED,
+    CONF_MESSAGE_SENDING_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -93,6 +94,7 @@ from .const import (
     DEFAULT_HIDE_EMPTY_SUBJECTS,
     DEFAULT_MERGE_PARALLEL_LESSONS,
     DEFAULT_MESSAGES_ENABLED,
+    DEFAULT_MESSAGE_SENDING_ENABLED,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
@@ -376,6 +378,12 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_MESSAGES_ENABLED,
                     default=options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_MESSAGE_SENDING_ENABLED,
+                    default=options.get(
+                        CONF_MESSAGE_SENDING_ENABLED, DEFAULT_MESSAGE_SENDING_ENABLED
+                    ),
                 ): BooleanSelector(),
                 vol.Required(
                     CONF_ANNOUNCEMENTS_ENABLED,

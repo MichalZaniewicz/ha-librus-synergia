@@ -74,6 +74,7 @@
         "data": {
           "scan_interval": "Częstotliwość odpytywania (minuty)",
           "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)",
+          "message_sending_enabled": "Pozwól wysyłać wiadomości",
           "announcements_enabled": "Pobieraj ogłoszenia",
           "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
           "descriptive_grades_enabled": "Pobieraj oceny opisowe",
@@ -91,6 +92,7 @@
         "data_description": {
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
           "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa.",
+          "message_sending_enabled": "Pozwala usługom send_message i withdraw_message pisać do nauczycieli i szkoły w Wiadomościach. Domyślnie wyłączone: wysłana wiadomość trafia do prawdziwej osoby. Niedostępne dla Assist ani podsumowania AI.",
           "announcements_enabled": "Gdy wyłączone, sensor Nieprzeczytane ogłoszenia staje się niedostępny i nie są wykonywane żadne zapytania o ogłoszenia.",
           "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
@@ -230,6 +232,7 @@
       "weekly_summary_generate": { "name": "Wygeneruj podsumowanie tygodnia" }
     },
     "switch": {
+      "message_sending": { "name": "Wysyłanie wiadomości (beta)" },
       "weekly_summary_enabled": { "name": "Automatyczne podsumowanie tygodnia" }
     },
     "calendar": {
@@ -280,6 +283,86 @@
           "description": "Ogranicz do ocen z jednego przedmiotu, używając atrybutu \"subject_id\" sensora średniej przedmiotowej. Zostaw puste dla wszystkich przedmiotów."
         }
       }
+    },
+    "get_message_recipients": {
+      "name": "Pobierz odbiorców wiadomości",
+      "description": "Pokazuje, do kogo można wysłać wiadomość w Wiadomościach: wychowawcę, nauczycieli (z przedmiotami, których uczą ucznia), dyrekcję, sekretariat i innych pracowników. Tylko odczyt.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń)."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Wyślij wiadomość",
+      "description": "Wysyła wiadomość w Wiadomościach do nauczyciela lub szkoły albo odpowiada na otrzymaną wiadomość w jej wątku. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości\" w Konfiguracji (poza trybem na sucho). Wysyłana raz, bez ponawiania; najwyżej 10 wiadomości na godzinę.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń), z którego konta rodzica wiadomość wychodzi."
+        },
+        "recipient": {
+          "name": "Odbiorca",
+          "description": "Do kogo: \"wychowawca\", \"sekretariat\", przedmiot (jego nauczyciel, np. \"Matematyka\"), część nazwiska albo numer konta z usługi Pobierz odbiorców wiadomości. Można podać kilku. Nie używane z Odpowiedz na."
+        },
+        "topic": {
+          "name": "Temat",
+          "description": "Temat wiadomości. Przy Odpowiedz na domyślnie \"Re: <temat>\"."
+        },
+        "message": {
+          "name": "Treść",
+          "description": "Tekst wiadomości. Zwykły tekst; nowe linie zostają."
+        },
+        "reply_to": {
+          "name": "Odpowiedz na",
+          "description": "Numer otrzymanej wiadomości (\"id\" w atrybucie \"recent\" sensora Nieprzeczytane wiadomości): odpowiedź trafia do nadawcy, w jej wątku. Otwarcie jej, żeby znaleźć nadawcę, oznacza ją jako przeczytaną."
+        },
+        "dry_run": {
+          "name": "Na sucho",
+          "description": "Tylko pokaż, do kogo i co by poszło - nic nie jest wysyłane."
+        }
+      }
+    },
+    "withdraw_message": {
+      "name": "Wycofaj wiadomość",
+      "description": "Wycofuje wysłaną wiadomość, dopóki Librus na to pozwala. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości\" w Konfiguracji.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń)."
+        },
+        "message_id": {
+          "name": "Numer wiadomości",
+          "description": "Numer wysłanej wiadomości - \"message_id\" z Wyślij wiadomość albo \"id\" w \"outbox_recent\"."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "message_sending_disabled": {
+      "message": "Wysyłanie wiadomości jest wyłączone. Włącz \"Pozwól wysyłać wiadomości\" w Konfiguracji integracji albo użyj trybu na sucho."
+    },
+    "message_no_recipient": {
+      "message": "Podaj odbiorcę albo Odpowiedz na z numerem otrzymanej wiadomości."
+    },
+    "message_no_topic": {
+      "message": "Podaj temat wiadomości."
+    },
+    "message_duplicate_recipient": {
+      "message": "Ta sama osoba jest podana więcej niż raz."
+    },
+    "message_recipient_unknown": {
+      "message": "Żaden odbiorca nie pasuje do \"{recipient}\". Usługa Pobierz odbiorców wiadomości pokazuje, do kogo można pisać."
+    },
+    "message_recipient_ambiguous": {
+      "message": "\"{recipient}\" pasuje do kilku odbiorców: {candidates}. Doprecyzuj albo podaj numer konta."
+    },
+    "message_not_sent": {
+      "message": "Wiadomość nie została wysłana: {error}"
+    },
+    "message_maybe_sent": {
+      "message": "Librus nie potwierdził wiadomości - mogła zostać wysłana. Sprawdź wysłane, zanim spróbujesz ponownie. ({error})"
     }
   }
 }

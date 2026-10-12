@@ -9,6 +9,13 @@
   subject) in one response, instead of reading each subject sensor's own
   `grades` attribute separately. Purely a reshape of `coordinator.data`
   already in memory - no extra Librus request, unlike `get_message`.
+- `get_message_recipients` - who a message can go to (read-only).
+- `send_message` / `withdraw_message` - write to Wiadomości. Only when
+  "Allow sending messages" is on under Configure; a send is never retried,
+  at most MESSAGE_SEND_LIMIT_PER_HOUR an hour, and `dry_run` shows what
+  would go out without sending. Deliberately not offered to Assist or the
+  AI summary (llm_api.py / ai_summary.py) - only a person or an automation
+  someone wrote can send.
 """
 
 from __future__ import annotations
@@ -23,22 +30,43 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 
-from librus_synergia import LibrusError
-from librus_synergia.parsers import parse_message_receivers, point_grades_percentage
+from librus_synergia import LibrusError, LibrusMessageSendError
+from librus_synergia.parsers import (
+    parse_message,
+    parse_message_receivers,
+    point_grades_percentage,
+    reply_topic,
+)
 
-from .const import DOMAIN
+from .const import (
+    CONF_MESSAGE_SENDING_ENABLED,
+    DEFAULT_MESSAGE_SENDING_ENABLED,
+    DOMAIN,
+)
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     decode_message_content,
     grade_improvements,
     resolve_sender_name,
 )
+from .messaging import RecipientError, recipient_dict, resolve_recipient
 
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_GET_MESSAGE = "get_message"
 SERVICE_REFRESH = "refresh"
 SERVICE_GET_GRADES = "get_grades"
+SERVICE_GET_MESSAGE_RECIPIENTS = "get_message_recipients"
+SERVICE_SEND_MESSAGE = "send_message"
+SERVICE_WITHDRAW_MESSAGE = "withdraw_message"
+_SERVICES = (
+    SERVICE_GET_MESSAGE,
+    SERVICE_REFRESH,
+    SERVICE_GET_GRADES,
+    SERVICE_GET_MESSAGE_RECIPIENTS,
+    SERVICE_SEND_MESSAGE,
+    SERVICE_WITHDRAW_MESSAGE,
+)
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
     {
@@ -49,6 +77,26 @@ _GET_MESSAGE_SCHEMA = vol.Schema(
 )
 
 _REFRESH_SCHEMA = vol.Schema({vol.Optional("device_id"): cv.string})
+
+_DEVICE_SCHEMA = vol.Schema({vol.Required("device_id"): cv.string})
+
+_SEND_MESSAGE_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Optional("recipient"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("topic"): cv.string,
+        vol.Required("message"): cv.string,
+        vol.Optional("reply_to"): cv.string,
+        vol.Optional("dry_run", default=False): cv.boolean,
+    }
+)
+
+_WITHDRAW_MESSAGE_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("message_id"): cv.string,
+    }
+)
 
 
 _GET_GRADES_SCHEMA = vol.Schema(
@@ -276,13 +324,178 @@ def async_setup_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.ONLY,
     )
 
+    _async_setup_message_writing(hass)
+
+
+def _require_sending(coordinator: LibrusDataUpdateCoordinator) -> None:
+    entry = coordinator.config_entry
+    enabled = entry is not None and entry.options.get(
+        CONF_MESSAGE_SENDING_ENABLED, DEFAULT_MESSAGE_SENDING_ENABLED
+    )
+    if not enabled:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="message_sending_disabled"
+        )
+
+
+def _send_error(err: LibrusMessageSendError) -> HomeAssistantError:
+    return HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="message_maybe_sent" if err.sent is None else "message_not_sent",
+        translation_placeholders={"error": str(err)},
+    )
+
+
+def _async_setup_message_writing(hass: HomeAssistant) -> None:
+    """get_message_recipients, send_message and withdraw_message."""
+
+    async def _async_handle_recipients(call: ServiceCall) -> ServiceResponse:
+        """Who a message can go to - read-only, works with sending off."""
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        try:
+            recipients = await coordinator.async_message_recipients()
+        except LibrusError as err:
+            raise HomeAssistantError(f"Couldn't read the message recipients: {err}") from err
+        return {"recipients": [recipient_dict(r) for r in recipients]}
+
+    async def _async_handle_send(call: ServiceCall) -> ServiceResponse:
+        """Send a message, or a reply in a received message's thread
+        (`reply_to`). With `dry_run`, only says what would go out."""
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        dry_run: bool = call.data["dry_run"]
+        if not dry_run:
+            # A dry run sends nothing, so it works with sending switched off.
+            _require_sending(coordinator)
+        text: str = call.data["message"]
+        reply_to: str | None = call.data.get("reply_to")
+        queries: list[str] = call.data.get("recipient") or []
+        if reply_to is None and not queries:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="message_no_recipient"
+            )
+        if reply_to is None and not (call.data.get("topic") or "").strip():
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="message_no_topic"
+            )
+        try:
+            if reply_to is not None:
+                if dry_run:
+                    # Opening the message (to find its sender) would mark it
+                    # read - a dry run only describes it from the inbox list.
+                    listed = next(
+                        (
+                            m
+                            for m in (coordinator.data.messages if coordinator.data else [])
+                            if m.id == reply_to
+                        ),
+                        None,
+                    )
+                    return {
+                        "sent": False,
+                        "dry_run": True,
+                        "reply_to": reply_to,
+                        "to": [listed.sender_name] if listed else [],
+                        "topic": call.data.get("topic")
+                        or (reply_topic(listed.topic) if listed else None),
+                        "message": text,
+                    }
+                original = parse_message(
+                    await coordinator.async_fetch_message("inbox", reply_to), "inbox", reply_to
+                )
+                if original is None or not original.sender_id:
+                    raise LibrusMessageSendError(
+                        f"Message {reply_to} or its sender wasn't found - not sent.", sent=False
+                    )
+                if original.no_reply:
+                    raise LibrusMessageSendError(
+                        "This message doesn't accept replies - not sent.", sent=False
+                    )
+                to_ids, to_names = [original.sender_id], [original.sender_name]
+                topic = call.data.get("topic") or reply_topic(original.topic)
+            else:
+                recipients = await coordinator.async_message_recipients()
+                chosen = [resolve_recipient(recipients, q) for q in queries]
+                if len({r.account_id for r in chosen}) != len(chosen):
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN, translation_key="message_duplicate_recipient"
+                    )
+                to_ids = [r.account_id for r in chosen]
+                to_names = [r.name for r in chosen]
+                topic = call.data["topic"]
+            if dry_run:
+                return {
+                    "sent": False,
+                    "dry_run": True,
+                    "to": to_names,
+                    "account_ids": to_ids,
+                    "topic": topic,
+                    "message": text,
+                }
+            sent = await coordinator.async_send_message(to_ids, topic, text, reply_to=reply_to)
+        except RecipientError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="message_recipient_ambiguous"
+                if err.candidates
+                else "message_recipient_unknown",
+                translation_placeholders={
+                    "recipient": err.query,
+                    "candidates": ", ".join(err.candidates),
+                },
+            ) from err
+        except LibrusMessageSendError as err:
+            raise _send_error(err) from err
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        except LibrusError as err:
+            raise HomeAssistantError(f"Couldn't prepare the message - not sent: {err}") from err
+        _LOGGER.info("Librus message %s sent to %s", sent.message_id, ", ".join(to_names))
+        return {
+            "sent": True,
+            "message_id": sent.message_id,
+            "to": to_names,
+            "topic": topic,
+            "reply_to": reply_to,
+        }
+
+    async def _async_handle_withdraw(call: ServiceCall) -> None:
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        _require_sending(coordinator)
+        try:
+            await coordinator.async_withdraw_message(call.data["message_id"])
+        except LibrusError as err:
+            raise HomeAssistantError(
+                f"Librus didn't withdraw message {call.data['message_id']}: {err}"
+            ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_MESSAGE_RECIPIENTS,
+        _async_handle_recipients,
+        schema=_DEVICE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_MESSAGE,
+        _async_handle_send,
+        schema=_SEND_MESSAGE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_WITHDRAW_MESSAGE,
+        _async_handle_withdraw,
+        schema=_WITHDRAW_MESSAGE_SCHEMA,
+    )
+
 
 def async_unload_services(hass: HomeAssistant) -> None:
     """Remove this integration's services - call only once the LAST config
     entry is about to be unloaded (see __init__.py::async_unload_entry),
     so a second student's entry doesn't lose the service while the first
     one is just being reloaded."""
-    for service in (SERVICE_GET_MESSAGE, SERVICE_REFRESH, SERVICE_GET_GRADES):
+    for service in _SERVICES:
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
 

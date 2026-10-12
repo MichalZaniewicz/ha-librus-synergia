@@ -49,3 +49,59 @@ get_grades:
       selector:
         number:
           mode: box
+
+get_message_recipients:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+
+send_message:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    recipient:
+      required: false
+      example: "wychowawca"
+      selector:
+        text:
+          multiple: true
+    topic:
+      required: false
+      example: "Nieobecność jutro"
+      selector:
+        text:
+    message:
+      required: true
+      example: "Dzień dobry, jutro Ola będzie nieobecna z powodu wizyty u lekarza."
+      selector:
+        text:
+          multiline: true
+    reply_to:
+      required: false
+      example: "100001"
+      selector:
+        text:
+    dry_run:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+withdraw_message:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    message_id:
+      required: true
+      example: "100002"
+      selector:
+        text:

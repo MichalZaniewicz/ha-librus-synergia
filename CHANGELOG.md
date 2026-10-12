@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Added
+- **Writing messages (Wiadomości).** New services:
+  - `librus_synergia.send_message` sends a message to the class tutor
+    ("wychowawca"), a subject's teacher ("Matematyka"), the secretary's office
+    ("sekretariat"), someone by name or by account id - or, with `reply_to`, a
+    reply to a received message in its thread. Returns Librus's message id.
+  - `librus_synergia.withdraw_message` withdraws a message you sent, while
+    Librus still allows it.
+  - `librus_synergia.get_message_recipients` lists who a message can go to
+    (read-only).
+  Sending is **off by default** - turn on the new **Message sending (beta)**
+  switch (a configuration entity on the student's device), or "Allow sending
+  messages" under Configure (the same setting; changing it doesn't reload the
+  integration). A message is sent once and never retried; when Librus doesn't
+  confirm it, the error says whether it may have gone out. At most 10
+  messages an hour per student, a name that matches several people is
+  refused instead of guessed, and `dry_run` shows who would get what without
+  sending (also with sending off). Not offered to Assist or the AI summary.
+  The send, reply and withdraw requests follow Librus's own web app and
+  haven't been confirmed on a live account yet. Needs librus-synergia 0.3.23.
+
 ### Fixed
 - **Blueprints can be saved again.** 29 of the 31 blueprints put the
   notification action in a way Home Assistant refuses: the automation editor
