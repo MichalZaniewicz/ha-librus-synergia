@@ -15,7 +15,8 @@
   still has library books, with their titles.
 - **Cancelled lessons this year.** A new sensor counts every lesson
   cancelled since the school year started - not just in the two timetable
-  weeks. Attributes: `substitutions`, `since`, `by_subject` and `by_month`
+  weeks. Attributes: `substitutions`, `lessons_held` and `cancelled_percent`
+  (the share of lessons that didn't take place), `since`, `by_subject` and `by_month`
   (cancelled and substituted per subject and per month) and `recent` (the
   latest 10 changes with the replacing subject and teacher).
 - Assist's school info tool lists the library books and the year's

@@ -2578,8 +2578,8 @@ class LibrusLibraryBooksSensor(LibrusSensorBase):
 class LibrusCancelledLessonsSensor(LibrusSensorBase):
     """Every change to the class's plan this school year (not just the two
     timetable weeks): the state is how many lessons were cancelled;
-    substitutions, a per-subject and per-month breakdown and the latest
-    changes in attributes."""
+    substitutions, the lessons held and the cancelled share, a per-subject
+    and per-month breakdown and the latest changes in attributes."""
 
     _attr_translation_key = "cancelled_lessons"
     _unrecorded_attributes = frozenset({"by_subject", "by_month", "recent"})
@@ -2617,8 +2617,14 @@ class LibrusCancelledLessonsSensor(LibrusSensorBase):
             key=lambda c: (c.original_date or "", c.original_lesson_no or 0),
             reverse=True,
         )[:10]
+        cancelled = sum(1 for c in changes if c.kind == "cancelled")
+        # Lessons held this year (Realizations - lesson topics) - with the
+        # cancelled ones, the share of lessons that didn't take place.
+        held = len(data.lesson_topics)
         return {
             "substitutions": sum(1 for c in changes if c.kind != "cancelled"),
+            "lessons_held": held or None,
+            "cancelled_percent": round(cancelled / (held + cancelled) * 100, 1) if held else None,
             "since": changes[0].original_date if changes else None,
             "by_subject": dict(
                 sorted(

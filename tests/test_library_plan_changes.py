@@ -63,6 +63,13 @@ async def test_library_and_plan_change_sensors(hass) -> None:
         async_get_teachers=TEACHERS,
         async_get_library_lendings=TWO_BOOKS,
         async_get_plan_changes=PLAN_CHANGES,
+        async_get_lessons={"Lessons": [{"Id": 3, "Subject": {"Id": 100}}]},
+        async_get_realizations={
+            "Realizations": [
+                {"Id": f"t{i}", "Lesson": {"Id": 3}, "LessonNo": 1, "Date": "2026-10-01", "Topic": "x"}
+                for i in range(18)
+            ]
+        },
     )
     entry = await setup_integration(hass, client)
 
@@ -75,6 +82,8 @@ async def test_library_and_plan_change_sensors(hass) -> None:
     assert cancelled.state == "2"
     assert cancelled.attributes["substitutions"] == 1
     assert cancelled.attributes["since"] == "2026-09-15"
+    assert cancelled.attributes["lessons_held"] == 18
+    assert cancelled.attributes["cancelled_percent"] == 10.0
     assert cancelled.attributes["by_subject"] == {
         "Matematyka": {"cancelled": 2, "substitutions": 0},
         "Historia": {"cancelled": 0, "substitutions": 1},
