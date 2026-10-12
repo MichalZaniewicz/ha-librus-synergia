@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.15
 
 ### Changed
 - **Timetable: a cancelled lesson held alongside another one joins it.**
