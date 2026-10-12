@@ -1,8 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.12.14
+
+### Added
+- **Diagnostics show the message recipient groups** Librus offers the
+  account (group ids and names, whether the integration reads them, head
+  counts per group, errors) - no person's name. Helps with schools and
+  kindergartens that name their groups differently.
 
 ### Fixed
+- One recipient group Librus refuses (e.g. a 404) no longer empties the
+  whole recipient list; the other groups still work and the refusal shows in
+  the diagnostics.
 - **A reply in a thread showed "Librus didn't confirm the message - it may
   have been sent" although it went out.** Librus answers a reply without the
   confirmation a new message gets; any success answer now counts as sent

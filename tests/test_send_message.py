@@ -267,3 +267,48 @@ async def test_sent_list_is_refreshed_right_after_sending(hass) -> None:
     assert [(m.id, m.receiver_name) for m in entry.runtime_data.data.sent_messages] == [
         ("987", "Kowal Jan")
     ]
+
+
+async def test_a_refused_group_is_skipped_and_shown_in_diagnostics(hass) -> None:
+    from homeassistant.helpers.json import json_bytes
+
+    from custom_components.librus_synergia.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+    from librus_synergia import LibrusUnexpectedResponseError
+
+    client, device_id = await _setup(hass, options=ON)
+    types = {
+        "data": {
+            "list": [
+                *TYPES["data"]["list"],
+                {"id": "kindergartenTeachers", "name": "Nauczyciele przedszkola"},
+            ]
+        }
+    }
+    client.async_get_message_recipient_types.return_value = types
+
+    def groups(group: str):
+        if group == "teachers":
+            raise LibrusUnexpectedResponseError("not found", status_code=404)
+        return GROUPS[group]
+
+    client.async_get_message_recipients.side_effect = groups
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    json_bytes(diagnostics)
+    summary = diagnostics["message_recipients"]
+    assert summary["errors"] == {"teachers": "LibrusUnexpectedResponseError (HTTP 404)"}
+    assert summary["people_by_group"] == {"tutors": 1, "secretary": 1}
+    assert {t["id"]: (t["known"], t["fetched"]) for t in summary["offered_types"]} == {
+        "tutors": (True, True),
+        "teachers": (True, False),
+        "secretary": (True, True),
+        "kindergartenTeachers": (False, False),
+    }
+    # No person's name anywhere in the section.
+    assert "Nowak" not in str(summary) and "Kowal" not in str(summary)
+    # The other groups still work for sending.
+    response = await _send(hass, device_id, recipient="wychowawca", topic="T", message="M", dry_run=True)
+    assert response["to"] == ["Nowak Anna"]

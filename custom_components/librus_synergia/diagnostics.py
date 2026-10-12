@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import re
 from typing import Any
@@ -12,7 +13,15 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.loader import async_get_integration
 
 from . import LibrusConfigEntry
-from .const import CONF_AI_CONTEXT, CONF_STUDENT_NUMBER, DOMAIN
+from librus_synergia import LibrusError
+
+from .const import (
+    CONF_AI_CONTEXT,
+    CONF_MESSAGES_ENABLED,
+    CONF_STUDENT_NUMBER,
+    DEFAULT_MESSAGES_ENABLED,
+    DOMAIN,
+)
 
 # entry.data holds login/password/session cookies - all secrets. Coordinator
 # data carries the student's real grades/attendance/notes, so free-text and
@@ -131,6 +140,22 @@ def _stringify_keys(value: Any) -> Any:
     return value
 
 
+async def _message_recipients(entry: LibrusConfigEntry) -> dict[str, Any] | None:
+    """Which recipient groups Librus offers this account (ids, group names,
+    head counts - never a person's name). Read once here when the
+    integration hasn't needed the list yet; a read-only request."""
+    coordinator = entry.runtime_data
+    if not entry.options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED):
+        return None
+    if coordinator.message_recipients_summary is None:
+        try:
+            async with asyncio.timeout(45):
+                await coordinator.async_message_recipients()
+        except (LibrusError, TimeoutError) as err:
+            return {"error": type(err).__name__}
+    return coordinator.message_recipients_summary
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: LibrusConfigEntry
 ) -> dict[str, Any]:
@@ -220,6 +245,8 @@ async def async_get_config_entry_diagnostics(
         # Kindergarten timetable discovery (issue #5) - state only, never
         # the child's LID itself.
         "kindergarten": coordinator.kindergarten_diagnostics,
+        # Writing messages: the recipient groups this account gets.
+        "message_recipients": await _message_recipients(entry),
         "entry_data": async_redact_data(dict(entry.data), TO_REDACT),
         "coordinator_data": async_redact_data(coordinator_data, TO_REDACT)
         if coordinator_data is not None

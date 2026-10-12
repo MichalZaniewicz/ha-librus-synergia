@@ -228,6 +228,13 @@ _EXTRA_LABELS = (
 )
 # Read receipts: the newest sent messages from the last this-many days.
 _READ_RECEIPT_DAYS = 30
+def _redact_message_error(err: Exception) -> str:
+    """An error for the recipient summary: its type and HTTP status only
+    (a message could echo names)."""
+    status = getattr(err, "status_code", None)
+    return f"{type(err).__name__}" + (f" (HTTP {status})" if status else "")
+
+
 # How long the message recipient list is kept (see async_message_recipients).
 _MESSAGE_RECIPIENTS_TTL = timedelta(hours=1)
 _READ_RECEIPT_MESSAGES = 5
@@ -1025,6 +1032,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Message recipients (fetched at, list) and when messages were sent
         # (the hourly sending limit) - memory only.
         self._message_recipients: tuple[datetime, list[MessageRecipientData]] | None = None
+        # What the last recipient-list fetch saw (diagnostics only, no names).
+        self.message_recipients_summary: dict[str, Any] | None = None
         self._sent_at: list[datetime] = []
         # Ids already announced per kind (text grades, descriptive grades,
         # school trips, school documents); None until the first sync, which
@@ -2412,26 +2421,60 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             return cached[1]
         types = await self._async_messages_read(self._client.async_get_message_recipient_types)
-        offered = {
-            str(item.get("id"))
+        offered_types = [
+            item
             for item in ((types.get("data") or {}).get("list") or [])
-            if isinstance(item, dict)
-        }
+            if isinstance(item, dict) and item.get("id")
+        ]
+        offered = {str(item.get("id")) for item in offered_types}
+        errors: dict[str, str] = {}
 
-        async def group(name: str) -> tuple[str, dict[str, Any]]:
-            payload = await self._async_messages_read(
-                lambda: self._client.async_get_message_recipients(name)
-            )
+        async def group(name: str) -> tuple[str, dict[str, Any] | None]:
+            # One group Librus refuses (a 404 on a school that offers it
+            # differently) mustn't take the whole list down.
+            try:
+                payload = await self._async_messages_read(
+                    lambda: self._client.async_get_message_recipients(name)
+                )
+            except LibrusError as err:
+                errors[name] = _redact_message_error(err)
+                return name, None
             return name, payload
 
-        groups = await asyncio.gather(
+        fetched = await asyncio.gather(
             *(group(name) for name in MESSAGE_RECIPIENT_GROUPS if name in offered)
         )
-        subjects = await self._async_messages_read(
-            self._client.async_get_student_subject_teachers
-        )
-        recipients = parse_message_recipients(types, dict(groups), subjects)
-        self._message_recipients = (dt_util.utcnow(), recipients)
+        groups = {name: payload for name, payload in fetched if payload is not None}
+        try:
+            subjects: dict[str, Any] | None = await self._async_messages_read(
+                self._client.async_get_student_subject_teachers
+            )
+        except LibrusError as err:
+            errors["student-subjects"] = _redact_message_error(err)
+            subjects = None
+        recipients = parse_message_recipients(types, groups, subjects)
+        now = dt_util.utcnow()
+        self._message_recipients = (now, recipients)
+        # For diagnostics: what Librus offers this account, without names.
+        self.message_recipients_summary = {
+            "checked_at": now.isoformat(),
+            "offered_types": [
+                {
+                    "id": str(item.get("id")),
+                    "name": item.get("name"),
+                    "fetched": str(item.get("id")) in groups,
+                    "known": str(item.get("id")) in MESSAGE_RECIPIENT_GROUPS,
+                }
+                for item in offered_types
+            ],
+            "people_by_group": {
+                name: len((payload or {}).get("receivers") or [])
+                for name, payload in groups.items()
+            },
+            "subject_teachers": len((subjects or {}).get("data") or []),
+            "recipients": len(recipients),
+            "errors": errors,
+        }
         return recipients
 
     def _check_send_limit(self) -> None:
