@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.13
 
 ### Added
 - **Writing messages (Wiadomości).** New services:
