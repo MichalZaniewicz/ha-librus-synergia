@@ -361,7 +361,7 @@
       "message": "The message was not sent: {error}"
     },
     "message_maybe_sent": {
-      "message": "Librus didn't confirm the message - it may have been sent. Check the sent messages before trying again. ({error})"
+      "message": "Not sure the message went out - check Sent before trying again."
     }
   }
 }

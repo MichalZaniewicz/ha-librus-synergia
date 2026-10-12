@@ -361,7 +361,7 @@
       "message": "Wiadomość nie została wysłana: {error}"
     },
     "message_maybe_sent": {
-      "message": "Librus nie potwierdził wiadomości - mogła zostać wysłana. Sprawdź wysłane, zanim spróbujesz ponownie. ({error})"
+      "message": "Nie wiadomo, czy wiadomość wyszła - sprawdź Wysłane, zanim spróbujesz ponownie."
     }
   }
 }

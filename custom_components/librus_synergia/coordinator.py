@@ -2467,6 +2467,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             sent = await self._client.async_send_message_checked(
                 account_ids, topic, text, reply_to=reply_to
             )
+        except LibrusMessageSendError as err:
+            if err.sent is None:
+                # May have gone out: show the sent messages now, so the
+                # user can check before trying again.
+                await self._async_refresh_outbox()
+            raise
         except BaseException:
             self._forget_mailbox_list("outbox")
             raise

@@ -152,6 +152,20 @@ async def test_unconfirmed_send_says_it_may_have_gone_out(hass) -> None:
         await _send(hass, device_id, recipient="sekretariat", topic="T", message="M")
     assert err.value.translation_key == "message_maybe_sent"
     assert client.async_send_message_checked.await_count == 1
+    # The sent messages are fetched at once, so the user can check them.
+    client.async_get_messages.assert_awaited_with(mailbox="outbox", limit=10)
+
+
+async def test_reply_without_a_message_id_is_sent(hass) -> None:
+    # Librus answers a reply without the message id (seen live 2026-10-12).
+    client, device_id = await _setup(
+        hass,
+        options=ON,
+        async_get_message={"data": {"topic": "Zebranie", "senderId": "13", "noReply": 0}},
+    )
+    client.async_send_message_checked.return_value = SentMessageData(message_id=None, status=None)
+    response = await _send(hass, device_id, reply_to="55", message="Dziękuję")
+    assert response["sent"] is True and response["message_id"] is None
 
 
 async def test_hourly_sending_limit(hass) -> None:

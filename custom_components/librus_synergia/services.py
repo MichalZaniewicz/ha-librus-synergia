@@ -344,6 +344,8 @@ def _require_sending(coordinator: LibrusDataUpdateCoordinator) -> None:
 
 
 def _send_error(err: LibrusMessageSendError) -> HomeAssistantError:
+    # The short user-facing text leaves the cause out; it goes to the log.
+    _LOGGER.warning("Librus message: %s", err)
     return HomeAssistantError(
         translation_domain=DOMAIN,
         translation_key="message_maybe_sent" if err.sent is None else "message_not_sent",

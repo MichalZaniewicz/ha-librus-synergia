@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **A reply in a thread showed "Librus didn't confirm the message - it may
+  have been sent" although it went out.** Librus answers a reply without the
+  confirmation a new message gets; any success answer now counts as sent
+  (librus-synergia 0.3.24). The service then returns `message_id: null`, so
+  the Messages card shows no Withdraw button for that reply.
+- When a send may have gone out, the sent messages are fetched right away
+  too, so they can be checked before trying again.
+- The "may have gone out" error is short now ("Not sure the message went
+  out - check Sent before trying again."); the technical cause goes to the
+  Home Assistant log.
+
 ## 0.12.13
 
 ### Added
