@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.11
 
 ### Added
 - **Library books.** A new "Library books" sensor counts the books the
