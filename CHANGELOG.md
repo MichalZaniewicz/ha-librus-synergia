@@ -12,10 +12,9 @@
     Librus still allows it.
   - `librus_synergia.get_message_recipients` lists who a message can go to
     (read-only).
-  Sending is **off by default** - turn on the new **Message sending (beta)**
-  switch (a configuration entity on the student's device), or "Allow sending
-  messages" under Configure (the same setting; changing it doesn't reload the
-  integration). A message is sent once and never retried; when Librus doesn't
+  Sending is **off by default** - turn on "Allow sending messages (beta)"
+  under the integration's Configure (changing it doesn't reload the
+  integration). The Unread messages sensor shows it as `sending_enabled`. A message is sent once and never retried; when Librus doesn't
   confirm it, the error says whether it may have gone out. At most 10
   messages an hour per student, a name that matches several people is
   refused instead of guessed, and `dry_run` shows who would get what without

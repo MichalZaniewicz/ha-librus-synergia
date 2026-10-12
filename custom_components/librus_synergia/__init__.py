@@ -168,7 +168,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
         """
         if _reload_relevant(entry.options) == _reload_relevant(options_at_setup):
             # Nothing changed, or only options read live (LIVE_OPTIONS, e.g.
-            # the "Message sending" switch) - no reload needed.
+            # "Allow sending messages") - no reload, just let the entities
+            # show it (the Unread messages sensor's `sending_enabled`).
+            entry.runtime_data.async_update_listeners()
             return
         await hass.config_entries.async_reload(entry.entry_id)
 

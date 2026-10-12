@@ -74,7 +74,7 @@
         "data": {
           "scan_interval": "Częstotliwość odpytywania (minuty)",
           "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)",
-          "message_sending_enabled": "Pozwól wysyłać wiadomości",
+          "message_sending_enabled": "Pozwól wysyłać wiadomości (beta)",
           "announcements_enabled": "Pobieraj ogłoszenia",
           "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
           "descriptive_grades_enabled": "Pobieraj oceny opisowe",
@@ -92,7 +92,7 @@
         "data_description": {
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
           "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa.",
-          "message_sending_enabled": "Pozwala usługom send_message i withdraw_message pisać do nauczycieli i szkoły w Wiadomościach. Domyślnie wyłączone: wysłana wiadomość trafia do prawdziwej osoby. Niedostępne dla Assist ani podsumowania AI.",
+          "message_sending_enabled": "Pozwala usługom send_message i withdraw_message oraz przyciskom Odpowiedz / Napisz w karcie Wiadomości pisać do nauczycieli i szkoły w Wiadomościach. Domyślnie wyłączone: wysłana wiadomość trafia do prawdziwej osoby. Niedostępne dla Assist ani podsumowania AI.",
           "announcements_enabled": "Gdy wyłączone, sensor Nieprzeczytane ogłoszenia staje się niedostępny i nie są wykonywane żadne zapytania o ogłoszenia.",
           "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
           "descriptive_grades_enabled": "Gdy wyłączone, sensor Oceny opisowe staje się niedostępny i nie są wykonywane żadne zapytania o oceny opisowe.",
@@ -232,7 +232,6 @@
       "weekly_summary_generate": { "name": "Wygeneruj podsumowanie tygodnia" }
     },
     "switch": {
-      "message_sending": { "name": "Wysyłanie wiadomości (beta)" },
       "weekly_summary_enabled": { "name": "Automatyczne podsumowanie tygodnia" }
     },
     "calendar": {
@@ -296,7 +295,7 @@
     },
     "send_message": {
       "name": "Wyślij wiadomość",
-      "description": "Wysyła wiadomość w Wiadomościach do nauczyciela lub szkoły albo odpowiada na otrzymaną wiadomość w jej wątku. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości\" w Konfiguracji (poza trybem na sucho). Wysyłana raz, bez ponawiania; najwyżej 10 wiadomości na godzinę.",
+      "description": "Wysyła wiadomość w Wiadomościach do nauczyciela lub szkoły albo odpowiada na otrzymaną wiadomość w jej wątku. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości (beta)\" w Konfiguracji (poza trybem na sucho). Wysyłana raz, bez ponawiania; najwyżej 10 wiadomości na godzinę.",
       "fields": {
         "device_id": {
           "name": "Urządzenie",
@@ -326,7 +325,7 @@
     },
     "withdraw_message": {
       "name": "Wycofaj wiadomość",
-      "description": "Wycofuje wysłaną wiadomość, dopóki Librus na to pozwala. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości\" w Konfiguracji.",
+      "description": "Wycofuje wysłaną wiadomość, dopóki Librus na to pozwala. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości (beta)\" w Konfiguracji.",
       "fields": {
         "device_id": {
           "name": "Urządzenie",
@@ -341,7 +340,7 @@
   },
   "exceptions": {
     "message_sending_disabled": {
-      "message": "Wysyłanie wiadomości jest wyłączone. Włącz \"Pozwól wysyłać wiadomości\" w Konfiguracji integracji albo użyj trybu na sucho."
+      "message": "Wysyłanie wiadomości jest wyłączone. Włącz \"Pozwól wysyłać wiadomości (beta)\" w Konfiguracji integracji albo użyj trybu na sucho."
     },
     "message_no_recipient": {
       "message": "Podaj odbiorcę albo Odpowiedz na z numerem otrzymanej wiadomości."

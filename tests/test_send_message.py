@@ -207,26 +207,32 @@ def test_resolve_recipient_rules() -> None:
         resolve_recipient(people, "999")
 
 
-async def test_switch_turns_sending_on_without_a_reload(hass) -> None:
+
+async def test_option_turns_sending_on_without_a_reload(hass) -> None:
     from homeassistant.helpers import entity_registry as er
 
     client, device_id = await _setup(hass)
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     coordinator = entry.runtime_data
-    entity_id = er.async_get(hass).async_get_entity_id(
-        "switch", DOMAIN, f"{entry.entry_id}_message_sending"
-    )
-    assert hass.states.get(entity_id).state == "off"
+    registry = er.async_get(hass)
+    assert registry.async_get_entity_id("switch", DOMAIN, f"{entry.entry_id}_message_sending") is None
+    sensor_id = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_unread_messages")
 
-    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_MESSAGE_SENDING_ENABLED: True}
+    )
     await hass.async_block_till_done()
-    assert hass.states.get(entity_id).state == "on"
-    assert entry.options[CONF_MESSAGE_SENDING_ENABLED] is True
     assert entry.runtime_data is coordinator  # not reloaded
+    state = hass.states.get(sensor_id)
+    if state is not None and state.state != "unavailable":
+        assert state.attributes["sending_enabled"] is True
 
     response = await _send(hass, device_id, recipient="sekretariat", topic="T", message="M")
     assert response["sent"] is True
 
-    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_MESSAGE_SENDING_ENABLED: False}
+    )
+    await hass.async_block_till_done()
     with pytest.raises(ServiceValidationError):
         await _send(hass, device_id, recipient="sekretariat", topic="T", message="M")

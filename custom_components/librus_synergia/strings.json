@@ -74,7 +74,7 @@
         "data": {
           "scan_interval": "Poll interval (minutes)",
           "messages_enabled": "Fetch private messages (Wiadomości)",
-          "message_sending_enabled": "Allow sending messages",
+          "message_sending_enabled": "Allow sending messages (beta)",
           "announcements_enabled": "Fetch announcements (ogłoszenia)",
           "behaviour_grades_enabled": "Fetch behaviour grade (ocena zachowania)",
           "descriptive_grades_enabled": "Fetch descriptive grades",
@@ -92,7 +92,7 @@
         "data_description": {
           "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API.",
           "messages_enabled": "When off, the Unread messages sensor goes unavailable and no messages calls are made - fewer requests to Librus.",
-          "message_sending_enabled": "Lets the send_message and withdraw_message services write to teachers and the school in Wiadomości. Off by default: a sent message goes to a real person. Not available to Assist or the AI summary.",
+          "message_sending_enabled": "Lets the send_message and withdraw_message services - and the Messages card's Reply / Write - write to teachers and the school in Wiadomości. Off by default: a sent message goes to a real person. Not available to Assist or the AI summary.",
           "announcements_enabled": "When off, the Unread announcements sensor goes unavailable and no SchoolNotices calls are made.",
           "behaviour_grades_enabled": "When off, the Behaviour grade sensor goes unavailable and no BehaviourGrades calls are made.",
           "descriptive_grades_enabled": "When off, the Descriptive grades sensor goes unavailable and no DescriptiveGrades calls are made.",
@@ -232,7 +232,6 @@
       "weekly_summary_generate": { "name": "Generate weekly summary" }
     },
     "switch": {
-      "message_sending": { "name": "Message sending (beta)" },
       "weekly_summary_enabled": { "name": "Automatic weekly summary" }
     },
     "calendar": {
@@ -296,7 +295,7 @@
     },
     "send_message": {
       "name": "Send message",
-      "description": "Sends a Wiadomości message to a teacher or the school, or replies to a received message in its thread. Needs \"Allow sending messages\" on under Configure (except a dry run). Sent once, never retried; at most 10 messages an hour.",
+      "description": "Sends a Wiadomości message to a teacher or the school, or replies to a received message in its thread. Needs \"Allow sending messages (beta)\" on under Configure (except a dry run). Sent once, never retried; at most 10 messages an hour.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -326,7 +325,7 @@
     },
     "withdraw_message": {
       "name": "Withdraw message",
-      "description": "Withdraws a message you sent, while Librus still allows it. Needs \"Allow sending messages\" on under Configure.",
+      "description": "Withdraws a message you sent, while Librus still allows it. Needs \"Allow sending messages (beta)\" on under Configure.",
       "fields": {
         "device_id": {
           "name": "Device",
@@ -341,7 +340,7 @@
   },
   "exceptions": {
     "message_sending_disabled": {
-      "message": "Sending messages is off. Turn on \"Allow sending messages\" under the integration's Configure, or use a dry run."
+      "message": "Sending messages is off. Turn on \"Allow sending messages (beta)\" under the integration's Configure, or use a dry run."
     },
     "message_no_recipient": {
       "message": "Give a recipient, or Reply to with a received message's id."

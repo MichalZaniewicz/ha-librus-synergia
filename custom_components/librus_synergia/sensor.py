@@ -36,6 +36,8 @@ from librus_synergia.parsers import justified_dates, plan_differences, point_gra
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
 from .const import (
+    CONF_MESSAGE_SENDING_ENABLED,
+    DEFAULT_MESSAGE_SENDING_ENABLED,
     ATTR_SUBJECT_ID,
     AVERAGE_MODE_ARITHMETIC,
     AVERAGE_MODE_WEIGHTED,
@@ -1832,6 +1834,14 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
         return (
             copy.deepcopy(self.coordinator.read_receipts),
             frozenset(self.coordinator.missing_mailboxes),
+            self._sending_enabled(),
+        )
+
+    def _sending_enabled(self) -> bool:
+        entry = self.coordinator.config_entry
+        return bool(
+            entry
+            and entry.options.get(CONF_MESSAGE_SENDING_ENABLED, DEFAULT_MESSAGE_SENDING_ENABLED)
         )
 
     @property
@@ -1872,6 +1882,9 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "archive_recent": _message_list_attr(data.archived_messages),
             # Mailboxes this account doesn't have (Librus answers 404).
             "missing_mailboxes": sorted(self.coordinator.missing_mailboxes),
+            # "Allow sending messages (beta)" under Configure - the Messages
+            # card shows Reply / Write only while it's on.
+            "sending_enabled": self._sending_enabled(),
         }
 
 

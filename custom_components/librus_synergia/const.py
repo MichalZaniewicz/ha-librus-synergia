@@ -105,8 +105,8 @@ DEFAULT_MESSAGE_SENDING_ENABLED = False
 # At most this many messages per student per hour - a runaway automation
 # can't flood a teacher's inbox.
 MESSAGE_SEND_LIMIT_PER_HOUR = 10
-# Options read live wherever they're used - changing one (e.g. from the
-# "Message sending" switch) doesn't reload the integration.
+# Options read live wherever they're used - changing one doesn't reload
+# the integration.
 LIVE_OPTIONS = frozenset({CONF_MESSAGE_SENDING_ENABLED})
 
 # Same "skip the fetch, sensor goes unavailable" shape as CONF_MESSAGES_
