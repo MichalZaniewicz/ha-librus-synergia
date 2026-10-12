@@ -608,6 +608,48 @@ async def test_timetable_never_merges_cancelled_lesson_with_its_substitution(has
     assert any("(odwołane)" in e["summary"] for e in events)
 
 
+async def test_timetable_folds_a_cancelled_parallel_lesson_into_the_held_one(hass) -> None:
+    """Tester report: only the support teacher ("Wspomaganie") is off, the
+    lesson itself is held - one entry, the cancellation in the title and
+    an "Odwołane:" line. Not a "(odwołane)" suffix: the cards would read
+    that as the whole slot being cancelled."""
+    client = _parallel_client(
+        [
+            _parallel_lesson("10", "20", "30"),
+            _parallel_lesson("11", "21", "31", IsCanceled=True),
+        ]
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert len(events) == 1
+    assert events[0]["summary"] == "Edukacja wczesnoszkolna (Wspomaganie odwołane)"
+    assert not events[0]["summary"].endswith("(odwołane)")
+    assert events[0]["description"].splitlines() == [
+        "Anna Nowak",
+        "Odwołane: Wspomaganie – Jan Kowalski",
+    ]
+    assert events[0]["location"] == "12"
+
+
+async def test_timetable_slot_cancelled_entirely_stays_cancelled(hass) -> None:
+    client = _parallel_client(
+        [
+            _parallel_lesson("10", "20", "30", IsCanceled=True),
+            _parallel_lesson("11", "21", "31", IsCanceled=True),
+        ]
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+
+    events = await _tomorrow_events(hass, entity_id)
+    assert sorted(e["summary"] for e in events) == [
+        "Edukacja wczesnoszkolna (odwołane)",
+        "Wspomaganie (odwołane)",
+    ]
+
+
 async def test_timetable_this_and_next_week_come_from_coordinator_data(hass) -> None:
     """This week and next are read from the coordinator's timetable (fetched
     on every refresh) - no extra request, and a substitution from the next

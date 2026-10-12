@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Timetable: a cancelled lesson held alongside another one joins it.**
+  When only the parallel lesson is called off (e.g. the support teacher,
+  "Wspomaganie") and the other lesson still takes place, the slot shows as
+  one entry - "Edukacja wczesnoszkolna (Wspomaganie odwołane)" - with an
+  "Odwołane: Wspomaganie – <teacher>" line in the description, instead of
+  two entries. A slot cancelled entirely, and a cancelled lesson with its
+  substitution, still show as before. Only with "Merge lessons held at the
+  same time" on (the default).
+
 ## 0.12.14
 
 ### Added

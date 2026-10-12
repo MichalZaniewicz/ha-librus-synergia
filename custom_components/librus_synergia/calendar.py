@@ -127,6 +127,9 @@ class _LessonParts:
     teacher: str | None
     details: list[str]
     changed: bool
+    # The subject without the change suffix, and whether it is cancelled.
+    subject: str = ""
+    cancelled: bool = False
 
     def to_event(self) -> CalendarEvent:
         description = "\n".join([self.teacher or "", *self.details]).strip() or None
@@ -150,18 +153,35 @@ def _join_unique(values: list[str | None], separator: str) -> str | None:
     return separator.join(dict.fromkeys(v for v in values if v)) or None
 
 
-def _merge_parts(group: list[_LessonParts]) -> CalendarEvent:
+def _merge_parts(
+    group: list[_LessonParts], cancelled: list[_LessonParts] | None = None
+) -> CalendarEvent:
     """One event for lessons held at the same time (issue #14 - e.g. a
     subject plus "Wspomaganie", a support teacher in the same room, or
     split groups): "Edukacja wczesnoszkolna + Wspomaganie", all teachers
-    and rooms."""
+    and rooms.
+
+    `cancelled` are lessons in the same slot that were called off while
+    the others still take place (e.g. only the support teacher is off):
+    they join the title as "(Wspomaganie odwołane)" and get an "Odwołane:"
+    line. Deliberately not a "(odwołane)" suffix - the companion cards
+    read that as the whole slot being cancelled."""
+    cancelled = cancelled or []
+    summary = _join_unique([p.summary for p in group], " + ") or ""
+    dropped = _join_unique([p.subject for p in cancelled], ", ")
+    if dropped:
+        summary = f"{summary} ({dropped} odwołane)"
+    details = list(dict.fromkeys(line for p in group for line in p.details))
+    details += [
+        f"Odwołane: {p.subject}" + (f" – {p.teacher}" if p.teacher else "") for p in cancelled
+    ]
     return _LessonParts(
         start=group[0].start,
         end=group[0].end,
-        summary=_join_unique([p.summary for p in group], " + ") or "",
+        summary=summary,
         location=_join_unique([p.location for p in group], ", "),
         teacher=_join_unique([p.teacher for p in group], ", "),
-        details=list(dict.fromkeys(line for p in group for line in p.details)),
+        details=details,
         changed=False,
     ).to_event()
 
@@ -174,21 +194,37 @@ def _day_events(
     owner: Hashable | None = None,
 ) -> list[CalendarEvent]:
     """Calendar events for one day. With `merge`, lessons with the same
-    start and end become one event. Changed lessons (cancelled,
-    substitution, room change, moved) always stay separate, so a
-    cancelled lesson and its substitution still show as two entries."""
+    start and end become one event. Changed lessons (substitution, room
+    change, moved) always stay separate, so a cancelled lesson and its
+    substitution still show as two entries. A cancelled lesson joins the
+    event only when an unchanged lesson still takes place in that slot and
+    nothing else there changed (e.g. just the support teacher is off) -
+    see `_merge_parts`."""
     events: list[CalendarEvent] = []
     groups: dict[tuple[datetime, datetime], list[_LessonParts]] = {}
+    cancelled: dict[tuple[datetime, datetime], list[_LessonParts]] = {}
+    other_changes: set[tuple[datetime, datetime]] = set()
     for lesson in lessons:
         parts = _lesson_parts(day, lesson, data, owner)
         if parts is None:
             continue
+        slot = (parts.start, parts.end)
         if merge and not parts.changed:
-            groups.setdefault((parts.start, parts.end), []).append(parts)
+            groups.setdefault(slot, []).append(parts)
+        elif merge and parts.cancelled:
+            cancelled.setdefault(slot, []).append(parts)
         else:
+            if merge:
+                other_changes.add(slot)
             events.append(parts.to_event())
-    for group in groups.values():
-        events.append(group[0].to_event() if len(group) == 1 else _merge_parts(group))
+    for slot, group in groups.items():
+        dropped = [] if slot in other_changes else cancelled.pop(slot, [])
+        if len(group) == 1 and not dropped:
+            events.append(group[0].to_event())
+        else:
+            events.append(_merge_parts(group, dropped))
+    for parts_list in cancelled.values():
+        events.extend(parts.to_event() for parts in parts_list)
     events.sort(key=lambda event: event.start)
     return events
 
@@ -253,6 +289,8 @@ def _lesson_parts(
         teacher=teacher_name,
         details=lines,
         changed=change["kind"] is not None or bool(change["room_changed"]),
+        subject=subject_name,
+        cancelled=change["kind"] == "canceled",
     )
 
 
