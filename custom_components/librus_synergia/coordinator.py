@@ -40,6 +40,7 @@ from librus_synergia import (
     LibrusSessionExpiredError,
 )
 from librus_synergia.const import MESSAGE_RECIPIENT_GROUPS
+from librus_synergia.parsers import mark_class_tutor, message_recipient_groups
 from librus_synergia.changes import Changes, ChangeTracker, SeenIds
 from librus_synergia.exceptions import LibrusUnexpectedResponseError
 from librus_synergia.changes import absences as tracked_absences
@@ -2426,33 +2427,36 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for item in ((types.get("data") or {}).get("list") or [])
             if isinstance(item, dict) and item.get("id")
         ]
-        offered = {str(item.get("id")) for item in offered_types}
         errors: dict[str, str] = {}
 
+        # The types read above just checked the session, so a group (or the
+        # subject list) Librus refuses is left out - read directly, without
+        # the relogin recovery: a kindergarten account gets a 403 on
+        # `receivers/student-subjects` every time (seen live 2026-10-12).
         async def group(name: str) -> tuple[str, dict[str, Any] | None]:
-            # One group Librus refuses (a 404 on a school that offers it
-            # differently) mustn't take the whole list down.
             try:
-                payload = await self._async_messages_read(
-                    lambda: self._client.async_get_message_recipients(name)
-                )
+                return name, await self._client.async_get_message_recipients(name)
             except LibrusError as err:
                 errors[name] = _redact_message_error(err)
                 return name, None
-            return name, payload
 
         fetched = await asyncio.gather(
-            *(group(name) for name in MESSAGE_RECIPIENT_GROUPS if name in offered)
+            *(group(name) for name in message_recipient_groups(types))
         )
         groups = {name: payload for name, payload in fetched if payload is not None}
         try:
-            subjects: dict[str, Any] | None = await self._async_messages_read(
-                self._client.async_get_student_subject_teachers
+            subjects: dict[str, Any] | None = (
+                await self._client.async_get_student_subject_teachers()
             )
         except LibrusError as err:
             errors["student-subjects"] = _redact_message_error(err)
             subjects = None
         recipients = parse_message_recipients(types, groups, subjects)
+        # A kindergarten account has no tutors group: the class tutor (by
+        # name, from the class / kindergarten group) is moved there.
+        had_tutors = any(r.group == "tutors" for r in recipients)
+        recipients = mark_class_tutor(recipients, self._class_tutor_name())
+        tutor_from_class = not had_tutors and any(r.group == "tutors" for r in recipients)
         now = dt_util.utcnow()
         self._message_recipients = (now, recipients)
         # For diagnostics: what Librus offers this account, without names.
@@ -2473,9 +2477,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             },
             "subject_teachers": len((subjects or {}).get("data") or []),
             "recipients": len(recipients),
+            "tutor_from_class": tutor_from_class,
             "errors": errors,
         }
         return recipients
+
+    def _class_tutor_name(self) -> str | None:
+        """The class tutor's name (the class's `tutor_id` in the teachers
+        list), for a school that offers no tutors recipient group."""
+        data = self.data
+        if data is None or data.school_class is None or data.school_class.tutor_id is None:
+            return None
+        return data.teachers.get(data.school_class.tutor_id)
 
     def _check_send_limit(self) -> None:
         """At most MESSAGE_SEND_LIMIT_PER_HOUR sends per hour."""

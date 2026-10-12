@@ -69,6 +69,10 @@ TO_REDACT = {
     "requirements",
     "email",
     "phone_number",
+    # The school's street address (the name and town stay - they help).
+    "street",
+    "building_number",
+    "post_code",
 }
 # A Librus account id inside an error text (an exception or an error message
 # can quote a request URL with the child's LID).

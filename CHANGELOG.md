@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.16
+
+### Fixed
+- **Writing messages on kindergarten accounts** (seen in a tester's
+  diagnostics):
+  - "wychowawca" finds the group's tutor even though Librus offers a
+    kindergarten account no tutors group - the tutor is matched by name
+    (from the class) among the teachers.
+  - Every recipient group Librus offers is read, not only a fixed list - e.g.
+    "Logopeda" (speech therapist). Parent councils, custom groups and
+    Librus's support account are still left out.
+  - A group or the subject list Librus refuses (a kindergarten account gets
+    HTTP 403 on the subject list) no longer triggers a password login each
+    time the recipient list is read.
+- Diagnostics no longer include the school's street address (street,
+  number, post code); the school's name and town stay.
+
+Needs librus-synergia 0.3.25.
+
 ## 0.12.15
 
 ### Changed

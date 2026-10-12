@@ -291,7 +291,7 @@ async def test_a_refused_group_is_skipped_and_shown_in_diagnostics(hass) -> None
     def groups(group: str):
         if group == "teachers":
             raise LibrusUnexpectedResponseError("not found", status_code=404)
-        return GROUPS[group]
+        return GROUPS.get(group, {"receivers": [{"accountId": "15", "label": "Lis Ewa"}]})
 
     client.async_get_message_recipients.side_effect = groups
     entry = hass.config_entries.async_entries(DOMAIN)[0]
@@ -300,15 +300,60 @@ async def test_a_refused_group_is_skipped_and_shown_in_diagnostics(hass) -> None
     json_bytes(diagnostics)
     summary = diagnostics["message_recipients"]
     assert summary["errors"] == {"teachers": "LibrusUnexpectedResponseError (HTTP 404)"}
-    assert summary["people_by_group"] == {"tutors": 1, "secretary": 1}
+    # A group the integration doesn't know is read too.
+    assert summary["people_by_group"] == {"tutors": 1, "secretary": 1, "kindergartenTeachers": 1}
     assert {t["id"]: (t["known"], t["fetched"]) for t in summary["offered_types"]} == {
         "tutors": (True, True),
         "teachers": (True, False),
         "secretary": (True, True),
-        "kindergartenTeachers": (False, False),
+        "kindergartenTeachers": (False, True),
     }
+    assert summary["tutor_from_class"] is False
     # No person's name anywhere in the section.
     assert "Nowak" not in str(summary) and "Kowal" not in str(summary)
     # The other groups still work for sending.
     response = await _send(hass, device_id, recipient="wychowawca", topic="T", message="M", dry_run=True)
     assert response["to"] == ["Nowak Anna"]
+
+
+async def test_tutor_found_by_name_without_a_tutors_group(hass) -> None:
+    """A kindergarten account (seen live 2026-10-12) is offered no tutors
+    group and gets a 403 on the subject list: "wychowawca" still finds the
+    group's tutor by name, and the 403 causes no relogin."""
+    import dataclasses
+
+    from librus_synergia import LibrusSessionExpiredError
+    from librus_synergia.models import ClassData
+
+    client, device_id = await _setup(hass, options=ON)
+    client.async_get_message_recipient_types.return_value = {
+        "data": {"list": [{"id": "teachers", "name": "Nauczyciele"}]}
+    }
+    client.async_get_student_subject_teachers.side_effect = LibrusSessionExpiredError(
+        "forbidden", status_code=403
+    )
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    coordinator = entry.runtime_data
+    coordinator.data = dataclasses.replace(
+        coordinator.data,
+        school_class=ClassData(
+            number=None,
+            symbol="0B",
+            tutor_id="LID-T",
+            begin_school_year=None,
+            end_first_semester=None,
+            end_school_year=None,
+        ),
+        teachers={**coordinator.data.teachers, "LID-T": "Jan Kowal"},
+    )
+    def forced_logins() -> int:
+        return sum(
+            1 for c in client.async_ensure_session_valid.await_args_list if c.kwargs.get("force")
+        )
+
+    logins = forced_logins()
+
+    response = await _send(hass, device_id, recipient="wychowawca", topic="T", message="M", dry_run=True)
+    assert response["to"] == ["Kowal Jan"]
+    assert forced_logins() == logins
+    assert coordinator.message_recipients_summary["tutor_from_class"] is True
