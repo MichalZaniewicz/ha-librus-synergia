@@ -74,7 +74,7 @@ actions:
       drop_summary: >-
         Średnia {{ ('z ' ~ subject_name ~ ' ') if subject_name else '' }}spadła do
         {{ trigger.to_state.state }} (było {{ trigger.from_state.state }}).
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

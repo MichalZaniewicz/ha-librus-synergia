@@ -85,6 +85,6 @@ actions:
                ~ '.' ~ ((' Trasa: ' ~ t.route ~ '.') if t.route else '')] -%}
         {%- endfor -%}
         {{ (student_name ~ ': ') if student_name else '' }}jutro {{ 'wycieczka' if ns.parts | count == 1 else 'wycieczki' }} - {{ ns.parts | join(' ') }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

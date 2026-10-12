@@ -64,6 +64,6 @@ actions:
         {{ (device_attr(trigger.entity_id, 'name') or '') | replace('E-dziennik ', '') }}
       attendance_summary: >-
         {{ (student_name ~ ': ') if student_name else '' }}Frekwencja{{ (' z przedmiotu ' ~ subject_name) if subject_name else '' }} spadła do {{ trigger.to_state.state }}%.
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

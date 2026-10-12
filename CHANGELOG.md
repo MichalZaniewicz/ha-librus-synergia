@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Blueprints can be saved again.** 29 of the 31 blueprints put the
+  notification action in a way Home Assistant refuses: the automation editor
+  stores an action input as a list, and the blueprint placed that list inside
+  its own action list, so saving failed with "Message malformed: expected
+  dictionary at 'actions[1]'". The action is now wrapped in a `sequence`.
+  Re-import the blueprints (or update them in Settings > Blueprints) to get
+  the fix. A test now checks every blueprint with an action given the way the
+  editor stores it.
+
 ## 0.12.11
 
 ### Added

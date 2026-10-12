@@ -49,7 +49,7 @@ actions:
         {%- if include_text and d.text %}
         {{ d.text | trim }}
         {%- endif -%}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

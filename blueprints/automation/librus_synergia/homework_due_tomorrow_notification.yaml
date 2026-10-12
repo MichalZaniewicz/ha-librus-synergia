@@ -80,6 +80,6 @@ actions:
       student_name: >-
         {{ (device_attr(homework_assignments_entity, 'name') or '') | replace('E-dziennik ', '') }}
       homework_summary: "{{ (student_name ~ ': ') if student_name else '' }}Zadanie domowe na jutro:\n{{ homework_lines }}"
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

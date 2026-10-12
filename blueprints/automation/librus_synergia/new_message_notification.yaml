@@ -31,7 +31,7 @@ actions:
   - variables:
       message_summary: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość od {{ trigger.event.data.sender }}: {{ trigger.event.data.topic }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

@@ -61,6 +61,6 @@ actions:
         {{ (device_attr(end_entity, 'name') or '') | replace('E-dziennik ', '') }}
       pickup_summary: >-
         {{ student_name or 'Dziecko' }} kończy lekcje o {{ end_time }} (za {{ minutes_left }} min).
-  - !input pickup_action
+  - sequence: !input pickup_action
 
 mode: single

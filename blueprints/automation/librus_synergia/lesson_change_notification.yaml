@@ -44,7 +44,7 @@ actions:
         {{ (d.student ~ ': ') if d.student else '' }}{{ labels.get(change, 'Zastępstwo') }}:
         {{ d.subject or ('lekcja ' ~ d.lesson_no) }}
         ({{ d.date }}{{ ', ' ~ d.hour_from if d.hour_from else '' }}){% if change == 'room_change' %} - sala {{ d.get('original_classroom') or '?' }} → {{ d.get('classroom') or '?' }}{% elif change == 'substitution' and (d.get('original_subject') or d.get('teacher')) %} -{{ (' za ' ~ d.original_subject) if d.get('original_subject') and d.original_subject != d.subject else '' }}{{ (', prowadzi ' ~ d.teacher) if d.get('teacher') else '' }}{% endif %}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

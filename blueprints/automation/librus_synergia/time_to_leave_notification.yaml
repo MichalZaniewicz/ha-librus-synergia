@@ -109,6 +109,6 @@ actions:
         {{ 'Czas wyjść na lekcję: ' ~ states(next_lesson_entity)
            ~ (' (sala ' ~ state_attr(next_lesson_entity, 'classroom') ~ ')' if state_attr(next_lesson_entity, 'classroom') else '')
            ~ '.' }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

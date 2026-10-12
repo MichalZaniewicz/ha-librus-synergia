@@ -53,7 +53,7 @@ actions:
       agenda_summary: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ ('[' ~ trigger.event.data.category ~ '] ') if trigger.event.data.category else '' }}{{ (trigger.event.data.subject ~ ': ') if trigger.event.data.subject else '' }}{{ trigger.event.data.content }}
         ({{ trigger.event.data.date }})
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

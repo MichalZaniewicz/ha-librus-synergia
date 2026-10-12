@@ -87,6 +87,6 @@ actions:
       student_name: >-
         {{ (device_attr(next_exam_entity, 'name') or '') | replace('E-dziennik ', '') }}
       revision_summary: "{{ (student_name ~ ': ') if student_name else '' }}Za {{ days_before | int }} dni:\n{{ revision_lines }}"
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

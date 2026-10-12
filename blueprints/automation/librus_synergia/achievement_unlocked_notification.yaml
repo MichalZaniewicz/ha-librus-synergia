@@ -35,7 +35,7 @@ actions:
   - variables:
       achievement_text: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Odznaka odblokowana: {{ trigger.event.data.title }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

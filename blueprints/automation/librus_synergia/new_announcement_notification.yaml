@@ -27,7 +27,7 @@ actions:
   - variables:
       announcement_summary: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}{{ trigger.event.data.subject }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

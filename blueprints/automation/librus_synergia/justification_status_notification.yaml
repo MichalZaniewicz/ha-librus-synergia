@@ -47,7 +47,7 @@ actions:
         {% set f = d.date_from or '' %}{% set t = d.date_to or f %}
         {% set days = (f[8:10] ~ '.' ~ f[5:7]) ~ ((' - ' ~ t[8:10] ~ '.' ~ t[5:7]) if t[:10] != f[:10] else '') %}
         {{ (d.student ~ ': ') if d.student else '' }}usprawiedliwienie za {{ days }} {{ 'przyjęte' if d.accepted else 'odrzucone' if d.rejected else ('- status: ' ~ d.status) }}{{ (' (' ~ d.justified_absences ~ ' nieobecn.)') if d.accepted and d.justified_absences else '' }}.
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

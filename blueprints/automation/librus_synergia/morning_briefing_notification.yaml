@@ -128,6 +128,6 @@ actions:
         {{ 'Pierwsza lekcja' if is_first_lesson else 'Następna lekcja' }}: {{ first_lesson }}{{ (' o ' ~ first_start[11:16]) if first_start else '' }}{{ (', sala ' ~ first_room) if first_room else '' }}.
         {{ ('Szczęśliwy numerek: ' ~ lucky ~ '.') if lucky else '' }}
         {{ exam_text }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

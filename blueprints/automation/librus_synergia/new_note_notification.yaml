@@ -41,7 +41,7 @@ actions:
       note_summary: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa uwaga{{ (' ' ~ note_kind) if note_kind else '' }}{{ ' od ' + trigger.event.data.teacher if trigger.event.data.teacher else '' }}:
         {{ trigger.event.data.text }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

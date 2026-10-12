@@ -99,6 +99,6 @@ actions:
         {{ 'Podsumowanie tygodnia:\n\nSprawdziany:\n' ~ (exam_lines if exam_lines else 'Brak zaplanowanych w tym tygodniu.')
            ~ (('\n\nZadania domowe:\n' ~ homework_lines) if homework_lines else '')
            ~ (('\n\nNieusprawiedliwione nieobecności: ' ~ unexcused_count ~ '.') if unexcused_count and unexcused_count | int(0) > 0 else '') }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

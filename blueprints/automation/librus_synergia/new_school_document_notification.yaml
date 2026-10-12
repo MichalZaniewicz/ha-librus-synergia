@@ -29,7 +29,7 @@ actions:
       document_summary: >-
         {% set d = trigger.event.data %}
         {{ (d.student ~ ': ') if d.student else '' }}szkoła udostępniła dokument „{{ d.name }}”
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

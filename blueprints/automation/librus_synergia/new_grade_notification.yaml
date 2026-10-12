@@ -67,7 +67,7 @@ actions:
           {%- if d.comments %}
         Komentarz: {{ d.comments | join('; ') }}{% endif -%}
         {%- endif -%}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

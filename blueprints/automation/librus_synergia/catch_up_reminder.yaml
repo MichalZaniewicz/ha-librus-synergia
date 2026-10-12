@@ -77,6 +77,6 @@ actions:
           {%- set period = period ~ '-' ~ (as_timestamp(cu.get('to')) | timestamp_custom('%d.%m')) -%}
         {%- endif -%}
         {{ (student_name ~ ': ') if student_name else '' }}do nadrobienia po nieobecności {{ period }}:{{ '\n' ~ catch_up_lines }}{{ ('\nZadania:\n' ~ homework_lines) if homework_lines else '' }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

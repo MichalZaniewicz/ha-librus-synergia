@@ -60,6 +60,6 @@ actions:
         {{ (device_attr(start_entity, 'name') or '') | replace('E-dziennik ', '') }}
       wake_summary: >-
         {{ (student_name ~ ': ') if student_name else '' }}pierwsza lekcja o {{ lesson_time }}{{ (' - ' ~ first_subject) if first_subject else '' }}
-  - !input wake_action
+  - sequence: !input wake_action
 
 mode: single

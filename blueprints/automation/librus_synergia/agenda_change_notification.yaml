@@ -88,7 +88,7 @@ actions:
         {% if 'content' in p %}{% set ns.parts = ns.parts + ['nowy opis: ' ~ (d.content or '')[:120]] %}{% endif %}
         {{ head }}{{ day if 'date' not in p else '' }}{{ ' - ' if 'date' not in p else '- ' }}{{ ns.parts | join(', ') }}
         {% endif %}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

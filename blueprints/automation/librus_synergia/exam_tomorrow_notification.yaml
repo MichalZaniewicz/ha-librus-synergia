@@ -63,6 +63,6 @@ actions:
       student_name: >-
         {{ (device_attr(next_exam_entity, 'name') or '') | replace('E-dziennik ', '') }}
       exam_summary: "{{ (student_name ~ ': ') if student_name else '' }}Jutro:\n{{ exam_lines }}"
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

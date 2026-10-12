@@ -48,7 +48,7 @@ actions:
   - variables:
       grade_summary: >-
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Słaba ocena: {{ trigger.event.data.value }}{{ (' z ' ~ trigger.event.data.subject) if trigger.event.data.subject else '' }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

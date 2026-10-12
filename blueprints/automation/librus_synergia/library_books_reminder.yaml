@@ -93,6 +93,6 @@ actions:
         {%- set word = 'książkę' if n == 1 else ('książki' if n % 10 in [2, 3, 4]
              and n % 100 not in [12, 13, 14] else 'książek') -%}
         {{ (student_name ~ ': ') if student_name else '' }}do końca roku szkolnego {{ days_left }} dni - oddaj do biblioteki {{ n }} {{ word }}: {{ book_titles }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: single

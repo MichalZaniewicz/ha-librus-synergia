@@ -54,7 +54,7 @@ actions:
         {{ 'Jedna 6 podnosi ją z powrotem.' if d.sixes_to_next == 1 else 'Do poprawy potrzeba ' ~ d.sixes_to_next ~ (' szóstki.' if d.sixes_to_next < 5 else ' szóstek.') }}
         {%- elif d.direction == 'up' and d.ones_to_drop == 1 %} Uwaga: jedna 1 cofnie ją z powrotem.
         {%- endif %}
-  - !input notify_action
+  - sequence: !input notify_action
 
 mode: queued
 max: 10

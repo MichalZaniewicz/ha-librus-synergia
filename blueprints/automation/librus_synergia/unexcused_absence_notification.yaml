@@ -105,7 +105,7 @@ actions:
           {%- set ns.dates = ns.dates + [a[8:10] ~ '.' ~ a[5:7]] -%}
         {%- endfor -%}
         {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nieusprawiedliwiona nieobecność {{ (d[8:10] ~ '.' ~ d[5:7]) if d | length >= 10 else d }}.{{ (' Do usprawiedliwienia: ' ~ ns.dates | join(', ') ~ '.') if ns.dates else '' }}
-  - !input notify_action
+  - sequence: !input notify_action
 
 # One run per batch: the extra events of the same batch (one per lesson)
 # arrive while the first run waits, and are dropped without a warning.
