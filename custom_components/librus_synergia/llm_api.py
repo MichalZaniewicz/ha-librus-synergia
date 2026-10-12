@@ -786,14 +786,30 @@ class BehaviourTool(_LibrusTool):
         )
 
 
+def _plan_change_summary(data: Any) -> dict[str, Any]:
+    """Cancelled lessons and substitutions this school year, per subject."""
+    per_subject: dict[str, dict[str, int]] = {}
+    for change in data.plan_changes:
+        name = data.subjects.get(change.original_subject_id, "?")
+        counts = per_subject.setdefault(name, {"cancelled": 0, "substitutions": 0})
+        counts["cancelled" if change.kind == "cancelled" else "substitutions"] += 1
+    return {
+        "cancelled": sum(c["cancelled"] for c in per_subject.values()),
+        "substitutions": sum(c["substitutions"] for c in per_subject.values()),
+        "per_subject": per_subject,
+    }
+
+
 class SchoolInfoTool(_LibrusTool):
     name = "librus_get_school_info"
     description = (
         "The student's school and class: class name, homeroom teacher, school name and "
         "address, the student's number in the class register, today's lucky number "
         "(szczęśliwy numerek: the student with that number is not asked to answer that "
-        "day) and whether it is theirs, the semester and school-year end dates, and the "
-        "documents the school shares with parents (forms, regulations)."
+        "day) and whether it is theirs, the semester and school-year end dates, the "
+        "documents the school shares with parents (forms, regulations), the books lent "
+        "by the school library, and how many lessons were cancelled or covered by a "
+        "substitute this school year (per subject)."
     )
     parameters = _schema({"student": _STUDENT_FIELD})
 
@@ -836,6 +852,14 @@ class SchoolInfoTool(_LibrusTool):
                     for f in data.school_files[:15]
                 ]
                 or None,
+                "library_books": [
+                    _compact(
+                        {"title": _cut(b.title, 160), "author": b.author, "lent_on": _dated(b.lent_on)}
+                    )
+                    for b in data.library_lendings[:30]
+                ]
+                or None,
+                "plan_changes_this_year": _plan_change_summary(data) if data.plan_changes else None,
             }
         )
 

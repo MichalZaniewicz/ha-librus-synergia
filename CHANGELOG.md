@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+- **Library books.** A new "Library books" sensor counts the books the
+  school library lent to the student; its `books` attribute lists them
+  (title, author, lent on, due date, can be extended). For the free
+  textbooks lent for the whole year, Librus's due date is nominal and has
+  usually passed, so nothing treats it as overdue. A new
+  `librus_synergia_library_changed` event (and a "School library" event
+  entity) fires when a book is lent or returned.
+- **Return Library Books blueprint.** Reminds you on chosen days before the
+  school year ends (by default 14, 7 and 2 days before) when the student
+  still has library books, with their titles.
+- **Cancelled lessons this year.** A new sensor counts every lesson
+  cancelled since the school year started - not just in the two timetable
+  weeks. Attributes: `substitutions`, `since`, `by_subject` and `by_month`
+  (cancelled and substituted per subject and per month) and `recent` (the
+  latest 10 changes with the replacing subject and teacher).
+- Assist's school info tool lists the library books and the year's
+  cancelled lessons and substitutions per subject.
+- A school without the library module, or an account that can't read the
+  year's plan changes, gets an empty sensor - not a repair issue.
+- Needs librus-synergia 0.3.22.
+
 ### Changed
 - **Agenda entries show their time.** When Librus gives an Agenda entry a
   time (a parent-teacher meeting at 17:30, say), the event description now

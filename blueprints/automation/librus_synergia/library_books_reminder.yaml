@@ -1,0 +1,98 @@
+blueprint:
+  name: "Librus: Return Library Books"
+  description: >
+    A set number of days before the school year ends, checks the Library
+    books sensor and runs your action - typically "Send a notification" -
+    when the student still has books from the school library (the free
+    textbooks lent for the year among them), listing their titles. Runs
+    once a day at the chosen time, on each of the chosen days before the
+    end of the year.
+
+
+    Library due dates of textbooks lent for the year are nominal (they have
+    usually passed long ago), so this reminder goes by the end of the school
+    year, taken from the Class sensor, not by those dates.
+
+
+    Use `{{ books_summary }}` in your action for a ready-made message such
+    as "Ola: do końca roku szkolnego 14 dni - oddaj do biblioteki 12
+    książek: Matematyka 7, Historia 7, ...", or `{{ book_count }}`,
+    `{{ book_titles }}` (comma-separated) and `{{ days_left }}` directly.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/library_books_reminder.yaml
+  input:
+    library_entity:
+      name: Library books sensor
+      description: The Librus "Library books" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    class_entity:
+      name: Class sensor
+      description: >-
+        The Librus "Class" sensor for this student - its `school_year_end`
+        attribute says when the school year ends.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    days_before:
+      name: Days before the end of the year
+      description: >-
+        On which days before the school year ends to remind, comma-separated
+        (e.g. "14, 7, 2").
+      default: "14, 7, 2"
+      selector:
+        text: {}
+    check_time:
+      name: Time
+      description: When to check on those days.
+      default: "18:00:00"
+      selector:
+        time: {}
+    notify_action:
+      name: Notification action
+      description: The action to run when books still need to go back.
+      selector:
+        action: {}
+
+variables:
+  library_entity: !input library_entity
+  class_entity: !input class_entity
+  days_input: !input days_before
+  days_left: >-
+    {%- set end = state_attr(class_entity, 'school_year_end') -%}
+    {%- if end -%}
+      {{ (strptime(end[:10], '%Y-%m-%d').date() - now().date()).days }}
+    {%- else -%}
+      -1
+    {%- endif -%}
+
+triggers:
+  - trigger: time
+    at: !input check_time
+
+conditions:
+  - condition: template
+    value_template: >-
+      {%- set wanted = (days_input | string | replace(' ', '')).split(',')
+           | reject('eq', '') | map('int', -1) | list -%}
+      {{ (states(library_entity) | int(0)) > 0 and (days_left | int(-1)) in wanted }}
+
+actions:
+  - variables:
+      books: "{{ state_attr(library_entity, 'books') or [] }}"
+      book_count: "{{ books | count }}"
+      book_titles: "{{ books | map(attribute='title') | reject('eq', '') | join(', ') }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(library_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      books_summary: >-
+        {%- set n = book_count | int(0) -%}
+        {%- set word = 'książkę' if n == 1 else ('książki' if n % 10 in [2, 3, 4]
+             and n % 100 not in [12, 13, 14] else 'książek') -%}
+        {{ (student_name ~ ': ') if student_name else '' }}do końca roku szkolnego {{ days_left }} dni - oddaj do biblioteki {{ n }} {{ word }}: {{ book_titles }}
+  - !input notify_action
+
+mode: single

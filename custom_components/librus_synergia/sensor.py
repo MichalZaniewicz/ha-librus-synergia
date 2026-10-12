@@ -377,6 +377,8 @@ async def async_setup_entry(
             LibrusPlanChangesSensor(coordinator, entry),
             LibrusSchoolTripsSensor(coordinator, entry),
             LibrusSchoolDocumentsSensor(coordinator, entry),
+            LibrusLibraryBooksSensor(coordinator, entry),
+            LibrusCancelledLessonsSensor(coordinator, entry),
             LibrusSubjectAttendanceSensor(coordinator, entry),
             LibrusNextLessonSensor(coordinator, entry),
             LibrusCurrentLessonSensor(coordinator, entry),
@@ -2531,6 +2533,113 @@ class LibrusSchoolDocumentsSensor(LibrusSensorBase):
                 {"id": f.id, "name": f.name, "added": f.added, "url": school_file_url(f.download_path)}
                 for f in self.coordinator.data.school_files[:20]
             ]
+        }
+
+
+class LibrusLibraryBooksSensor(LibrusSensorBase):
+    """Books lent by the school library: the state is how many the student
+    has; `books` lists them. For the free textbooks lent for the whole
+    year, `due_date` is a nominal date that has usually passed - not a
+    real deadline."""
+
+    _attr_translation_key = "library_books"
+    _unrecorded_attributes = frozenset({"books"})
+    _attr_icon = "mdi:bookshelf"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "library_books")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return len(self.coordinator.data.library_lendings)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        return {
+            "books": [
+                {
+                    "id": b.id,
+                    "title": b.title,
+                    "author": b.author,
+                    "kind": b.kind,
+                    "lent_on": b.lent_on,
+                    "due_date": b.due_date,
+                    "extendable": b.extendable,
+                }
+                for b in self.coordinator.data.library_lendings
+            ]
+        }
+
+
+class LibrusCancelledLessonsSensor(LibrusSensorBase):
+    """Every change to the class's plan this school year (not just the two
+    timetable weeks): the state is how many lessons were cancelled;
+    substitutions, a per-subject and per-month breakdown and the latest
+    changes in attributes."""
+
+    _attr_translation_key = "cancelled_lessons"
+    _unrecorded_attributes = frozenset({"by_subject", "by_month", "recent"})
+    _attr_icon = "mdi:calendar-remove"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "cancelled_lessons")
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        return sum(1 for c in self.coordinator.data.plan_changes if c.kind == "cancelled")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        changes = data.plan_changes
+
+        def name(table: dict[Any, str], key: int | None) -> str | None:
+            return table.get(key, str(key)) if key is not None else None
+
+        by_subject: dict[str, dict[str, int]] = {}
+        by_month: dict[str, dict[str, int]] = {}
+        for c in changes:
+            bucket = "cancelled" if c.kind == "cancelled" else "substitutions"
+            subject = name(data.subjects, c.original_subject_id) or "?"
+            for table, key in ((by_subject, subject), (by_month, (c.original_date or "")[:7])):
+                counts = table.setdefault(key, {"cancelled": 0, "substitutions": 0})
+                counts[bucket] += 1
+        recent = sorted(
+            changes,
+            key=lambda c: (c.original_date or "", c.original_lesson_no or 0),
+            reverse=True,
+        )[:10]
+        return {
+            "substitutions": sum(1 for c in changes if c.kind != "cancelled"),
+            "since": changes[0].original_date if changes else None,
+            "by_subject": dict(
+                sorted(
+                    by_subject.items(),
+                    key=lambda kv: (-kv[1]["cancelled"], -kv[1]["substitutions"], kv[0]),
+                )
+            ),
+            "by_month": dict(sorted(by_month.items())),
+            "recent": [
+                {
+                    "date": c.original_date,
+                    "lesson_no": c.original_lesson_no,
+                    "subject": name(data.subjects, c.original_subject_id),
+                    "teacher": name(data.teachers, c.original_teacher_id),
+                    "kind": c.kind,
+                    "new_subject": name(data.subjects, c.subject_id),
+                    "new_teacher": name(data.teachers, c.teacher_id),
+                    "classroom": c.classroom or c.original_classroom,
+                }
+                for c in recent
+            ],
         }
 
 

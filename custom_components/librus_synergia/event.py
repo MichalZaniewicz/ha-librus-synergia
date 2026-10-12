@@ -35,6 +35,7 @@ from .const import (
     EVENT_NEW_MESSAGE,
     EVENT_NEW_NOTE,
     EVENT_NEW_SCHOOL_DOCUMENT,
+    EVENT_LIBRARY_CHANGED,
     EVENT_NEW_SCHOOL_TRIP,
     EVENT_TIMETABLE_CHANGED,
 )
@@ -113,6 +114,13 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
         ("new_document",),
         "mdi:file-document-plus-outline",
         lambda d: "new_document",
+    ),
+    LibrusEventDescription(
+        "library",
+        EVENT_LIBRARY_CHANGED,
+        ("lent", "returned"),
+        "mdi:bookshelf",
+        lambda d: "returned" if d.get("action") == "returned" else "lent",
     ),
     LibrusEventDescription(
         "announcement",

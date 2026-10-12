@@ -304,6 +304,9 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     "Realizations",
     "SchoolTrips",
     "SchoolFiles",
+    # School library lendings and the school year's plan changes.
+    "EbiblioLendings",
+    "Calendars/Substitutions",
     # Descriptive grades' comments and skill names - only fetched when the
     # student has descriptive grades.
     "DescriptiveGrades/Comments",
@@ -354,6 +357,9 @@ EVENT_JUSTIFICATION_STATUS = f"{DOMAIN}_justification_status"
 # Seeded silently on the first sync.
 EVENT_NEW_SCHOOL_TRIP = f"{DOMAIN}_new_school_trip"
 EVENT_NEW_SCHOOL_DOCUMENT = f"{DOMAIN}_new_school_document"
+# A book the school library lent to the student (`action: lent`) or got
+# back (`action: returned`). Seeded silently on the first sync.
+EVENT_LIBRARY_CHANGED = f"{DOMAIN}_library_changed"
 # Fires for a new real homework assignment ("zadanie domowe", the
 # `HomeWorkAssignments` endpoint) - distinct from EVENT_NEW_HOMEWORK, which
 # despite its name covers the Agenda feed. Carries topic/text/due date, the

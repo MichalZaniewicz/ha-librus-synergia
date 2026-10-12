@@ -100,6 +100,8 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_parent_teacher_conferences,
     parse_justifications,
     parse_realizations,
+    parse_library_lendings,
+    parse_plan_changes,
     parse_school_files,
     parse_school_trips,
     parse_text_grade_categories,
@@ -148,6 +150,7 @@ from .const import (
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
+    EVENT_LIBRARY_CHANGED,
     EVENT_NEW_SCHOOL_DOCUMENT,
     EVENT_NEW_SCHOOL_TRIP,
     EVENT_NEW_ABSENCE,
@@ -208,6 +211,8 @@ _EXTRA_LABELS = (
     "Realizations",
     "SchoolTrips",
     "SchoolFiles",
+    "EbiblioLendings",
+    "Calendars/Substitutions",
     "TimetableEntries",
     "DescriptiveGrades/Comments",
     "DescriptiveGrades/Skills",
@@ -222,6 +227,19 @@ _MESSAGES_QUICK_RECHECKS = 3
 # Reference endpoints for a school setting that may be closed to an account
 # (403/404): the default is used instead of a degraded-endpoint issue.
 _SCHOOL_SETTING_LABELS = frozenset({"GradingSystem"})
+# Optional modules a school may not have at all (no e-library, no access
+# to the year's plan changes): a refusal (401/403/404) is an empty answer,
+# asked again on the endpoint's own schedule - not a degraded endpoint.
+_OPTIONAL_MODULE_LABELS = frozenset({"EbiblioLendings", "Calendars/Substitutions"})
+
+
+def _is_module_refusal(err: BaseException) -> bool:
+    """A 403/404, or a 401 "Insufficient scopes" - the account can't read
+    the module. A plain 401 is a dead session, not a refusal."""
+    status = getattr(err, "status_code", None)
+    if status == 401:
+        return not isinstance(err, LibrusSessionExpiredError)
+    return status in (403, 404)
 # A badge earned longer ago than this is recorded without an event - a week,
 # so HA being off for a few days doesn't swallow one.
 _ACHIEVEMENT_NEWS_DAYS = timedelta(days=7)
@@ -992,6 +1010,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_agenda: dict[str, dict[str, Any]] | None = None
         # Justification id -> its last seen status (None until first sync).
         self._known_justifications: dict[str, str] | None = None
+        # Library lending id -> {title, author, lent_on} (None until the first
+        # sync, which only seeds it) - see _fire_library_events.
+        self._known_library: dict[str, dict[str, Any]] | None = None
         # Ids already announced per kind (text grades, descriptive grades,
         # school trips, school documents); None until the first sync, which
         # only seeds them.
@@ -1126,6 +1147,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_agenda = agenda
         if isinstance(statuses := stored.get("justifications"), dict):
             self._known_justifications = statuses
+        if isinstance(library := stored.get("library"), dict):
+            self._known_library = library
         if isinstance(items := stored.get("known_items"), dict):
             for kind in self._known_items:
                 if isinstance(ids := items.get(kind), list):
@@ -1491,6 +1514,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._unseeded_kinds,
             self._known_agenda,
             self._known_justifications,
+            self._known_library,
             self._known_items,
             self._known_homework_assignment_ids,
             self._achievement_dates,
@@ -1590,6 +1614,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "unseeded_kinds": sorted(self._unseeded_kinds),
             "agenda": self._known_agenda,
             "justifications": self._known_justifications,
+            "library": self._known_library,
             "known_items": {
                 kind: sorted(ids, key=str) if ids is not None else None
                 for kind, ids in self._known_items.items()
@@ -2574,6 +2599,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "SchoolFiles", self._client.async_get_school_files, every=_HOURLY
             ),
             self._async_optional(
+                "EbiblioLendings", self._client.async_get_library_lendings, every=_HOURLY
+            ),
+            # The whole year's cancelled lessons and substitutions - the two
+            # timetable weeks fetched every cycle carry the fresh ones.
+            self._async_optional(
+                "Calendars/Substitutions", self._client.async_get_plan_changes, every=_HOURLY
+            ),
+            self._async_optional(
                 "TimetableEntries", self._client.async_get_timetable_entries, every=_DAILY
             ),
             self._async_get_descriptive_grade_lookups(core_payloads),
@@ -2584,6 +2617,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             realizations,
             school_trips,
             school_files,
+            library_lendings,
+            plan_changes,
             timetable_entries,
             descriptive_lookups,
             partial_grades,
@@ -2593,6 +2628,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "Realizations": realizations,
             "SchoolTrips": school_trips,
             "SchoolFiles": school_files,
+            "EbiblioLendings": library_lendings,
+            "Calendars/Substitutions": plan_changes,
             "TimetableEntries": timetable_entries,
             **descriptive_lookups,
             **partial_grades,
@@ -2628,6 +2665,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
         self._fire_justification_events(data)
+        self._fire_library_events(data)
         self._fire_extra_item_events(data)
         self._check_achievements(data, today)
         self._fire_forecast_events(data, today)
@@ -2785,6 +2823,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
             school_trips=parse_school_trips((extras or {}).get("SchoolTrips") or {}),
             school_files=parse_school_files((extras or {}).get("SchoolFiles") or {}),
+            library_lendings=parse_library_lendings((extras or {}).get("EbiblioLendings") or {}),
+            plan_changes=parse_plan_changes((extras or {}).get("Calendars/Substitutions") or {}),
             standing_timetable=parse_timetable_entries(
                 (extras or {}).get("TimetableEntries") or {}, self._cached_lesson_subjects
             ),
@@ -3158,6 +3198,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         clears any previously-raised issue for it - turning a feature off
         isn't a failure worth flagging)."""
         if isinstance(result, BaseException):
+            if label in _OPTIONAL_MODULE_LABELS and _is_module_refusal(result):
+                self._note_optional_endpoint_recovery(label)
+                self._remember_payload(label, {})
+                self._fetched_at[label] = dt_util.utcnow()
+                return {}
             if isinstance(result, LibrusError):
                 _LOGGER.debug(
                     "Optional endpoint '%s' fetch failed (non-fatal): %s",
@@ -4526,6 +4571,53 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "teachers": item.teachers,
                 },
             )
+
+    def _fire_library_events(self, data: LibrusData) -> None:
+        """EVENT_LIBRARY_CHANGED for each book the school library lent
+        (`action: lent`) or got back (`action: returned`) since the last
+        sync. The first sync only seeds; a failed fetch (the last good copy
+        is shown) fires nothing."""
+        current = {
+            item.id: {"title": item.title, "author": item.author, "lent_on": item.lent_on}
+            for item in data.library_lendings
+        }
+        if (
+            "EbiblioLendings" in self._failed_this_cycle
+            or "EbiblioLendings" in self.fallback_sections
+        ):
+            # Not seeded from a failed fetch either: an empty first list
+            # would announce every book as new once Librus answers.
+            return
+        known = self._known_library
+        if known and not current:
+            # Every book gone at once is more likely a refused or emptied
+            # fetch than the whole stack handed back - keep the list and
+            # announce nothing.
+            return
+        self._known_library = current
+        if known is None:
+            return
+        base = {
+            "entry_id": self.config_entry.entry_id if self.config_entry else None,
+            "student": data.me.display_name,
+        }
+        for action, ids, source in (
+            ("lent", current.keys() - known.keys(), current),
+            ("returned", known.keys() - current.keys(), known),
+        ):
+            for item_id in sorted(ids):
+                fields = source[item_id]
+                self.hass.bus.async_fire(
+                    EVENT_LIBRARY_CHANGED,
+                    {
+                        **base,
+                        "action": action,
+                        "id": item_id,
+                        "title": fields.get("title"),
+                        "author": fields.get("author"),
+                        "lent_on": fields.get("lent_on"),
+                    },
+                )
 
     def _fire_agenda_change_events(self, data: LibrusData, today: date) -> None:
         """EVENT_AGENDA_CHANGED for an upcoming Agenda entry whose date,
