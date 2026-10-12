@@ -14,7 +14,9 @@
     (read-only).
   Sending is **off by default** - turn on "Allow sending messages (beta)"
   under the integration's Configure (changing it doesn't reload the
-  integration). The Unread messages sensor shows it as `sending_enabled`. A message is sent once and never retried; when Librus doesn't
+  integration). The Unread messages sensor shows it as `sending_enabled`.
+  Right after a send or a withdrawal the sent messages are fetched again
+  (one request), so the message shows in the Messages card's Sent tab at once. A message is sent once and never retried; when Librus doesn't
   confirm it, the error says whether it may have gone out. At most 10
   messages an hour per student, a name that matches several people is
   refused instead of guessed, and `dry_run` shows who would get what without

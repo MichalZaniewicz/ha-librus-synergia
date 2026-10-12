@@ -49,6 +49,7 @@ async def _setup(hass, *, options: dict | None = None, **overrides):
     client.async_get_student_subject_teachers.return_value = SUBJECTS
     client.async_get_messages_me.return_value = {"accountId": 1}
     client.async_send_message_checked.return_value = SentMessageData(message_id=987, status="sent")
+    client.async_get_messages.return_value = {"data": []}
     entry = await setup_integration(hass, client, options=options)
     # The mock account has no Wiadomości during the poll; switch it on here.
     entry.runtime_data._messages_available = True
@@ -236,3 +237,19 @@ async def test_option_turns_sending_on_without_a_reload(hass) -> None:
     await hass.async_block_till_done()
     with pytest.raises(ServiceValidationError):
         await _send(hass, device_id, recipient="sekretariat", topic="T", message="M")
+
+
+async def test_sent_list_is_refreshed_right_after_sending(hass) -> None:
+    client, device_id = await _setup(hass, options=ON)
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    client.async_get_messages.return_value = {
+        "data": [
+            {"messageId": "987", "receiverName": "Kowal Jan", "topic": "Pytanie",
+             "content": "", "sendDate": "2026-10-12 10:00:00"}
+        ]
+    }
+    await _send(hass, device_id, recipient="Matematyka", topic="Pytanie", message="Treść")
+    client.async_get_messages.assert_awaited_with(mailbox="outbox", limit=10)
+    assert [(m.id, m.receiver_name) for m in entry.runtime_data.data.sent_messages] == [
+        ("987", "Kowal Jan")
+    ]

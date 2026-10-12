@@ -2464,16 +2464,43 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # gone out.
         self._sent_at.append(dt_util.utcnow())
         try:
-            return await self._client.async_send_message_checked(
+            sent = await self._client.async_send_message_checked(
                 account_ids, topic, text, reply_to=reply_to
             )
-        finally:
+        except BaseException:
             self._forget_mailbox_list("outbox")
+            raise
+        await self._async_refresh_outbox()
+        return sent
 
     async def async_withdraw_message(self, message_id: str) -> None:
         """Withdraws a message you sent (`withdraw_message` service)."""
         await self._async_messages_read(lambda: self._client.async_withdraw_message(message_id))
-        self._forget_mailbox_list("outbox")
+        await self._async_refresh_outbox()
+
+    async def _async_refresh_outbox(self) -> None:
+        """Right after a send or a withdrawal: fetch the sent messages
+        (one request) and show them now instead of at the next poll. A
+        failure only leaves the list to the next poll (its cached copy is
+        dropped, so that poll asks again)."""
+        try:
+            payload = await self._async_messages_read(
+                lambda: self._client.async_get_messages(mailbox="outbox", limit=10)
+            )
+        except LibrusError as err:
+            _LOGGER.debug("Sent messages not refreshed after writing: %s", err)
+            self._forget_mailbox_list("outbox")
+            return
+        sent = parse_message_list(payload, "outbox")
+        self._remember_mailbox_list("outbox", None, sent)
+        if self._last_messages is not None:
+            # Same tuple layout as _async_get_messages returns (outbox: 6).
+            last = list(self._last_messages)
+            last[6] = sent
+            self._last_messages = tuple(last)
+        if self.data is not None:
+            self.data = dataclasses.replace(self.data, sent_messages=sent)
+            self.async_update_listeners()
 
     async def _async_update_data(self) -> LibrusData:
         assert self.config_entry is not None
