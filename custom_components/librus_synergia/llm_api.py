@@ -31,7 +31,7 @@ from homeassistant.helpers import llm
 from homeassistant.util import dt as dt_util
 
 from librus_synergia.models import LibrusData
-from librus_synergia.parsers import plan_differences
+from librus_synergia.parsers import plan_differences, point_grades_percentage
 
 from .ai_summary import _compact, _cut, _dated, _day
 from .catch_up import catch_up
@@ -293,6 +293,49 @@ class TimetableTool(_LibrusTool):
         return {"days": result_days}
 
 
+def _point_grade_summary(data: Any, subject_ids: set[Any] | None, since: date | None) -> dict[str, Any]:
+    """Point grades (schools grading in points out of a maximum): the picked
+    ones newest first and the percentage per subject over the whole year.
+    Empty at a school without them."""
+    every = [g for g in data.point_grades if subject_ids is None or g.subject_id in subject_ids]
+    if not every:
+        return {}
+    by_subject: dict[str, list[Any]] = {}
+    for grade in every:
+        by_subject.setdefault(_subject_name(data, grade.subject_id) or "?", []).append(grade)
+    picked = sorted(
+        (g for g in every if since is None or (_day(g.add_date) or date.min) >= since),
+        key=lambda g: g.add_date or "",
+        reverse=True,
+    )
+    return {
+        "point_grades": [
+            _compact(
+                {
+                    "date": _dated(g.add_date),
+                    "subject": _subject_name(data, g.subject_id),
+                    "points": g.points,
+                    "max_points": g.max_points,
+                    "percent": g.percentage,
+                    "value": g.value if g.points is None else None,
+                    "category": g.category,
+                    "weight": g.weight,
+                    "counts_to_average": False if not g.counts_to_average else None,
+                    "teacher": _teacher_name(data, g.teacher_id),
+                }
+            )
+            for g in picked[:MAX_GRADES]
+        ]
+        or None,
+        "points_percent_by_subject": {
+            name: point_grades_percentage(grades)
+            for name, grades in sorted(by_subject.items())
+            if point_grades_percentage(grades) is not None
+        }
+        or None,
+    }
+
+
 class GradesTool(_LibrusTool):
     name = "librus_get_grades"
     description = (
@@ -302,7 +345,9 @@ class GradesTool(_LibrusTool):
         "towards the average. Also a forecast of the report-card grade per subject (from the "
         "average and the school's thresholds - the teacher decides the real grade) with how "
         "many 6s lift it and how many 1s drop it. Also grades a teacher gave as text "
-        "(text_grades) and descriptive grades. Filter by subject and by how many days back."
+        "(text_grades), descriptive grades, and point grades (points out of a maximum, "
+        "with the percentage per subject) at schools that use them. Filter by subject and "
+        "by how many days back."
     )
     parameters = _schema(
         {
@@ -448,6 +493,7 @@ class GradesTool(_LibrusTool):
                     if subject_ids is None or d.subject_id in subject_ids
                 ][:10]
                 or None,
+                **_point_grade_summary(data, subject_ids, since),
                 "more_grades_not_shown": len(picked) - MAX_GRADES if len(picked) > MAX_GRADES else None,
                 "no_grades": True if not picked else None,
             }

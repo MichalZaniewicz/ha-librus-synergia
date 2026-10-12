@@ -105,7 +105,8 @@ SECTIONS: dict[str, str] = {
     " (averages[].now against averages[].week_ago). A grade with kind 'descriptive' is"
     " for a skill (in category) and doesn't count towards any average.",
     "attendance": "Attendance: this week's lessons, absences (excused or not), lates,"
-    " which subjects were missed, and what is still waiting to be excused overall.",
+    " which subjects were missed, what is still waiting to be excused overall, and"
+    " lessons the school cancelled or covered with a substitute this week.",
     "behaviour": "Behaviour: notes (uwagi) from this week - positive, negative,"
     " neutral - the behaviour grade if there is one, and the streaks.",
     "next_week": "Next week: tests and other agenda entries, homework due, cancelled"
@@ -218,6 +219,10 @@ are calendar days. attendance.absences lists this week's absences and lates;
 attendance.missed_lessons_topics is what was taught in the lessons the student
 missed this week (worth catching up on); attendance.justifications counts
 justifications still waiting for the school's decision and recent rejected ones.
+attendance.cancelled_or_substituted_this_week lists lessons the school cancelled or
+covered with a substitute teacher this week (the school's decision, not the
+student's absence); school_year_cancelled / school_year_substituted are the totals
+since the school year started.
 A grade with kind "text" is a teacher's written grade, not a number.
 next_week.agenda holds tests, trips and other entries from the class calendar;
 next_week.tests_to_revise lists the topics taught since the previous test in that
@@ -532,6 +537,24 @@ def build_context(
                         }
                     )
                 )
+    # The school's own changes this week (Calendars/Substitutions, the whole
+    # year): lessons cancelled or covered by a substitute, and the year so far.
+    school_changes = [
+        _compact(
+            {
+                "date": _dated(_day(change.original_date)),
+                "lesson_no": change.original_lesson_no,
+                "subject": subject(change.original_subject_id),
+                "change": "cancelled" if change.kind == "cancelled" else "substitute",
+                "substitute_teacher": teacher(change.teacher_id)
+                if change.kind != "cancelled"
+                else None,
+            }
+        )
+        for change in data.plan_changes
+        if _in(_day(change.original_date), week_from, today)
+    ]
+    year_cancelled = sum(1 for change in data.plan_changes if change.kind == "cancelled")
     free_days = [
         {"name": free.name, "from": _dated(free.date_from), "to": _dated(free.date_to)}
         for free in data.free_days
@@ -648,6 +671,11 @@ def build_context(
                 "open_unexcused_dates": sorted(set(open_unexcused))[-10:],
                 "missed_lessons_topics": missed_topics[:20],
                 "justifications": justifications,
+                "cancelled_or_substituted_this_week": school_changes[:20],
+                "school_year_cancelled": year_cancelled if data.plan_changes else None,
+                "school_year_substituted": len(data.plan_changes) - year_cancelled
+                if data.plan_changes
+                else None,
             }
         ),
         "new_school_documents": documents,

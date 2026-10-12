@@ -92,6 +92,10 @@ async def test_library_and_plan_change_sensors(hass) -> None:
         "2026-09": {"cancelled": 2, "substitutions": 0},
         "2026-10": {"cancelled": 0, "substitutions": 1},
     }
+    assert cancelled.attributes["by_date"]["2026-09-15"] == [
+        {"lesson_no": 2, "subject": "Matematyka", "kind": "cancelled"},
+        {"lesson_no": 3, "subject": "Matematyka", "kind": "cancelled"},
+    ]
     latest = cancelled.attributes["recent"][0]
     assert (latest["date"], latest["kind"], latest["new_teacher"]) == (
         "2026-10-01",

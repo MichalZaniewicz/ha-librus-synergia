@@ -2582,7 +2582,7 @@ class LibrusCancelledLessonsSensor(LibrusSensorBase):
     and per-month breakdown and the latest changes in attributes."""
 
     _attr_translation_key = "cancelled_lessons"
-    _unrecorded_attributes = frozenset({"by_subject", "by_month", "recent"})
+    _unrecorded_attributes = frozenset({"by_subject", "by_month", "by_date", "recent"})
     _attr_icon = "mdi:calendar-remove"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -2606,7 +2606,17 @@ class LibrusCancelledLessonsSensor(LibrusSensorBase):
 
         by_subject: dict[str, dict[str, int]] = {}
         by_month: dict[str, dict[str, int]] = {}
+        # Day -> its changes, for a calendar (the month card's dots).
+        by_date: dict[str, list[dict[str, Any]]] = {}
         for c in changes:
+            if c.original_date:
+                by_date.setdefault(c.original_date[:10], []).append(
+                    {
+                        "lesson_no": c.original_lesson_no,
+                        "subject": name(data.subjects, c.original_subject_id),
+                        "kind": c.kind,
+                    }
+                )
             bucket = "cancelled" if c.kind == "cancelled" else "substitutions"
             subject = name(data.subjects, c.original_subject_id) or "?"
             for table, key in ((by_subject, subject), (by_month, (c.original_date or "")[:7])):
@@ -2633,6 +2643,7 @@ class LibrusCancelledLessonsSensor(LibrusSensorBase):
                 )
             ),
             "by_month": dict(sorted(by_month.items())),
+            "by_date": dict(sorted(by_date.items())),
             "recent": [
                 {
                     "date": c.original_date,

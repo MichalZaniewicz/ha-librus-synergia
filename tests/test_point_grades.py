@@ -118,3 +118,21 @@ async def test_get_grades_service_includes_point_grades(hass) -> None:
 
     assert [g["percentage"] for g in response["point_grades"]] == [75.0, 85.0]
     assert response["points_percentage"] == round(100 * 185 / 220, 1)
+
+
+async def test_assist_grades_tool_lists_point_grades(hass) -> None:
+    from .test_llm_api import _call
+
+    client = build_mock_client(
+        async_get_point_grades=POINT_GRADES,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_subjects=SUBJECTS,
+    )
+    await setup_integration(hass, client)
+
+    data = await _call(hass, "librus_get_grades", subject="matem")
+
+    assert [(g["points"], g["max_points"]) for g in data["point_grades"]] == [(15.0, 20.0), (85.0, 100.0)]
+    assert data["point_grades"][0]["percent"] == 75.0
+    assert data["point_grades"][1]["category"] == "Sprawdzian"
+    assert "Matematyka" in data["points_percent_by_subject"]

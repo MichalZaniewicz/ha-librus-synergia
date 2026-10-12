@@ -15,12 +15,19 @@
   still has library books, with their titles.
 - **Cancelled lessons this year.** A new sensor counts every lesson
   cancelled since the school year started - not just in the two timetable
-  weeks. Attributes: `substitutions`, `lessons_held` and `cancelled_percent`
-  (the share of lessons that didn't take place), `since`, `by_subject` and `by_month`
-  (cancelled and substituted per subject and per month) and `recent` (the
-  latest 10 changes with the replacing subject and teacher).
+  weeks. Attributes: `substitutions`; `lessons_held` and `cancelled_percent`
+  (the share of lessons that didn't take place); `since`; `by_subject` and
+  `by_month` (cancelled and substituted per subject and per month); `by_date`
+  (each day's changes, for a calendar); and `recent` (the latest 10 changes
+  with the replacing subject and teacher).
 - Assist's school info tool lists the library books and the year's
   cancelled lessons and substitutions per subject.
+- **Point grades in Assist.** At a school grading in points, the grades tool
+  lists them (points, maximum, percent, category, teacher) with the
+  percentage per subject.
+- **The weekly AI summary mentions cancelled lessons.** Lessons the school
+  cancelled or covered with a substitute that week, and the totals for the
+  school year, go into the Attendance section.
 - A school without the library module, or an account that can't read the
   year's plan changes, gets an empty sensor - not a repair issue.
 - Needs librus-synergia 0.3.22.

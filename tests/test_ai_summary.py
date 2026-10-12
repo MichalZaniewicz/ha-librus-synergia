@@ -27,7 +27,7 @@ from custom_components.librus_synergia.const import (
     EVENT_WEEKLY_SUMMARY,
 )
 
-from librus_synergia.models import DescriptiveGradeData
+from librus_synergia.models import DescriptiveGradeData, PlanChangeData
 
 from .conftest import build_mock_client, setup_integration
 
@@ -189,6 +189,40 @@ async def test_build_context_includes_this_weeks_descriptive_grades(hass) -> Non
     assert descriptive == [
         {"date": "2026-10-02 Fri", "value": "6", "category": "Rytmika", "comment": "Brawo", "kind": "descriptive"}
     ]
+
+
+async def test_build_context_has_this_weeks_cancelled_and_substituted_lessons(hass) -> None:
+    entry = await setup_integration(hass, _client())
+    base = entry.runtime_data.data
+
+    def change(change_id: int, day: str, cancelled: bool) -> PlanChangeData:
+        return PlanChangeData(
+            id=change_id, original_date=day, original_lesson_no=2, original_subject_id=42002,
+            original_teacher_id=None, original_classroom=None, cancelled=cancelled, shifted=False,
+            date=None if cancelled else day, lesson_no=None if cancelled else 2,
+            teacher_id=None,
+        )
+
+    data = dataclasses.replace(
+        base,
+        plan_changes=[
+            change(1, "2026-09-15", True),  # earlier in the year - totals only
+            change(2, "2026-09-30", True),
+            change(3, "2026-10-02", False),
+        ],
+    )
+
+    attendance = build_context(data, _TODAY, weighted=True, include_news=False, student=None)["attendance"]
+
+    subject = base.subjects.get(42002)
+    week = attendance["cancelled_or_substituted_this_week"]
+    assert [(c["date"], c["change"]) for c in week] == [
+        ("2026-09-30 Wed", "cancelled"),
+        ("2026-10-02 Fri", "substitute"),
+    ]
+    assert all(c.get("subject") == subject for c in week)
+    assert attendance["school_year_cancelled"] == 2
+    assert attendance["school_year_substituted"] == 1
 
 
 async def test_build_context_has_revision_topics_and_missed_lessons(hass) -> None:
