@@ -31,6 +31,7 @@ from custom_components.librus_synergia.const import (
     CONF_FREE_DAYS_ENABLED,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MESSAGES_ENABLED,
+    CONF_MESSAGE_SENDING_ENABLED,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -303,6 +304,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
     assert entry.options == {
         CONF_SCAN_INTERVAL: 45,
         CONF_MESSAGES_ENABLED: False,
+        CONF_MESSAGE_SENDING_ENABLED: False,
         CONF_ANNOUNCEMENTS_ENABLED: True,
         CONF_BEHAVIOUR_GRADES_ENABLED: True,
         CONF_DESCRIPTIVE_GRADES_ENABLED: True,
@@ -348,6 +350,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
     assert entry.options == {
         CONF_SCAN_INTERVAL: 20,
         CONF_MESSAGES_ENABLED: True,
+        CONF_MESSAGE_SENDING_ENABLED: False,
         CONF_ANNOUNCEMENTS_ENABLED: False,
         CONF_BEHAVIOUR_GRADES_ENABLED: False,
         CONF_DESCRIPTIVE_GRADES_ENABLED: False,

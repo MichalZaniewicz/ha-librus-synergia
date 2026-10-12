@@ -22,6 +22,8 @@
   sending (also with sending off). Not offered to Assist or the AI summary.
   The send, reply and withdraw requests follow Librus's own web app and
   haven't been confirmed on a live account yet. Needs librus-synergia 0.3.23.
+- `get_message` also returns `no_reply` (Librus doesn't take a reply to it) and
+  `can_withdraw` (a sent message that can still be withdrawn).
 
 ### Fixed
 - **Blueprints can be saved again.** 29 of the 31 blueprints put the
