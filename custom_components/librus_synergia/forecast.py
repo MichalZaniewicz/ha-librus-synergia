@@ -20,8 +20,14 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, TypeVar
 
-from librus_synergia.models import GradeCategoryData, GradeData, GradingSystemData, LibrusData
-from librus_synergia.parsers import parse_grade_value
+from librus_synergia.models import (
+    GradeCategoryData,
+    GradeData,
+    GradingSystemData,
+    LibrusData,
+    PointGradeData,
+)
+from librus_synergia.parsers import parse_grade_value, point_grades_percentage
 
 _T = TypeVar("_T")
 
@@ -135,6 +141,28 @@ def parse_thresholds(text: str | None) -> tuple[float, ...]:
     return values
 
 
+def parse_point_thresholds(text: str | None) -> tuple[float, ...] | None:
+    """Five ascending percentages (for a 2..6) from "40, 55, 75, 90, 98" -
+    decimal commas and "%" allowed. Empty (the default) or unusable -> None:
+    point-graded subjects then stay out of the forecast, as before the
+    option existed, since there is no common scale to fall back to (each
+    school, often each subject, sets its own)."""
+    if not text:
+        return None
+    parts = [p for p in text.replace("%", " ").replace(";", " ").replace(", ", " ").split() if p]
+    try:
+        values = tuple(float(p.replace(",", ".")) for p in parts)
+    except ValueError:
+        return None
+    if len(values) != 5 or any(
+        b <= a for a, b in zip(values, values[1:], strict=False)
+    ):
+        return None
+    if values[0] <= 0 or values[-1] > 100:
+        return None
+    return values
+
+
 def _counts(grade: GradeData) -> bool:
     return not (
         grade.is_semester_proposition
@@ -214,6 +242,10 @@ class SubjectForecast:
     declining: bool
     # The teacher's semester/year-end proposition, once there is one.
     proposed: str | None
+    # Point-graded subject (forecast from `point_grade_thresholds`): its
+    # percentage. `average` and `next_grade_at` are then percentages too,
+    # and the "how many 6s/1s" counts don't apply (None).
+    percentage: float | None = None
 
     @property
     def at_risk(self) -> bool:
@@ -231,6 +263,7 @@ class SubjectForecast:
             "declining": self.declining,
             "at_risk": self.at_risk,
             "proposed": self.proposed,
+            "percentage": self.percentage,
         }
 
 
@@ -265,14 +298,20 @@ def subject_forecasts(
     *,
     weighted: bool = True,
     owner: Hashable | None = None,
+    point_thresholds: tuple[float, ...] | None = None,
 ) -> list[SubjectForecast]:
     """One forecast per subject with at least one counted grade, worst
     first. The list is shared between callers - don't modify it. `owner`
-    is the config entry id (see DataMemo)."""
+    is the config entry id (see DataMemo). With `point_thresholds`
+    (percentages for a 2..6), a subject graded only in points gets a
+    forecast from its percentage as well."""
+    points = tuple(point_thresholds) if point_thresholds else None
     return _FORECASTS.get(
         data,
-        (today, tuple(thresholds), weighted),
-        lambda: _subject_forecasts(data, today, tuple(thresholds), weighted=weighted),
+        (today, tuple(thresholds), weighted, points),
+        lambda: _subject_forecasts(
+            data, today, tuple(thresholds), weighted=weighted, point_thresholds=points
+        ),
         owner=owner,
     )
 
@@ -283,6 +322,7 @@ def _subject_forecasts(
     thresholds: tuple[float, ...],
     *,
     weighted: bool,
+    point_thresholds: tuple[float, ...] | None = None,
 ) -> list[SubjectForecast]:
     basis, semester = forecast_basis(data, today)
     # A grade without a semester number counts in either basis.
@@ -343,7 +383,78 @@ def _subject_forecasts(
                 proposed=proposed,
             )
         )
+    if point_thresholds:
+        result.extend(
+            _point_forecasts(
+                data,
+                today,
+                point_thresholds,
+                semester=semester,
+                proposition=proposition,
+                skip={f.subject_id for f in result},
+            )
+        )
     result.sort(key=lambda f: (f.predicted, f.average, f.subject))
+    return result
+
+
+def _point_forecasts(
+    data: LibrusData,
+    today: date,
+    thresholds: tuple[float, ...],
+    *,
+    semester: int | None,
+    proposition: Callable[[GradeData], bool],
+    skip: set[int],
+) -> list[SubjectForecast]:
+    """Forecasts for point-graded subjects: the percentage of points (as
+    `point_grades_percentage` counts it - what the grade log shows) against
+    the percentage thresholds. Same basis as the 1-6 grades. A subject that
+    already has a forecast from 1-6 grades (`skip`) keeps that one - the two
+    scales aren't mixed."""
+    grades = [
+        g
+        for g in data.point_grades
+        if g.subject_id is not None
+        and g.subject_id not in skip
+        and (semester is None or g.semester in (semester, None))
+    ]
+    cutoff = (today - timedelta(days=DECLINE_WINDOW_DAYS)).isoformat()
+    by_subject: dict[int, list[PointGradeData]] = {}
+    for grade in grades:
+        by_subject.setdefault(grade.subject_id, []).append(grade)  # type: ignore[arg-type]
+    result: list[SubjectForecast] = []
+    for subject_id, subject_grades in by_subject.items():
+        percentage = point_grades_percentage(subject_grades)
+        if percentage is None:
+            continue
+        predicted = predicted_grade(percentage, thresholds)
+        older = point_grades_percentage(
+            [g for g in subject_grades if (g.add_date or "")[:10] < cutoff]
+        )
+        declining = older is not None and predicted < predicted_grade(older, thresholds)
+        result.append(
+            SubjectForecast(
+                subject_id=subject_id,
+                subject=data.subjects.get(subject_id, str(subject_id)),
+                average=percentage,
+                weight_total=0.0,
+                predicted=predicted,
+                next_grade_at=thresholds[predicted - 1] if predicted < 6 else None,
+                sixes_to_next=None,
+                ones_to_drop=None,
+                declining=declining,
+                proposed=next(
+                    (
+                        g.value
+                        for g in data.grades
+                        if g.subject_id == subject_id and proposition(g)
+                    ),
+                    None,
+                ),
+                percentage=percentage,
+            )
+        )
     return result
 
 

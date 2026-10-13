@@ -76,6 +76,7 @@ from .const import (
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_ENABLED,
     CONF_MESSAGE_SENDING_ENABLED,
+    CONF_POINT_GRADE_THRESHOLDS,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -418,6 +419,13 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_GRADE_THRESHOLDS,
                     default=options.get(CONF_GRADE_THRESHOLDS, DEFAULT_GRADE_THRESHOLDS),
+                ): TextSelector(TextSelectorConfig()),
+                # Optional: no common scale to default to (see
+                # const.CONF_POINT_GRADE_THRESHOLDS); empty keeps point-graded
+                # subjects out of the forecast.
+                vol.Optional(
+                    CONF_POINT_GRADE_THRESHOLDS,
+                    description={"suggested_value": options.get(CONF_POINT_GRADE_THRESHOLDS)},
                 ): TextSelector(TextSelectorConfig()),
                 # Optional override: the number is read from Librus
                 # (coordinator.student_number_from_librus);

@@ -318,6 +318,7 @@ def build_context(
     student: str | None,
     thresholds: tuple[float, ...] | None = None,
     owner: Hashable | None = None,
+    point_thresholds: tuple[float, ...] | None = None,
 ) -> dict[str, Any]:
     """Compact, JSON-ready snapshot of the week before and after ``today``.
     ``owner`` is the config entry id the forecasts are cached under (see
@@ -650,7 +651,14 @@ def build_context(
                     "one_one_drops_it": True if f.ones_to_drop == 1 else None,
                 }
             )
-            for f in subject_forecasts(data, today, thresholds, weighted=weighted, owner=owner)
+            for f in subject_forecasts(
+                data,
+                today,
+                thresholds,
+                weighted=weighted,
+                owner=owner,
+                point_thresholds=point_thresholds,
+            )
             if f.at_risk or f.declining or f.sixes_to_next == 1 or f.ones_to_drop == 1
         ]
         if thresholds
@@ -1028,6 +1036,7 @@ class LibrusWeeklySummary:
             student=student,
             thresholds=self._coordinator.grade_thresholds,
             owner=self._coordinator.memo_owner,
+            point_thresholds=self._coordinator.point_grade_thresholds,
         )
         if skip_empty and is_empty_week(context):
             _LOGGER.debug("Weekly summary skipped: nothing happened this week or next")

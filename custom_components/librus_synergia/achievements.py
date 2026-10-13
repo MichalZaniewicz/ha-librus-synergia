@@ -224,6 +224,7 @@ def compute_badges(
     today: date,
     *,
     thresholds: tuple[float, ...],
+    point_thresholds: tuple[float, ...] | None = None,
     weighted: bool = True,
     student_number: int | None = None,
     homework_done: int = 0,
@@ -319,7 +320,14 @@ def compute_badges(
 
     honours = badge("honours", target=HONOURS_AVERAGE, unit="average")
     report = report_average(
-        subject_forecasts(data, today, thresholds, weighted=weighted, owner=owner)
+        subject_forecasts(
+            data,
+            today,
+            thresholds,
+            weighted=weighted,
+            owner=owner,
+            point_thresholds=point_thresholds,
+        )
     )
     honours.value = round(report, 2) if report is not None else None
     # Earned only once the year is over: the forecast is just progress until

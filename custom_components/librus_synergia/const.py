@@ -138,6 +138,11 @@ DEFAULT_AVERAGE_MODE = AVERAGE_MODE_WEIGHTED
 # (forecast.py). Free text so any school's statute fits; an unusable value
 # falls back to forecast.DEFAULT_GRADE_THRESHOLDS.
 CONF_GRADE_THRESHOLDS = "grade_thresholds"
+# Minimum percentages for a 2..6 in point-graded subjects (PointGrades).
+# Empty by default: there is no common scale (schools - often single
+# subjects - set their own), so without it point-graded subjects stay out
+# of the forecast. See forecast.parse_point_thresholds.
+CONF_POINT_GRADE_THRESHOLDS = "point_grade_thresholds"
 
 # The student's own number in the class register ("numer w dzienniku") -
 # an optional manual override. The number is normally read from Librus

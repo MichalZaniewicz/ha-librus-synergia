@@ -136,6 +136,7 @@ from .const import (
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
     CONF_MESSAGES_ENABLED,
+    CONF_POINT_GRADE_THRESHOLDS,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -190,7 +191,13 @@ from .const import (
     STATUS_STALE,
 )
 from .achievements import Badge, compute_badges, key_title
-from .forecast import average_sums, forecast_basis, parse_thresholds, subject_forecasts
+from .forecast import (
+    average_sums,
+    forecast_basis,
+    parse_point_thresholds,
+    parse_thresholds,
+    subject_forecasts,
+)
 
 if TYPE_CHECKING:
     from .ai_summary import LibrusWeeklySummary
@@ -3077,6 +3084,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         text = self.config_entry.options.get(CONF_GRADE_THRESHOLDS) if self.config_entry else None
         return parse_thresholds(text)
 
+    @property
+    def point_grade_thresholds(self) -> tuple[float, ...] | None:
+        """Minimum percentages for a 2..6 in point-graded subjects (options
+        flow) - None when not set, keeping those subjects out of the
+        forecast."""
+        text = (
+            self.config_entry.options.get(CONF_POINT_GRADE_THRESHOLDS)
+            if self.config_entry
+            else None
+        )
+        return parse_point_thresholds(text)
+
     def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
         """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.
         Silent on the first poll and when the basis changes (the second
@@ -3095,6 +3114,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self.grade_thresholds,
             weighted=self.weighted_average,
             owner=self.memo_owner,
+            point_thresholds=self.point_grade_thresholds,
         )
         current = {f.subject_id: f.predicted for f in forecasts}
         known = self._known_forecast
@@ -4943,6 +4963,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 data,
                 today,
                 thresholds=self.grade_thresholds,
+                point_thresholds=self.point_grade_thresholds,
                 weighted=self.weighted_average,
                 student_number=student_number,
                 homework_done=len(self.homework_done_ever),

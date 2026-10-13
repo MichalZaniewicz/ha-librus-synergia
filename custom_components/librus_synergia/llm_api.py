@@ -454,6 +454,7 @@ class GradesTool(_LibrusTool):
                         coordinator.grade_thresholds,
                         weighted=weighted,
                         owner=coordinator.memo_owner,
+                        point_thresholds=coordinator.point_grade_thresholds,
                     )
                     if subject_ids is None or f.subject_id in subject_ids
                 ]

@@ -157,6 +157,7 @@ class LibrusGradeRiskSensor(
             self.coordinator.grade_thresholds,
             weighted=self.coordinator.weighted_average,
             owner=self.coordinator.memo_owner,
+            point_thresholds=self.coordinator.point_grade_thresholds,
         )
 
     @property

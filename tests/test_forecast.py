@@ -10,6 +10,7 @@ from librus_synergia.models import (
     GradeData,
     LibrusData,
     MeData,
+    PointGradeData,
 )
 
 from custom_components.librus_synergia.forecast import (
@@ -17,6 +18,7 @@ from custom_components.librus_synergia.forecast import (
     BASIS_SEMESTER_1,
     DataMemo,
     forecast_basis,
+    parse_point_thresholds,
     parse_thresholds,
     predicted_grade,
     report_average,
@@ -214,3 +216,94 @@ def test_data_memo_keeps_one_data_object_per_owner() -> None:
     for index, data in enumerate(students):
         memo.get(data, "k", compute("again"), owner=f"entry_{index}")
     assert "again" not in calls
+
+
+_POINTS = (40.0, 55.0, 75.0, 90.0, 98.0)
+
+
+def _points(
+    gid: int, points: float, max_points: float, subject: int, day: str = "2026-09-15", **kw
+) -> PointGradeData:
+    return PointGradeData(
+        id=gid,
+        subject_id=subject,
+        value=f"{points}/{max_points}",
+        points=points,
+        max_points=max_points,
+        category_id=None,
+        category=None,
+        weight=kw.pop("weight", None),
+        counts_to_average=kw.pop("counts", True),
+        semester=kw.pop("semester", 1),
+        add_date=f"{day} 10:00:00",
+    )
+
+
+def test_parse_point_thresholds() -> None:
+    assert parse_point_thresholds("40, 55, 75, 90, 98") == _POINTS
+    assert parse_point_thresholds("40%; 55%; 75%; 90%; 97,5%") == (40, 55, 75, 90, 97.5)
+    # Not set or unusable -> None (no common scale to fall back to).
+    for text in (None, "", "40, 55, 75, 90", "40, 30, 75, 90, 98", "0, 55, 75, 90, 98",
+                 "40, 55, 75, 90, 101", "abc"):
+        assert parse_point_thresholds(text) is None
+
+
+def test_point_graded_subject_is_left_out_without_thresholds() -> None:
+    data = _data([_grade(1, "5", 10)])
+    data.point_grades = [_points(1, 6.5, 20, 20)]
+    forecasts = subject_forecasts(data, _TODAY, _THRESHOLDS)
+    assert [f.subject for f in forecasts] == ["Matematyka"]
+
+
+def test_point_graded_subject_forecast_from_percentage() -> None:
+    data = _data([_grade(1, "5", 10)])
+    # 21/30 + 6.5/20 = 27.5/50 = 55 % -> exactly the 3 threshold.
+    data.point_grades = [_points(1, 21, 30, 20), _points(2, 6.5, 20, 20)]
+    forecasts = subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=_POINTS)
+    by_name = {f.subject: f for f in forecasts}
+    history = by_name["Historia"]
+    assert history.percentage == 55.0
+    assert history.average == 55.0
+    assert history.predicted == 3
+    assert history.next_grade_at == 75.0
+    assert history.sixes_to_next is None and history.ones_to_drop is None
+    assert history.as_dict()["percentage"] == 55.0
+    # A 1-6 subject is unchanged and carries no percentage.
+    assert by_name["Matematyka"].percentage is None
+    assert by_name["Matematyka"].predicted == 5
+    # The report card average counts both.
+    assert report_average(forecasts) == 4.0
+
+
+def test_point_graded_subject_at_risk_declining_and_basis() -> None:
+    data = _data([])
+    data.point_grades = [
+        _points(1, 10, 10, 20, day="2026-09-10"),
+        # Recent: drags 100 % down to 7/30 = 23 % -> 1 (at risk, was a 6).
+        _points(2, 0, 20, 20, day="2026-10-15"),
+        # Not counted, other semester or no subject: ignored.
+        _points(3, 0, 50, 20, counts=False),
+        _points(4, 0, 50, 20, semester=2),
+        _points(5, 0, 50, None),
+    ]
+    (history,) = subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=_POINTS)
+    assert history.percentage == 33.3
+    assert history.predicted == 1
+    assert history.at_risk
+    assert history.declining
+
+
+def test_subject_with_both_scales_keeps_the_grade_forecast() -> None:
+    data = _data([_grade(1, "4", 20)])
+    data.point_grades = [_points(1, 10, 10, 20)]
+    (history,) = subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=_POINTS)
+    assert history.percentage is None
+    assert history.predicted == 4
+
+
+def test_point_thresholds_are_part_of_the_memo_key() -> None:
+    data = _data([])
+    data.point_grades = [_points(1, 8, 10, 20)]
+    assert subject_forecasts(data, _TODAY, _THRESHOLDS) == []
+    (with_points,) = subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=_POINTS)
+    assert with_points.predicted == 4  # 80 % >= 75
