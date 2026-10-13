@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **librus-synergia 0.3.28.** The free days calendar now uses the library's
+  own filter for the student's class (the library had the same bug the
+  integration fixed in 0.12.18, now fixed there too) - the integration's
+  copy of the filter is gone. Nothing changes in what you see.
+
 ## 0.12.18
 
 ### Added

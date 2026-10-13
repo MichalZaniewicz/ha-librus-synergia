@@ -602,34 +602,6 @@ def state_store_key(entry_id: str) -> str:
     return f"{DOMAIN}.{entry_id}.state"
 
 
-def own_class_free_days(
-    payload: dict[str, Any], classes_payload: dict[str, Any]
-) -> dict[str, Any]:
-    """`ClassFreeDays` without the other classes' days.
-
-    Librus answers `ClassFreeDays` with the free days of EVERY class in the
-    school, each tagged with `Class.Id` (confirmed live 2026-10-13: a
-    technikum with ~25 classes, 48 entries, two of them the student's -
-    work placements and trips of the other classes made the student's
-    calendar show "free" on school days). `Classes` (the student's own
-    class) gives the id to keep. Without it - or for an entry with no
-    class - nothing is dropped, as before."""
-    own = (classes_payload.get("Class") or {}).get("Id") if classes_payload else None
-    items = payload.get("ClassFreeDays") if payload else None
-    if own is None or not isinstance(items, list):
-        return payload
-    return {
-        **payload,
-        "ClassFreeDays": [
-            item
-            for item in items
-            if not isinstance(item, dict)
-            or not isinstance(item.get("Class"), dict)
-            or item["Class"].get("Id") in (None, own)
-        ],
-    }
-
-
 def payload_store_key(entry_id: str) -> str:
     """Storage key of one entry's saved responses (the big part)."""
     return f"{DOMAIN}.{entry_id}.payloads"
@@ -3915,11 +3887,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._cached_homework_categories = parse_id_name_map(
             payload("HomeworkCategories"), ("Categories",)
         )
+        # ClassFreeDays lists every class in the school - the library keeps
+        # the student's class only (unknown class, e.g. a kindergarten
+        # group: everything).
         self._cached_free_days = parse_free_days(
             payload("SchoolFreeDays"), "SchoolFreeDays"
         ) + parse_free_days(
-            own_class_free_days(payload("ClassFreeDays"), payload("Classes")),
+            payload("ClassFreeDays"),
             "ClassFreeDays",
+            class_id=self._cached_class.id if self._cached_class else None,
         )
         self._cached_note_categories = parse_id_name_map(
             payload("NoteCategories"), ("Categories",)
