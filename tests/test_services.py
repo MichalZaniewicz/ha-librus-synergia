@@ -336,3 +336,99 @@ async def test_get_grades_service_unknown_device_raises(hass) -> None:
             blocking=True,
             return_response=True,
         )
+
+
+_NOTICES = {
+    "SchoolNotices": [
+        {
+            "Id": "LID-NBOARD-NOTICE-1",
+            "Subject": "Wycieczka",
+            "Content": "Zbiórka o 8:00.",
+            "StartDate": "2026-10-01",
+            "EndDate": "2026-10-20",
+            "CreationDate": "2026-10-01 10:00:00",
+            "WasRead": False,
+        },
+        {
+            "Id": "LID-NBOARD-NOTICE-2",
+            "Subject": "Zebranie",
+            "Content": "We wtorek.",
+            "StartDate": "2026-10-02",
+            "EndDate": "2026-10-20",
+            "CreationDate": "2026-10-02 10:00:00",
+            "WasRead": False,
+        },
+    ]
+}
+
+
+def _notices_entity(hass, entry) -> str:
+    from homeassistant.helpers import entity_registry as er
+
+    return next(
+        e.entity_id
+        for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        if e.unique_id.endswith("_unread_announcements")
+    )
+
+
+async def test_mark_announcement_read_marks_one_and_shows_it_read(hass) -> None:
+    client = build_mock_client(async_get_school_notices=_NOTICES)
+    entry = await setup_integration(hass, client)
+    entity_id = _notices_entity(hass, entry)
+    assert hass.states.get(entity_id).state == "2"
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "mark_announcement_read",
+        {"device_id": _device_id(hass, entry), "announcement_id": "LID-NBOARD-NOTICE-1"},
+        blocking=True,
+        return_response=True,
+    )
+    await hass.async_block_till_done()
+
+    assert response == {"marked": ["LID-NBOARD-NOTICE-1"]}
+    client.async_mark_school_notice_read.assert_awaited_once_with("LID-NBOARD-NOTICE-1")
+    state = hass.states.get(entity_id)
+    assert state.state == "1"
+    read = {n["id"]: n["read"] for n in state.attributes["notices"]}
+    assert read == {"LID-NBOARD-NOTICE-1": True, "LID-NBOARD-NOTICE-2": False}
+
+
+async def test_mark_announcement_read_without_id_marks_every_unread(hass) -> None:
+    client = build_mock_client(async_get_school_notices=_NOTICES)
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "mark_announcement_read",
+        {"device_id": _device_id(hass, entry)},
+        blocking=True,
+        return_response=True,
+    )
+    await hass.async_block_till_done()
+
+    assert sorted(response["marked"]) == ["LID-NBOARD-NOTICE-1", "LID-NBOARD-NOTICE-2"]
+    assert client.async_mark_school_notice_read.await_count == 2
+    assert hass.states.get(_notices_entity(hass, entry)).state == "0"
+
+
+async def test_mark_announcement_read_refused_raises(hass) -> None:
+    from librus_synergia import LibrusUnexpectedResponseError
+
+    client = build_mock_client(async_get_school_notices=_NOTICES)
+    client.async_mark_school_notice_read.side_effect = LibrusUnexpectedResponseError(
+        "HTTP 400", status_code=400
+    )
+    entry = await setup_integration(hass, client)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "mark_announcement_read",
+            {"device_id": _device_id(hass, entry), "announcement_id": "LID-NBOARD-NOTICE-1"},
+            blocking=True,
+            return_response=True,
+        )
+    # Nothing shows read when Librus refused.
+    assert hass.states.get(_notices_entity(hass, entry)).state == "2"

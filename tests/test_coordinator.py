@@ -2123,3 +2123,27 @@ async def test_new_school_year_starts_badges_over_quietly(hass) -> None:
 
     assert all(a["key"] != "first_six" for a in coordinator.achievements)
     assert events == []
+
+
+async def test_messages_count_option_sets_the_list_size(hass) -> None:
+    """"Messages to fetch" under Configure: every mailbox list asks Librus for
+    that many messages (10 by default, clamped to 10-50)."""
+    client = build_mock_client()
+    client.async_bootstrap_messages.return_value = True
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+    client.async_get_messages.return_value = {"data": []}
+    coordinator = _make_coordinator(hass, client, options={"messages_count": 30})
+
+    await coordinator._async_update_data()
+
+    limits = {call.kwargs.get("limit") for call in client.async_get_messages.await_args_list}
+    assert limits == {30}
+    assert coordinator.messages_limit == 30
+
+
+async def test_messages_limit_is_clamped(hass) -> None:
+    for raw, expected in ((None, 10), (5, 10), (35, 35), (500, 50), ("x", 10)):
+        options = {} if raw is None else {"messages_count": raw}
+        client = build_mock_client()
+        coordinator = _make_coordinator(hass, client, options=options)
+        assert coordinator.messages_limit == expected

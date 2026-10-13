@@ -93,6 +93,19 @@ send_message:
       selector:
         boolean:
 
+mark_announcement_read:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    announcement_id:
+      required: false
+      example: "LID-NBOARD-NOTICE-1"
+      selector:
+        text:
+          multiple: true
 withdraw_message:
   fields:
     device_id:

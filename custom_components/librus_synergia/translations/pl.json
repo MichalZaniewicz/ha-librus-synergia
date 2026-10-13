@@ -74,6 +74,7 @@
         "data": {
           "scan_interval": "Częstotliwość odpytywania (minuty)",
           "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)",
+          "messages_count": "Liczba pobieranych wiadomości w skrzynce",
           "message_sending_enabled": "Pozwól wysyłać wiadomości (beta)",
           "announcements_enabled": "Pobieraj ogłoszenia",
           "behaviour_grades_enabled": "Pobieraj ocenę zachowania",
@@ -93,6 +94,7 @@
         "data_description": {
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
           "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa.",
+          "messages_count": "Ile najnowszych wiadomości trzyma lista każdej skrzynki (odebrane, wysłane, archiwum i pozostałe), 10-50. Więcej to dłuższe listy w karcie Wiadomości, trochę więcej danych przy odświeżaniu i większe atrybuty sensora.",
           "message_sending_enabled": "Pozwala usługom send_message i withdraw_message oraz przyciskom Odpowiedz / Napisz w karcie Wiadomości pisać do nauczycieli i szkoły w Wiadomościach. Domyślnie wyłączone: wysłana wiadomość trafia do prawdziwej osoby. Niedostępne dla Assist ani podsumowania AI.",
           "announcements_enabled": "Gdy wyłączone, sensor Nieprzeczytane ogłoszenia staje się niedostępny i nie są wykonywane żadne zapytania o ogłoszenia.",
           "behaviour_grades_enabled": "Gdy wyłączone, sensor Ocena zachowania staje się niedostępny i nie są wykonywane żadne zapytania o ocenę zachowania.",
@@ -322,6 +324,20 @@
         "dry_run": {
           "name": "Na sucho",
           "description": "Tylko pokaż, do kogo i co by poszło - nic nie jest wysyłane."
+        }
+      }
+    },
+    "mark_announcement_read": {
+      "name": "Oznacz ogłoszenie jako przeczytane",
+      "description": "Oznacza ogłoszenia jako przeczytane w Librusie, tak jak ich otwarcie w Librusie. Puste ID oznacza wszystkie nieprzeczytane.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń)."
+        },
+        "announcement_id": {
+          "name": "ID ogłoszenia",
+          "description": "\"id\" ogłoszenia z atrybutu \"notices\" sensora Nieprzeczytane ogłoszenia. Jedno lub więcej; puste oznacza wszystkie nieprzeczytane."
         }
       }
     },

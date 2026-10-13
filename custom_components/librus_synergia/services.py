@@ -16,6 +16,9 @@
   would go out without sending. Deliberately not offered to Assist or the
   AI summary (llm_api.py / ai_summary.py) - only a person or an automation
   someone wrote can send.
+- `mark_announcement_read` - marks school notices read in Librus (one, a
+  few, or every unread one), as opening them there does. A person's action
+  (the Announcements card does it when you open a notice) - never polling.
 """
 
 from __future__ import annotations
@@ -59,6 +62,7 @@ SERVICE_GET_GRADES = "get_grades"
 SERVICE_GET_MESSAGE_RECIPIENTS = "get_message_recipients"
 SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_WITHDRAW_MESSAGE = "withdraw_message"
+SERVICE_MARK_ANNOUNCEMENT_READ = "mark_announcement_read"
 _SERVICES = (
     SERVICE_GET_MESSAGE,
     SERVICE_REFRESH,
@@ -66,6 +70,7 @@ _SERVICES = (
     SERVICE_GET_MESSAGE_RECIPIENTS,
     SERVICE_SEND_MESSAGE,
     SERVICE_WITHDRAW_MESSAGE,
+    SERVICE_MARK_ANNOUNCEMENT_READ,
 )
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
@@ -98,6 +103,14 @@ _WITHDRAW_MESSAGE_SCHEMA = vol.Schema(
     }
 )
 
+
+# No `announcement_id`: every unread notice.
+_MARK_ANNOUNCEMENT_READ_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Optional("announcement_id"): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
 
 _GET_GRADES_SCHEMA = vol.Schema(
     {
@@ -327,6 +340,24 @@ def async_setup_services(hass: HomeAssistant) -> None:
         _async_handle_get_grades,
         schema=_GET_GRADES_SCHEMA,
         supports_response=SupportsResponse.ONLY,
+    )
+
+    async def _async_handle_mark_announcement_read(call: ServiceCall) -> ServiceResponse:
+        """Marks the given notices (or every unread one) read in Librus."""
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        ids: list[str] | None = call.data.get("announcement_id") or None
+        try:
+            marked = await coordinator.async_mark_announcements_read(ids)
+        except LibrusError as err:
+            raise HomeAssistantError(f"Librus didn't mark the announcement read: {err}") from err
+        return {"marked": marked}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MARK_ANNOUNCEMENT_READ,
+        _async_handle_mark_announcement_read,
+        schema=_MARK_ANNOUNCEMENT_READ_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
     _async_setup_message_writing(hass)

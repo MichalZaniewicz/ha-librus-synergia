@@ -74,6 +74,7 @@
         "data": {
           "scan_interval": "Poll interval (minutes)",
           "messages_enabled": "Fetch private messages (Wiadomości)",
+          "messages_count": "Messages to fetch per mailbox",
           "message_sending_enabled": "Allow sending messages (beta)",
           "announcements_enabled": "Fetch announcements (ogłoszenia)",
           "behaviour_grades_enabled": "Fetch behaviour grade (ocena zachowania)",
@@ -93,6 +94,7 @@
         "data_description": {
           "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API.",
           "messages_enabled": "When off, the Unread messages sensor goes unavailable and no messages calls are made - fewer requests to Librus.",
+          "messages_count": "How many of the newest messages each mailbox list holds (received, sent, archive and the others), 10-50. More means longer lists in the Messages card, a bit more data per refresh and larger sensor attributes.",
           "message_sending_enabled": "Lets the send_message and withdraw_message services - and the Messages card's Reply / Write - write to teachers and the school in Wiadomości. Off by default: a sent message goes to a real person. Not available to Assist or the AI summary.",
           "announcements_enabled": "When off, the Unread announcements sensor goes unavailable and no SchoolNotices calls are made.",
           "behaviour_grades_enabled": "When off, the Behaviour grade sensor goes unavailable and no BehaviourGrades calls are made.",
@@ -322,6 +324,20 @@
         "dry_run": {
           "name": "Dry run",
           "description": "Only show who it would go to and what - nothing is sent."
+        }
+      }
+    },
+    "mark_announcement_read": {
+      "name": "Mark announcement read",
+      "description": "Marks school notices read in Librus, as opening them there does. Leave the ID empty to mark every unread notice.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Librus Synergia device (student)."
+        },
+        "announcement_id": {
+          "name": "Announcement ID",
+          "description": "The notice's \"id\" from the Unread announcements sensor's \"notices\" attribute. One or more; empty marks every unread notice."
         }
       }
     },

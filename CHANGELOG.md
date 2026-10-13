@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- **Mark announcements read.** New action `librus_synergia.mark_announcement_read`
+  marks school notices read in Librus, the same as opening them there: one
+  or more ids (`id` from the Unread announcements sensor's `notices`), or
+  every unread notice when no id is given. The notices show read straight
+  away. The Announcements card does it when you open an unread notice and has
+  a "mark all read" button. Needs librus-synergia 0.3.26.
+- **Messages to fetch per mailbox** (Configure, 10-50, default 10): how many
+  of the newest messages each mailbox list holds - received, sent, archive
+  and the others - and so how long the Messages card's lists can get.
 - **Point-graded subjects in the grade forecast.** New option "Point grade
   forecast thresholds (%)": the minimum percentage of points for a 2, 3, 4, 5
   and 6 (e.g. `40, 55, 75, 90, 98`). With it, a subject graded only in points

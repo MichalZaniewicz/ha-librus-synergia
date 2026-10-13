@@ -74,6 +74,7 @@ from .const import (
     CONF_GRADE_THRESHOLDS,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
+    CONF_MESSAGES_COUNT,
     CONF_MESSAGES_ENABLED,
     CONF_MESSAGE_SENDING_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
@@ -94,6 +95,7 @@ from .const import (
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_HIDE_EMPTY_SUBJECTS,
     DEFAULT_MERGE_PARALLEL_LESSONS,
+    DEFAULT_MESSAGES_COUNT,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_MESSAGE_SENDING_ENABLED,
     DEFAULT_QUIET_HOURS_ENABLED,
@@ -102,7 +104,9 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SMART_POLLING,
     DOMAIN,
+    MAX_MESSAGES_COUNT,
     MAX_SCAN_INTERVAL_MINUTES,
+    MIN_MESSAGES_COUNT,
     MIN_SCAN_INTERVAL_MINUTES,
 )
 from .forecast import DEFAULT_GRADE_THRESHOLDS
@@ -380,6 +384,17 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_MESSAGES_ENABLED,
                     default=options.get(CONF_MESSAGES_ENABLED, DEFAULT_MESSAGES_ENABLED),
                 ): BooleanSelector(),
+                vol.Required(
+                    CONF_MESSAGES_COUNT,
+                    default=options.get(CONF_MESSAGES_COUNT, DEFAULT_MESSAGES_COUNT),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_MESSAGES_COUNT,
+                        max=MAX_MESSAGES_COUNT,
+                        step=5,
+                        mode=NumberSelectorMode.BOX,
+                    )
+                ),
                 vol.Required(
                     CONF_MESSAGE_SENDING_ENABLED,
                     default=options.get(

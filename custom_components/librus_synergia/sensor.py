@@ -1776,7 +1776,10 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
 
 
 def _message_list_attr(
-    messages: list[MessageData], receipts: dict[str, dict[str, Any]] | None = None
+    messages: list[MessageData],
+    receipts: dict[str, dict[str, Any]] | None = None,
+    *,
+    limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Same shape used for every mailbox's `*_recent` attribute - `id` +
     `mailbox` together are what a card needs to pass to the `get_message`
@@ -1805,7 +1808,7 @@ def _message_list_attr(
                 else {}
             ),
         }
-        for m in messages[:10]
+        for m in messages[:limit]
     ]
 
 
@@ -1870,9 +1873,11 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
         if self.coordinator.data is None:
             return None
         data = self.coordinator.data
+        # "Messages to fetch" under Configure - the lists hold that many.
+        limit = self.coordinator.messages_limit
         return {
             "mailbox_breakdown": dict(data.unread_messages_by_mailbox),
-            "recent": _message_list_attr(data.messages),
+            "recent": _message_list_attr(data.messages, limit=limit),
             # Full CONTENT (not just the count already in
             # mailbox_breakdown) for the secondary mailboxes most worth
             # actually reading - "substitutions" (zastępstwa, schedule
@@ -1880,13 +1885,15 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             # (usprawiedliwienia - a parent's submitted absence excuse and
             # its pending/accepted status, added 2026-09-06 on user
             # request).
-            "substitutions_recent": _message_list_attr(data.substitution_messages),
-            "alerts_recent": _message_list_attr(data.alert_messages),
-            "justifications_recent": _message_list_attr(data.justification_messages),
+            "substitutions_recent": _message_list_attr(data.substitution_messages, limit=limit),
+            "alerts_recent": _message_list_attr(data.alert_messages, limit=limit),
+            "justifications_recent": _message_list_attr(data.justification_messages, limit=limit),
             # Sent messages (with `receiver`) and the archive of past
             # school years.
-            "outbox_recent": _message_list_attr(data.sent_messages, self.coordinator.read_receipts),
-            "archive_recent": _message_list_attr(data.archived_messages),
+            "outbox_recent": _message_list_attr(
+                data.sent_messages, self.coordinator.read_receipts, limit=limit
+            ),
+            "archive_recent": _message_list_attr(data.archived_messages, limit=limit),
             # Mailboxes this account doesn't have (Librus answers 404).
             "missing_mailboxes": sorted(self.coordinator.missing_mailboxes),
             # "Allow sending messages (beta)" under Configure - the Messages

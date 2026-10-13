@@ -135,6 +135,7 @@ from .const import (
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
+    CONF_MESSAGES_COUNT,
     CONF_MESSAGES_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
     CONF_QUIET_HOURS_ENABLED,
@@ -149,12 +150,15 @@ from .const import (
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
+    DEFAULT_MESSAGES_COUNT,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
     DEFAULT_SMART_POLLING,
     DOMAIN,
+    MAX_MESSAGES_COUNT,
+    MIN_MESSAGES_COUNT,
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
@@ -2575,6 +2579,51 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         await self._async_messages_read(lambda: self._client.async_withdraw_message(message_id))
         await self._async_refresh_outbox()
 
+    async def async_mark_announcements_read(self, notice_ids: list[str] | None) -> list[str]:
+        """Marks school notices read in Librus (`mark_announcement_read`
+        service) - the given ids, or every unread one when None. Each is one
+        `SchoolNotices/MarkAsRead` request on the main session, with one
+        relogin if the session was rejected. The notices show read straight
+        away; the next poll brings Librus's own `WasRead` anyway. Returns the
+        ids marked; a refusal raises after the ones before it are shown read."""
+        data = self.data
+        if notice_ids is None:
+            notice_ids = [n.id for n in data.school_notices if not n.was_read] if data else []
+        done: list[str] = []
+        try:
+            for notice_id in notice_ids:
+                seen = self._login_count
+                try:
+                    await self._client.async_mark_school_notice_read(notice_id)
+                except LibrusSessionExpiredError as err:
+                    if err.status_code == 403:
+                        raise
+                    await self._async_relogin(seen)
+                    await self._client.async_mark_school_notice_read(notice_id)
+                done.append(notice_id)
+        finally:
+            if done:
+                self._show_notices_read(set(done))
+        return done
+
+    def _show_notices_read(self, notice_ids: set[str]) -> None:
+        """Shows the given notices read without waiting for the next poll -
+        in the data and in the saved response (a fallback cycle shouldn't
+        bring them back as unread)."""
+        saved = self._last_good.get("SchoolNotices")
+        if isinstance(saved, dict) and isinstance(saved.get("SchoolNotices"), list):
+            for item in saved["SchoolNotices"]:
+                if isinstance(item, dict) and str(item.get("Id")) in notice_ids:
+                    item["WasRead"] = True
+        if self.data is None:
+            return
+        notices = [
+            dataclasses.replace(n, was_read=True) if str(n.id) in notice_ids else n
+            for n in self.data.school_notices
+        ]
+        self.data = dataclasses.replace(self.data, school_notices=notices)
+        self.async_update_listeners()
+
     async def _async_refresh_outbox(self) -> None:
         """Right after a send or a withdrawal: fetch the sent messages
         (one request) and show them now instead of at the next poll. A
@@ -2582,7 +2631,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         dropped, so that poll asks again)."""
         try:
             payload = await self._async_messages_read(
-                lambda: self._client.async_get_messages(mailbox="outbox", limit=10)
+                lambda: self._client.async_get_messages(mailbox="outbox", limit=self.messages_limit)
             )
         except LibrusError as err:
             _LOGGER.debug("Sent messages not refreshed after writing: %s", err)
@@ -3111,6 +3160,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """The forecast's minimum averages for a 2..6 (options flow)."""
         text = self.config_entry.options.get(CONF_GRADE_THRESHOLDS) if self.config_entry else None
         return parse_thresholds(text)
+
+    @property
+    def messages_limit(self) -> int:
+        """How many of the newest messages each mailbox list fetches
+        ("Messages to fetch" under Configure, 10-50)."""
+        raw = (
+            self.config_entry.options.get(CONF_MESSAGES_COUNT, DEFAULT_MESSAGES_COUNT)
+            if self.config_entry
+            else DEFAULT_MESSAGES_COUNT
+        )
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return DEFAULT_MESSAGES_COUNT
+        return max(MIN_MESSAGES_COUNT, min(MAX_MESSAGES_COUNT, value))
 
     @property
     def point_grade_thresholds(self) -> tuple[float, ...] | None:
@@ -4255,7 +4319,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         inbox = self._reusable_mailbox_list("inbox", unread_count)
         if inbox is None:
-            inbox = parse_message_list(await self._client.async_get_messages(limit=10), "inbox")
+            inbox = parse_message_list(await self._client.async_get_messages(limit=self.messages_limit), "inbox")
             self._remember_mailbox_list("inbox", unread_count, inbox)
         return unread_count, unread_by_mailbox, inbox
 
@@ -4457,7 +4521,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 continue
             to_fetch.append(box)
         results = await asyncio.gather(
-            *(self._client.async_get_messages(mailbox=box, limit=10) for box in to_fetch),
+            *(self._client.async_get_messages(mailbox=box, limit=self.messages_limit) for box in to_fetch),
             return_exceptions=True,
         )
         failed = False
@@ -4577,7 +4641,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             return
         try:
-            payload = await self._client.async_get_messages(mailbox=ARCHIVE_MAILBOX, limit=10)
+            payload = await self._client.async_get_messages(
+                mailbox=ARCHIVE_MAILBOX, limit=self.messages_limit
+            )
         except LibrusUnexpectedResponseError as err:
             if err.status_code != 404:
                 _LOGGER.debug("Archived messages fetch failed (non-fatal)", exc_info=True)

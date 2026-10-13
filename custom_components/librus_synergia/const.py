@@ -97,6 +97,13 @@ DEFAULT_MERGE_PARALLEL_LESSONS = True
 # a school that hasn't enabled the module.
 CONF_MESSAGES_ENABLED = "messages_enabled"
 DEFAULT_MESSAGES_ENABLED = True
+# How many of the newest messages each mailbox list fetches (inbox, sent,
+# archive, substitutions...) - and so how many the Unread messages sensor's
+# lists hold. Librus's own web app pages by 10.
+CONF_MESSAGES_COUNT = "messages_count"
+DEFAULT_MESSAGES_COUNT = 10
+MIN_MESSAGES_COUNT = 10
+MAX_MESSAGES_COUNT = 50
 # Writing messages (the send_message / withdraw_message services) - off by
 # default: a sent message goes to a real teacher and can't be unsent once
 # read, so it has to be switched on deliberately under Configure.
