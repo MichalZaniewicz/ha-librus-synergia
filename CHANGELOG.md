@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.18
 
 ### Added
 - **Mark announcements read.** New action `librus_synergia.mark_announcement_read`
