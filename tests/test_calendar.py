@@ -137,6 +137,36 @@ async def test_free_days_calendar_event(hass) -> None:
     assert state.attributes["message"] == "Ferie zimowe"
 
 
+async def test_free_days_calendar_keeps_only_own_class_days(hass) -> None:
+    """ClassFreeDays lists every class in the school - only the student's
+    own class (Classes.Class.Id) belongs in the calendar."""
+    client = build_mock_client(
+        async_get_classes={"Class": {"Id": 42, "Number": 1, "Symbol": "b"}},
+        async_get_class_free_days={
+            "ClassFreeDays": [
+                {
+                    "Id": 1,
+                    "Class": {"Id": 41},
+                    "Type": {"Id": 7},
+                    "DateFrom": _TOMORROW,
+                    "DateTo": _TOMORROW,
+                },
+                {
+                    "Id": 2,
+                    "Class": {"Id": 42},
+                    "Type": {"Id": 7},
+                    "DateFrom": _TOMORROW,
+                    "DateTo": _TOMORROW,
+                },
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    data = entry.runtime_data.data
+    assert [day.id for day in data.free_days] == [2]
+
+
 async def test_timetable_calendar_resolves_subject_and_teacher_names(hass) -> None:
     """CONFIRMED live: Timetables returns Subject/Teacher/Classroom ids as
     STRINGS, unlike every other endpoint - this must still resolve against

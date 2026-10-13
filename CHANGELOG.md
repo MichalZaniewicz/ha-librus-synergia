@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Free days calendar: only the student's own class.** Librus answers
+  `ClassFreeDays` with the free days of every class in the school (each
+  tagged with its class), and all of them landed in the calendar - at a
+  school with many classes, other classes' trips and work placements made
+  school days show as free (and the free days card showed "ongoing" on a
+  normal school day). Class free days are now kept only for the student's
+  class (`Classes`); school-wide free days are unchanged. If the class is
+  unknown, nothing is dropped, as before.
+
 ## 0.12.16
 
 ### Fixed
