@@ -27,6 +27,7 @@ from custom_components.librus_synergia.coordinator import (
     days_since_last_negative_note,
     good_grade_streak,
     optional_endpoint_issue_id,
+    own_class_free_days,
     school_year_issue_id,
 )
 from librus_synergia import (
@@ -1453,6 +1454,26 @@ async def test_free_days_disabled_via_options_skips_calls(hass) -> None:
     assert data.free_days == []
     client.async_get_school_free_days.assert_not_called()
     client.async_get_class_free_days.assert_not_called()
+
+
+def test_own_class_free_days_drops_other_classes_only() -> None:
+    days = {
+        "ClassFreeDays": [
+            {"Id": 1, "Class": {"Id": 41}, "DateFrom": "2026-10-12", "DateTo": "2026-10-13"},
+            {"Id": 2, "Class": {"Id": 42}, "DateFrom": "2026-10-08", "DateTo": "2026-10-09"},
+            # No class on the entry: kept (can't tell whose it is).
+            {"Id": 3, "DateFrom": "2026-10-20", "DateTo": "2026-10-20"},
+        ],
+        "Resources": {},
+    }
+    own = own_class_free_days(days, {"Class": {"Id": 42, "Number": 1, "Symbol": "b"}})
+    assert [d["Id"] for d in own["ClassFreeDays"]] == [2, 3]
+    assert own["Resources"] == {}
+    # The student's class unknown (no Classes payload, or no Id in it):
+    # nothing dropped, as before.
+    assert own_class_free_days(days, {}) is days
+    assert own_class_free_days(days, {"Class": {"Number": 7}}) is days
+    assert own_class_free_days({}, {"Class": {"Id": 42}}) == {}
 
 
 async def test_all_optional_features_enabled_by_default(hass) -> None:
