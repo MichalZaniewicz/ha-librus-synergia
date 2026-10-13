@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+- **Point-graded subjects in the grade forecast.** New option "Point grade
+  forecast thresholds (%)": the minimum percentage of points for a 2, 3, 4, 5
+  and 6 (e.g. `40, 55, 75, 90, 98`). With it, a subject graded only in points
+  (`PointGrades`) gets a forecast from its percentage - the same percentage
+  the subject sensor shows - so it counts in the Grade forecast sensor (report
+  card average, at risk, declining), the Grade at risk binary sensor, the
+  honours badge, the AI summary and Assist. Its entry in the forecast's
+  `subjects` has `percentage` set, and `average`/`next_grade_at` are
+  percentages; "how many 6s/1s" don't apply (`null`). A subject with 1-6
+  grades keeps its usual forecast - the two scales aren't mixed. Empty (the
+  default): point-graded subjects stay out, as before - there's no common
+  scale to assume. The Grade forecast sensor also shows `point_thresholds`.
+
 ### Fixed
 - **Free days calendar: only the student's own class.** Librus answers
   `ClassFreeDays` with the free days of every class in the school (each

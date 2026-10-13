@@ -722,6 +722,7 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                     self.coordinator.grade_thresholds,
                     weighted=self._weighted,
                     owner=self.coordinator.memo_owner,
+                    point_thresholds=self.coordinator.point_grade_thresholds,
                 )
                 if f.subject_id == self._subject_id
             ),
@@ -764,6 +765,7 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
             self.coordinator.grade_thresholds,
             weighted=self._weighted,
             owner=self.coordinator.memo_owner,
+            point_thresholds=self.coordinator.point_grade_thresholds,
         )
 
     @property
@@ -783,6 +785,11 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
         return {
             "basis": basis,
             "thresholds": list(self.coordinator.grade_thresholds),
+            # Percentages for a 2..6 in point-graded subjects - None when not
+            # set (those subjects are then left out).
+            "point_thresholds": (
+                list(points) if (points := self.coordinator.point_grade_thresholds) else None
+            ),
             # Only the average part of "świadectwo z wyróżnieniem" - the
             # behaviour grade must be at least very good as well.
             "honours_average": average is not None and average >= HONOURS_AVERAGE,
