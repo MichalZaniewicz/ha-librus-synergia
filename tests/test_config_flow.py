@@ -304,6 +304,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
     assert entry.options == {
         CONF_SCAN_INTERVAL: 45,
         CONF_MESSAGES_ENABLED: False,
+        "messages_count": 10,
         CONF_MESSAGE_SENDING_ENABLED: False,
         CONF_ANNOUNCEMENTS_ENABLED: True,
         CONF_BEHAVIOUR_GRADES_ENABLED: True,
@@ -332,6 +333,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         {
             CONF_SCAN_INTERVAL: 20,
             CONF_MESSAGES_ENABLED: True,
+            "messages_count": 25,
             CONF_ANNOUNCEMENTS_ENABLED: False,
             CONF_BEHAVIOUR_GRADES_ENABLED: False,
             CONF_DESCRIPTIVE_GRADES_ENABLED: False,
@@ -350,6 +352,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
     assert entry.options == {
         CONF_SCAN_INTERVAL: 20,
         CONF_MESSAGES_ENABLED: True,
+        "messages_count": 25,
         CONF_MESSAGE_SENDING_ENABLED: False,
         CONF_ANNOUNCEMENTS_ENABLED: False,
         CONF_BEHAVIOUR_GRADES_ENABLED: False,

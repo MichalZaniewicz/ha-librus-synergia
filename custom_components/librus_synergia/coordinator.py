@@ -2612,9 +2612,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         bring them back as unread)."""
         saved = self._last_good.get("SchoolNotices")
         if isinstance(saved, dict) and isinstance(saved.get("SchoolNotices"), list):
-            for item in saved["SchoolNotices"]:
-                if isinstance(item, dict) and str(item.get("Id")) in notice_ids:
-                    item["WasRead"] = True
+            # A copy, not in place: the saved payload can be shared.
+            self._last_good["SchoolNotices"] = {
+                **saved,
+                "SchoolNotices": [
+                    {**item, "WasRead": True}
+                    if isinstance(item, dict) and str(item.get("Id")) in notice_ids
+                    else item
+                    for item in saved["SchoolNotices"]
+                ],
+            }
         if self.data is None:
             return
         notices = [
