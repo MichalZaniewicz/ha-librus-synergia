@@ -15,6 +15,9 @@
   grades keeps its usual forecast - the two scales aren't mixed. Empty (the
   default): point-graded subjects stay out, as before - there's no common
   scale to assume. The Grade forecast sensor also shows `point_thresholds`.
+  The `librus_synergia_forecast_changed` event gained `percentage` (set for
+  a point-graded subject), and the Grade Forecast Changed blueprint shows
+  "(60,8% punktów)" for such a subject instead of an average.
 
 ### Fixed
 - **Free days calendar: only the student's own class.** Librus answers

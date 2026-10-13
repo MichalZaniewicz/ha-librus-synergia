@@ -118,6 +118,7 @@ async def test_forecast_changed_event(hass, freezer) -> None:
     assert data["subject"] == "Matematyka"
     assert (data["old"], data["new"], data["direction"]) == (4, 2, "down")
     assert data["average"] == 2.5
+    assert data["percentage"] is None  # a 1-6 subject
 
     event_entity = hass.states.get(_entity_id(hass, entry, "event", "forecast_event"))
     assert event_entity.attributes["event_type"] == "down"

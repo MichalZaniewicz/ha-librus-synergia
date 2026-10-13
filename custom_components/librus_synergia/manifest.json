@@ -18,5 +18,5 @@
   "requirements": [
     "librus-synergia==0.3.25"
   ],
-  "version": "0.12.16"
+  "version": "0.12.17-beta.1"
 }

@@ -3162,7 +3162,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                         "old": old,
                         "new": forecast.predicted,
                         "direction": "up" if forecast.predicted > old else "down",
+                        # A percentage for a point-graded subject (then
+                        # `percentage` is set too); a 1-6 average otherwise.
                         "average": forecast.average,
+                        "percentage": forecast.percentage,
                         "sixes_to_next": forecast.sixes_to_next,
                         "ones_to_drop": forecast.ones_to_drop,
                     },

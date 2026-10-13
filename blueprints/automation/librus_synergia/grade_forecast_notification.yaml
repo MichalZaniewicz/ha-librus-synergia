@@ -14,6 +14,8 @@ blueprint:
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.old }}`,
     `{{ trigger.event.data.new }}`, `{{ trigger.event.data.direction }}`
     (up/down), `{{ trigger.event.data.average }}`,
+    `{{ trigger.event.data.percentage }}` (set only for a subject graded in
+    points - then `average` is that percentage too),
     `{{ trigger.event.data.sixes_to_next }}`,
     `{{ trigger.event.data.ones_to_drop }}`. With more than one child the
     summary starts with the child's name.
@@ -49,7 +51,7 @@ actions:
         {%- set d = trigger.event.data -%}
         {{ (d.student ~ ': ') if d.student else '' }}{{ d.subject }} -
         prognoza {{ 'spadła' if d.direction == 'down' else 'wzrosła' }} z {{ d.old }} na {{ d.new }}
-        (średnia {{ '%.2f' | format(d.average) | replace('.', ',') }}).
+        ({{ ('%.1f' | format(d.percentage) | replace('.', ',')) ~ '% punktów' if d.percentage is number else 'średnia ' ~ ('%.2f' | format(d.average) | replace('.', ',')) }}).
         {%- if d.direction == 'down' and d.sixes_to_next %}
         {{ 'Jedna 6 podnosi ją z powrotem.' if d.sixes_to_next == 1 else 'Do poprawy potrzeba ' ~ d.sixes_to_next ~ (' szóstki.' if d.sixes_to_next < 5 else ' szóstek.') }}
         {%- elif d.direction == 'up' and d.ones_to_drop == 1 %} Uwaga: jedna 1 cofnie ją z powrotem.

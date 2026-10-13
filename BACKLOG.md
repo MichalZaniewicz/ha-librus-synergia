@@ -29,9 +29,6 @@ roadmap; pick from here when it makes sense.
   confirmed with real comments; whether each item is a bare id or an
   `{"Id": ...}` object wasn't captured. librus-synergia's
   `resolve_comment_ids` handles both.
-- **Point grades** — sensor and attributes are in place (0.12.0), but the
-  field names come from another client; no point grade has been seen on a
-  real account (the test school has them off).
 - **Behaviour grade on a points scale** — the classic scale is confirmed
   live (`BehaviourGrade.Id`); the points variant hasn't been seen.
 - **Descriptive grades** — the sensor is in place; the endpoint has been
@@ -63,8 +60,6 @@ roadmap; pick from here when it makes sense.
 - **Message coverage** — the `notes` / `absences` / `trash` mailboxes get
   unread counts only; opening a message from the archive was never tried;
   no `mark_message_read` service.
-- **Assist tools** — the eight tools cover everything the sensors have
-  except point grades.
 - **Calendar weeks ahead option** — the timetable calendar fetches other
   weeks on demand; a configurable look-ahead for the Agenda isn't there.
 
