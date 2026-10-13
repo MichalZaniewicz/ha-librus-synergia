@@ -270,6 +270,8 @@ def test_point_graded_subject_forecast_from_percentage() -> None:
     assert history.next_grade_at == 75.0
     assert history.sixes_to_next is None and history.ones_to_drop is None
     assert history.as_dict()["percentage"] == 55.0
+    # The weighted sums behind the percentage (21 + 6.5 of 30 + 20).
+    assert (history.points_earned, history.points_possible) == (27.5, 50.0)
     # A 1-6 subject is unchanged and carries no percentage.
     assert by_name["Matematyka"].percentage is None
     assert by_name["Matematyka"].predicted == 5

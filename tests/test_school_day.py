@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.librus_synergia.average_history import (
     LibrusAverageHistory,
     daily_averages,
+    daily_point_percentages,
 )
 from custom_components.librus_synergia.const import DOMAIN
 from custom_components.librus_synergia.school_day import school_days
@@ -314,3 +315,59 @@ async def test_average_history_writes_only_what_changed(hass, freezer) -> None:
         add.reset_mock()
         history._async_update()
         assert len(_written_days(add)[subject]) == 9  # 2 .. 10 September
+
+
+def test_daily_point_percentages_step_with_new_scores() -> None:
+    from librus_synergia.models import PointGradeData
+
+    def score(gid: int, points: float, day: str) -> PointGradeData:
+        return PointGradeData(
+            id=gid, subject_id=7, value=str(points), points=points, max_points=10,
+            category_id=None, category=None, weight=None, counts_to_average=True,
+            semester=1, add_date=f"{day} 10:00:00",
+        )
+
+    grades = [score(1, 8, "2026-09-02"), score(2, 6, "2026-09-04"), score(3, 9, "2026-09-04")]
+    points = daily_point_percentages(grades, date(2026, 9, 5), subject_id=7)
+    assert points == [
+        (date(2026, 9, 2), 80.0),
+        (date(2026, 9, 3), 80.0),
+        (date(2026, 9, 4), round(100 * 23 / 30, 1)),
+        (date(2026, 9, 5), round(100 * 23 / 30, 1)),
+    ]
+    # From a later day: the earlier scores are taken in at once.
+    assert daily_point_percentages(grades, date(2026, 9, 5), subject_id=7, start=date(2026, 9, 4)) == (
+        points[2:]
+    )
+    assert daily_point_percentages(grades, date(2026, 9, 5), subject_id=99) == []
+
+
+async def test_average_history_writes_point_percentage_series(hass) -> None:
+    """A subject graded only in points gets a daily percentage series (unit
+    %), and there's no overall average series without 1-6 grades."""
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Fizyka"}]},
+        async_get_point_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "17", "GradeValue": 17, "Category": {"Id": 2},
+                 "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-09-02 10:00:00"},
+            ]
+        },
+        async_get_point_grade_categories={
+            "Categories": [{"Id": 2, "Name": "Kartkówka", "Weight": 1, "CountToTheAverage": True, "ValueTo": 20}]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    hass.config.components.add("recorder")
+    with patch(
+        "homeassistant.components.recorder.statistics.async_add_external_statistics"
+    ) as add:
+        history = LibrusAverageHistory(hass, entry.runtime_data)
+        history.async_start()
+        history.async_stop()
+    prefix = f"{DOMAIN}:{entry.entry_id.lower()}_average"
+    ((meta, rows),) = [(call.args[1], call.args[2]) for call in add.call_args_list]
+    assert meta["statistic_id"] == f"{prefix}_points_100"
+    assert meta["unit_of_measurement"] == "%"
+    assert "punkty Fizyka" in meta["name"]
+    assert rows[0]["mean"] == 85.0

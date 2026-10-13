@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- **More for point-graded subjects.** A subject average sensor of a subject
+  graded in points now also has `points_earned` / `points_possible` (the
+  weighted sums behind its percentage), `points_percentage_semester_1` /
+  `_2`, `forecast_points_earned` / `forecast_points_possible` (on the
+  forecast's basis) and `points_statistic_id`. The grade-average history in
+  long-term statistics gets a daily percentage series for each point-graded
+  subject ("<student> - punkty <subject>", unit %). The companion cards use
+  these for the Grade simulator, Grade goal, Semester comparison and Grade
+  trend. (Thanks @keysim86 for the idea)
 - **Point grade thresholds per subject.** New option under Configure,
   "Point grade thresholds per subject": one subject a line, e.g.
   `fizyka: 30, 50, 70, 85, 96` (case and Polish letters don't matter). Those

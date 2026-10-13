@@ -6,7 +6,9 @@ since the first grade, the average of the grades added up to that day -
 overall and per subject - written as external statistics
 (`librus_synergia:<entry>_average[_<subject>]`). A Statistics graph card
 can then chart the year, picked by name ("Ola Kowalska - średnia
-Matematyka").
+Matematyka"). A subject graded in points gets a daily percentage series
+too (`..._average_points_<subject>`, unit %, "Ola Kowalska - punkty
+Fizyka"), which the Grade trend card charts.
 
 The averages are worked out again whenever the grades change and once a
 day (so today gets its point) - from the earliest day that can differ (a
@@ -30,7 +32,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
-from librus_synergia.models import GradeData, GradingSystemData, LibrusData
+from librus_synergia.models import GradeData, GradingSystemData, LibrusData, PointGradeData
+from librus_synergia.parsers import point_grades_percentage
 
 from .ai_summary import _day
 from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
@@ -91,13 +94,62 @@ def daily_averages(
     return out
 
 
+def daily_point_percentages(
+    grades: list[PointGradeData],
+    today: date,
+    *,
+    subject_id: Any,
+    start: date | None = None,
+) -> list[tuple[date, float]]:
+    """(day, percentage of points earned up to and including that day) for
+    one subject's point grades - the same day-by-day walk as
+    `daily_averages`."""
+    dated = sorted(
+        (
+            (d, g)
+            for g in grades
+            if g.subject_id == subject_id and (d := _day(g.add_date)) is not None and d <= today
+        ),
+        key=lambda item: item[0],
+    )
+    if not dated:
+        return []
+    first = max(dated[0][0], today - timedelta(days=MAX_DAYS))
+    out: list[tuple[date, float]] = []
+    included: list[PointGradeData] = []
+    index = 0
+    day = first if start is None or start <= first else start
+    while index < len(dated) and dated[index][0] < day:
+        included.append(dated[index][1])
+        index += 1
+    value = point_grades_percentage(included) if included else None
+    while day <= today:
+        changed = False
+        while index < len(dated) and dated[index][0] <= day:
+            included.append(dated[index][1])
+            index += 1
+            changed = True
+        if changed:
+            value = point_grades_percentage(included)
+        if value is not None:
+            out.append((day, value))
+        day += timedelta(days=1)
+    return out
+
+
 def statistic_id_prefix(entry_id: str) -> str:
     """Every statistic id of one entry starts with this (the overall one is
     exactly it) - also how `__init__.async_remove_entry` finds them."""
     return f"{DOMAIN}:{slugify(entry_id)}_average"
 
 
-def _metadata(statistic_id: str, name: str) -> dict[str, Any]:
+def points_statistic_id(entry_id: str, subject_id: Any) -> str:
+    """A point-graded subject's daily percentage series (under the same
+    prefix, so removing the entry removes it too)."""
+    return f"{statistic_id_prefix(entry_id)}_points_{slugify(str(subject_id))}"
+
+
+def _metadata(statistic_id: str, name: str, unit: str | None = None) -> dict[str, Any]:
     """StatisticMetaData for this Home Assistant: `mean_type`/`unit_class`
     where the recorder knows them, the older `has_mean` otherwise."""
     from homeassistant.components.recorder import models  # noqa: PLC0415
@@ -107,7 +159,7 @@ def _metadata(statistic_id: str, name: str) -> dict[str, Any]:
         "name": name,
         "source": DOMAIN,
         "statistic_id": statistic_id,
-        "unit_of_measurement": None,
+        "unit_of_measurement": unit,
     }
     fields = getattr(models.StatisticMetaData, "__annotations__", {})
     mean_type = getattr(models, "StatisticMeanType", None)
@@ -173,7 +225,7 @@ class LibrusAverageHistory:
     @callback
     def _async_update(self) -> None:
         data = self._coordinator.data
-        if data is None or not data.grades:
+        if data is None or not (data.grades or data.point_grades):
             return
         today = dt_util.now().date()
         if data is self._last_data and today == self._last_day:
@@ -191,6 +243,7 @@ class LibrusAverageHistory:
             data.grading_system,
             _categories_signature(data),
             _grades_signature(data),
+            _point_grades_signature(data),
         )
         if signature == self._signature:
             return
@@ -207,7 +260,10 @@ class LibrusAverageHistory:
         )
 
         student = data.me.display_name
-        series: list[tuple[str, str, Any]] = [(self._prefix, f"{student} - średnia", None)]
+        # (statistic id, name, subject id, point series?)
+        series: list[tuple[str, str, Any, bool]] = []
+        if data.grades:
+            series.append((self._prefix, f"{student} - średnia", None, False))
         for subject_id in sorted({g.subject_id for g in data.grades if g.subject_id is not None}, key=str):
             subject = data.subjects.get(subject_id) or str(subject_id)
             series.append(
@@ -215,9 +271,27 @@ class LibrusAverageHistory:
                     f"{self._prefix}_{slugify(str(subject_id))}",
                     f"{student} - średnia {subject}",
                     subject_id,
+                    False,
                 )
             )
-        full_signature = (weighted, data.grading_system, tuple((sid, name) for sid, name, _ in series))
+        entry = self._coordinator.config_entry
+        for subject_id in sorted(
+            {g.subject_id for g in data.point_grades if g.subject_id is not None}, key=str
+        ):
+            subject = data.subjects.get(subject_id) or str(subject_id)
+            series.append(
+                (
+                    points_statistic_id(entry.entry_id if entry else "librus", subject_id),
+                    f"{student} - punkty {subject}",
+                    subject_id,
+                    True,
+                )
+            )
+        full_signature = (
+            weighted,
+            data.grading_system,
+            tuple((sid, name) for sid, name, _, _ in series),
+        )
         if full_signature != self._full_signature:
             # Another mode or grade scale changes every row; a new name only
             # reaches the recorder with a write, so write them all again.
@@ -232,17 +306,27 @@ class LibrusAverageHistory:
             or self._computed_today is None
             or today < self._computed_today
         )
-        for statistic_id, name, subject_id in series:
-            keys = frozenset(
-                _grade_key(g)
-                for g in data.grades
-                if subject_id is None or g.subject_id == subject_id
-            )
+        for statistic_id, name, subject_id, is_points in series:
+            if is_points:
+                keys = frozenset(
+                    _point_grade_key(g) for g in data.point_grades if g.subject_id == subject_id
+                )
+            else:
+                keys = frozenset(
+                    _grade_key(g)
+                    for g in data.grades
+                    if subject_id is None or g.subject_id == subject_id
+                )
             start = None if recompute_all else self._first_changed_day(statistic_id, keys)
-            points = daily_averages(
-                data.grades, data.grade_categories, today, subject_id=subject_id, weighted=weighted,
-                grading=data.grading_system, start=start
-            )
+            if is_points:
+                points = daily_point_percentages(
+                    data.point_grades, today, subject_id=subject_id, start=start
+                )
+            else:
+                points = daily_averages(
+                    data.grades, data.grade_categories, today, subject_id=subject_id,
+                    weighted=weighted, grading=data.grading_system, start=start
+                )
             first_run = statistic_id not in self._written
             written = self._written.get(statistic_id, {})
             # The days before `start` are unchanged by definition; from it on
@@ -268,7 +352,9 @@ class LibrusAverageHistory:
                     if written.get(day) != value
                 ]
             if rows:
-                async_add_external_statistics(self._hass, _metadata(statistic_id, name), rows)
+                async_add_external_statistics(
+                    self._hass, _metadata(statistic_id, name, "%" if is_points else None), rows
+                )
             self._written[statistic_id] = series_now
             self._series_grades[statistic_id] = keys
             self._coordinator.set_average_digest(statistic_id, digest)
@@ -316,6 +402,26 @@ def _grade_key(g: GradeData) -> tuple[Any, ...]:
         g.is_final_proposition,
         g.is_semester,
         g.is_final,
+    )
+
+
+def _point_grade_key(g: PointGradeData) -> tuple[Any, ...]:
+    """Everything a point percentage depends on; the day at index 2, like
+    `_grade_key`."""
+    return (
+        g.id,
+        g.points,
+        g.add_date or "",
+        g.max_points,
+        g.weight,
+        g.counts_to_average,
+        g.subject_id,
+    )
+
+
+def _point_grades_signature(data: LibrusData) -> tuple[Any, ...]:
+    return tuple(
+        sorted((_point_grade_key(g) for g in data.point_grades), key=lambda item: str(item[0]))
     )
 
 

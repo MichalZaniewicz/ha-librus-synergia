@@ -321,6 +321,10 @@ class SubjectForecast:
     # percentage. `average` and `next_grade_at` are then percentages too,
     # and the "how many 6s/1s" counts don't apply (None).
     percentage: float | None = None
+    # ... and the weighted points earned / possible behind it, so a card can
+    # add one more score to the exact percentage.
+    points_earned: float | None = None
+    points_possible: float | None = None
 
     @property
     def at_risk(self) -> bool:
@@ -339,6 +343,8 @@ class SubjectForecast:
             "at_risk": self.at_risk,
             "proposed": self.proposed,
             "percentage": self.percentage,
+            "points_earned": self.points_earned,
+            "points_possible": self.points_possible,
         }
 
 
@@ -531,9 +537,25 @@ def _point_forecasts(
                     None,
                 ),
                 percentage=percentage,
+                points_earned=(sums := point_sums(subject_grades))[0],
+                points_possible=sums[1],
             )
         )
     return result
+
+
+def point_sums(grades: list[PointGradeData]) -> tuple[float, float]:
+    """(earned, possible) weighted points - the sums `point_grades_percentage`
+    divides (counted categories with a known maximum, weight 1 when
+    unknown)."""
+    earned = possible = 0.0
+    for grade in grades:
+        if not grade.counts_to_average or grade.points is None or not grade.max_points:
+            continue
+        weight = grade.weight if grade.weight else 1.0
+        earned += grade.points * weight
+        possible += grade.max_points * weight
+    return round(earned, 2), round(possible, 2)
 
 
 def report_average(forecasts: list[SubjectForecast]) -> float | None:

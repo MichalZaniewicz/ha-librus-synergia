@@ -71,11 +71,13 @@ from .coordinator import (
 )
 from .catch_up import catch_up
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts
+from .average_history import points_statistic_id
 from .forecast import (
     HONOURS_AVERAGE,
     DataMemo,
     SubjectForecast,
     forecast_basis,
+    point_sums,
     report_average,
     subject_forecasts,
 )
@@ -355,8 +357,19 @@ def _point_grade_attrs(
     ).get(subject_id)
     if not grades:
         return {}
+    earned, possible = point_sums(grades)
     return {
         "points_percentage": point_grades_percentage(grades),
+        # The weighted sums behind it (cards add a score to them).
+        "points_earned": earned,
+        "points_possible": possible,
+        # Each semester's own percentage (Semester comparison card).
+        "points_percentage_semester_1": point_grades_percentage(
+            [g for g in grades if g.semester == 1]
+        ),
+        "points_percentage_semester_2": point_grades_percentage(
+            [g for g in grades if g.semester == 2]
+        ),
         "point_grades": _point_grade_log(data, grades),
     }
 
@@ -718,13 +731,17 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         # the general one) - cards map single point grades with it.
         scales = self.coordinator.point_grade_thresholds
         data = self.coordinator.data
-        if (
-            scales
-            and (values := scales.for_subject(self._subject_id))
-            and data is not None
-            and any(g.subject_id == self._subject_id for g in data.point_grades)
-        ):
+        has_points = data is not None and any(
+            g.subject_id == self._subject_id for g in data.point_grades
+        )
+        if scales and (values := scales.for_subject(self._subject_id)) and has_points:
             attrs["point_thresholds"] = list(values)
+        if has_points and self.coordinator.config_entry is not None:
+            # The daily percentage series in long-term statistics (see
+            # average_history.py) - the Grade trend card charts it.
+            attrs["points_statistic_id"] = points_statistic_id(
+                self.coordinator.config_entry.entry_id, self._subject_id
+            )
         return attrs
 
     def _forecast_values(self) -> dict[str, Any]:
@@ -755,6 +772,16 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "sixes_to_next_grade": forecast.sixes_to_next,
             "ones_to_drop_grade": forecast.ones_to_drop,
             "forecast_declining": forecast.declining,
+            # Point-graded subject: the weighted points on the forecast's
+            # basis (this semester or the year), for the exact percentage.
+            **(
+                {
+                    "forecast_points_earned": forecast.points_earned,
+                    "forecast_points_possible": forecast.points_possible,
+                }
+                if forecast.percentage is not None
+                else {}
+            ),
         }
 
 

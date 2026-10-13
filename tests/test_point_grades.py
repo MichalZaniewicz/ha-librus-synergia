@@ -170,3 +170,34 @@ async def test_point_thresholds_per_subject(hass) -> None:
     )
     assert subject.attributes["point_thresholds"] == [30, 50, 70, 80, 95]
     assert subject.attributes["predicted_grade"] == 5
+
+
+async def test_point_subject_sums_semesters_and_statistic_id(hass) -> None:
+    """What the Grade simulator / goal / semester / trend cards read."""
+    grades = {
+        "Grades": [
+            *POINT_GRADES["Grades"],
+            {"Id": 3, "Grade": "10", "GradeValue": 10, "Category": {"Id": 2},
+             "Subject": {"Id": 100}, "Semester": 2, "AddDate": "2026-10-03 10:00:00"},
+        ]
+    }
+    client = build_mock_client(
+        async_get_point_grades=grades,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_subjects=SUBJECTS,
+    )
+    entry = await setup_integration(
+        hass, client, options={"point_grade_thresholds": "40, 55, 75, 90, 98"}
+    )
+    registry = er.async_get(hass)
+    state = hass.states.get(
+        registry.async_get_entity_id("sensor", "librus_synergia", f"{entry.entry_id}_subject_100_average")
+    )
+    attrs = state.attributes
+    # 85*2 + 15 + 10 of 100*2 + 20 + 20
+    assert (attrs["points_earned"], attrs["points_possible"]) == (195.0, 240.0)
+    assert attrs["points_percentage_semester_1"] == round(100 * 185 / 220, 1)
+    assert attrs["points_percentage_semester_2"] == 50.0
+    assert attrs["points_statistic_id"] == f"librus_synergia:{entry.entry_id.lower()}_average_points_100"
+    # The forecast's own basis: semester 1 only here.
+    assert (attrs["forecast_points_earned"], attrs["forecast_points_possible"]) == (185.0, 220.0)
