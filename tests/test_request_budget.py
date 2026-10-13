@@ -606,3 +606,41 @@ async def test_reference_data_requests_are_capped(hass) -> None:
     assert in_flight["max"] == 6
     for name in _REFERENCE_METHODS:
         assert getattr(client, name).call_count == 1
+
+
+async def test_changed_messages_count_refetches_saved_mailbox_lists(hass, hass_storage) -> None:
+    """A saved inbox list is reused while the unread count is unchanged -
+    but not after "Messages to fetch per mailbox" changed (found live: the
+    option showed no effect until the hourly refresh)."""
+
+    def client():
+        c = build_mock_client()
+        c.async_bootstrap_messages.return_value = True
+        c.async_get_unread_messages_count.return_value = {"data": {"inbox": 1}}
+        c.async_get_messages.side_effect = messages_by_mailbox({"inbox": {"data": [_message("1")]}})
+        return c
+
+    first = _coordinator(hass, client())
+    await first._async_update_data()
+    saved = saved_state(first)
+
+    # Same limit: the saved inbox list stands in, no inbox request.
+    same_entry = make_config_entry()
+    _store(hass_storage, same_entry.entry_id, saved)
+    same = _coordinator(hass, client(), same_entry)
+    await same.async_restore_state()
+    await same._async_update_data()
+    assert _mailbox_calls(same._client, "inbox") == 0
+
+    # Another limit: asked again, with the new limit.
+    changed_entry = make_config_entry(options={"messages_count": 20})
+    _store(hass_storage, changed_entry.entry_id, saved)
+    changed = _coordinator(hass, client(), changed_entry)
+    await changed.async_restore_state()
+    await changed._async_update_data()
+    inbox_calls = [
+        call
+        for call in changed._client.async_get_messages.call_args_list
+        if call.kwargs.get("mailbox", "inbox") == "inbox"
+    ]
+    assert inbox_calls and all(call.kwargs.get("limit") == 20 for call in inbox_calls)

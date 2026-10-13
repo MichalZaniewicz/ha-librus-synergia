@@ -1434,10 +1434,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         if isinstance(missing := saved.get("missing_mailboxes"), list):
             self.missing_mailboxes = {str(box) for box in missing}
             self._mailbox_probed_at = times(saved.get("mailbox_probed_at"))
-        if isinstance(archive := saved.get("archive"), list):
+        # Lists saved with another "Messages to fetch per mailbox" (state from
+        # before the option: always 10) are dropped, so a changed option shows
+        # on the first refresh instead of up to a day later.
+        same_limit = saved.get("mailbox_limit", DEFAULT_MESSAGES_COUNT) == self.messages_limit
+        if same_limit and isinstance(archive := saved.get("archive"), list):
             self._archived_messages = _messages_from_saved(archive)
             self._archive_fetched_at = when(saved.get("archive_fetched_at"))
-        if isinstance(lists := saved.get("mailbox_lists"), dict):
+        if same_limit and isinstance(lists := saved.get("mailbox_lists"), dict):
             counts = saved.get("mailbox_counts") or {}
             fetched = times(saved.get("mailbox_fetched_at"))
             for box, items in lists.items():
@@ -1664,6 +1668,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             },
             "mailbox_counts": dict(self._mailbox_counts),
             "mailbox_fetched_at": isos(self._mailbox_fetched_at),
+            "mailbox_limit": self.messages_limit,
             "receipts_fetched_at": isos(self._receipts_fetched_at),
         }
 
