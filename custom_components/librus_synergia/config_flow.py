@@ -78,6 +78,7 @@ from .const import (
     CONF_MESSAGES_ENABLED,
     CONF_MESSAGE_SENDING_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
+    CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -442,6 +443,13 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     CONF_POINT_GRADE_THRESHOLDS,
                     description={"suggested_value": options.get(CONF_POINT_GRADE_THRESHOLDS)},
                 ): TextSelector(TextSelectorConfig()),
+                # Per-subject scales, one "subject: thresholds" a line.
+                vol.Optional(
+                    CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
+                    description={
+                        "suggested_value": options.get(CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT)
+                    },
+                ): TextSelector(TextSelectorConfig(multiline=True)),
                 # Optional override: the number is read from Librus
                 # (coordinator.student_number_from_librus);
                 # a value here wins over it.

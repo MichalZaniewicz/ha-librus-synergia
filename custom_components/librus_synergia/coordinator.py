@@ -139,6 +139,7 @@ from .const import (
     CONF_MESSAGES_COUNT,
     CONF_MESSAGES_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
+    CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -197,9 +198,11 @@ from .const import (
 )
 from .achievements import Badge, compute_badges, key_title
 from .forecast import (
+    PointThresholds,
     average_sums,
     forecast_basis,
     parse_point_thresholds,
+    parse_point_thresholds_by_subject,
     parse_thresholds,
     subject_forecasts,
 )
@@ -3182,16 +3185,39 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return max(MIN_MESSAGES_COUNT, min(MAX_MESSAGES_COUNT, value))
 
     @property
-    def point_grade_thresholds(self) -> tuple[float, ...] | None:
+    def point_grade_thresholds(self) -> PointThresholds | None:
         """Minimum percentages for a 2..6 in point-graded subjects (options
-        flow) - None when not set, keeping those subjects out of the
-        forecast."""
+        flow): the general scale plus per-subject ones - None when neither
+        is set, keeping those subjects out of the forecast."""
+        return self.point_grade_thresholds_for(self.data)
+
+    def point_grade_thresholds_for(self, data: LibrusData | None) -> PointThresholds | None:
+        """`point_grade_thresholds` with the subject names of `data` - the
+        refresh in progress uses its own data (`self.data` is still the
+        previous one, or None on the first refresh)."""
+        options = self.config_entry.options if self.config_entry else {}
+        default = parse_point_thresholds(options.get(CONF_POINT_GRADE_THRESHOLDS))
+        by_subject, _unmatched = self._point_thresholds_by_subject(data)
+        if not default and not by_subject:
+            return None
+        return PointThresholds(default, tuple(sorted(by_subject.items(), key=lambda kv: str(kv[0]))))
+
+    @property
+    def point_grade_thresholds_unmatched(self) -> list[str]:
+        """Per-subject threshold entries that don't work - an unknown
+        subject name or unusable numbers - to show the user."""
+        return self._point_thresholds_by_subject(self.data)[1]
+
+    def _point_thresholds_by_subject(
+        self, data: LibrusData | None
+    ) -> tuple[dict[int | str, tuple[float, ...]], list[str]]:
         text = (
-            self.config_entry.options.get(CONF_POINT_GRADE_THRESHOLDS)
+            self.config_entry.options.get(CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT)
             if self.config_entry
             else None
         )
-        return parse_point_thresholds(text)
+        subjects = data.subjects if data is not None else {}
+        return parse_point_thresholds_by_subject(text, subjects)
 
     def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
         """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.
@@ -3211,7 +3237,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self.grade_thresholds,
             weighted=self.weighted_average,
             owner=self.memo_owner,
-            point_thresholds=self.point_grade_thresholds,
+            point_thresholds=self.point_grade_thresholds_for(data),
         )
         current = {f.subject_id: f.predicted for f in forecasts}
         known = self._known_forecast
@@ -5075,7 +5101,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 data,
                 today,
                 thresholds=self.grade_thresholds,
-                point_thresholds=self.point_grade_thresholds,
+                point_thresholds=self.point_grade_thresholds_for(data),
                 weighted=self.weighted_average,
                 student_number=student_number,
                 homework_done=len(self.homework_done_ever),

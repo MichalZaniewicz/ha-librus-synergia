@@ -59,7 +59,7 @@ from .coordinator import (
     teacher_subject_ids,
 )
 from .exam_prep import exam_prep, missed_lessons
-from .forecast import subject_forecasts
+from .forecast import PointThresholdsArg, subject_forecasts
 
 if TYPE_CHECKING:
     from .coordinator import LibrusDataUpdateCoordinator
@@ -319,7 +319,7 @@ def build_context(
     student: str | None,
     thresholds: tuple[float, ...] | None = None,
     owner: Hashable | None = None,
-    point_thresholds: tuple[float, ...] | None = None,
+    point_thresholds: PointThresholdsArg = None,
 ) -> dict[str, Any]:
     """Compact, JSON-ready snapshot of the week before and after ``today``.
     ``owner`` is the config entry id the forecasts are cached under (see

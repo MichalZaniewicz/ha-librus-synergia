@@ -713,6 +713,21 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         }
 
     def _forecast_attrs(self) -> dict[str, Any]:
+        attrs = self._forecast_values()
+        # The scale this subject's point grades are judged on (its own, or
+        # the general one) - cards map single point grades with it.
+        scales = self.coordinator.point_grade_thresholds
+        data = self.coordinator.data
+        if (
+            scales
+            and (values := scales.for_subject(self._subject_id))
+            and data is not None
+            and any(g.subject_id == self._subject_id for g in data.point_grades)
+        ):
+            attrs["point_thresholds"] = list(values)
+        return attrs
+
+    def _forecast_values(self) -> dict[str, Any]:
         forecast = next(
             (
                 f
@@ -786,10 +801,19 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
             "basis": basis,
             "thresholds": list(self.coordinator.grade_thresholds),
             # Percentages for a 2..6 in point-graded subjects - None when not
-            # set (those subjects are then left out).
+            # set (those subjects are then left out) - and the per-subject
+            # scales, by subject name, plus entries that matched no subject
+            # or had unusable numbers.
             "point_thresholds": (
-                list(points) if (points := self.coordinator.point_grade_thresholds) else None
+                list(points.default)
+                if (points := self.coordinator.point_grade_thresholds) and points.default
+                else None
             ),
+            "point_thresholds_by_subject": {
+                data.subjects.get(subject_id, str(subject_id)): list(values)
+                for subject_id, values in (points.by_subject if points else ())
+            },
+            "point_thresholds_unmatched": self.coordinator.point_grade_thresholds_unmatched,
             # Only the average part of "świadectwo z wyróżnieniem" - the
             # behaviour grade must be at least very good as well.
             "honours_average": average is not None and average >= HONOURS_AVERAGE,

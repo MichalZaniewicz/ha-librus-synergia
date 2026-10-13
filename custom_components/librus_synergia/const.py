@@ -150,6 +150,10 @@ CONF_GRADE_THRESHOLDS = "grade_thresholds"
 # subjects - set their own), so without it point-graded subjects stay out
 # of the forecast. See forecast.parse_point_thresholds.
 CONF_POINT_GRADE_THRESHOLDS = "point_grade_thresholds"
+# Per-subject overrides of those percentages, one subject a line:
+# "fizyka: 30, 50, 70, 85, 96" (teachers often set their own scale). See
+# forecast.parse_point_thresholds_by_subject.
+CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT = "point_grade_thresholds_by_subject"
 
 # The student's own number in the class register ("numer w dzienniku") -
 # an optional manual override. The number is normally read from Librus

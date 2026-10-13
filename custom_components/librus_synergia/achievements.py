@@ -31,7 +31,13 @@ from librus_synergia.models import (
 )
 from librus_synergia.parsers import parse_grade_value
 
-from .forecast import HONOURS_AVERAGE, average_sums, report_average, subject_forecasts
+from .forecast import (
+    HONOURS_AVERAGE,
+    PointThresholdsArg,
+    average_sums,
+    report_average,
+    subject_forecasts,
+)
 
 GOOD_GRADE = 4.0
 _TEST_CATEGORY_RE = re.compile(r"sprawdzian|praca klasowa|test", re.IGNORECASE)
@@ -224,7 +230,7 @@ def compute_badges(
     today: date,
     *,
     thresholds: tuple[float, ...],
-    point_thresholds: tuple[float, ...] | None = None,
+    point_thresholds: PointThresholdsArg = None,
     weighted: bool = True,
     student_number: int | None = None,
     homework_done: int = 0,

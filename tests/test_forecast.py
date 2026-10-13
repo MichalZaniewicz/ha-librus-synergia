@@ -18,7 +18,9 @@ from custom_components.librus_synergia.forecast import (
     BASIS_SEMESTER_1,
     DataMemo,
     forecast_basis,
+    PointThresholds,
     parse_point_thresholds,
+    parse_point_thresholds_by_subject,
     parse_thresholds,
     predicted_grade,
     report_average,
@@ -307,3 +309,39 @@ def test_point_thresholds_are_part_of_the_memo_key() -> None:
     assert subject_forecasts(data, _TODAY, _THRESHOLDS) == []
     (with_points,) = subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=_POINTS)
     assert with_points.predicted == 4  # 80 % >= 75
+
+
+def test_parse_point_thresholds_by_subject() -> None:
+    subjects = {20: "Historia", 30: "Język polski", 40: "Fizyka"}
+    matched, unmatched = parse_point_thresholds_by_subject(
+        "historia: 30, 50, 70, 85, 96\n JEZYK  POLSKI : 35; 50; 65; 80; 95%\n"
+        "40: 20, 40, 60, 80, 90\nfizka: 30, 50, 70, 85, 96\nHistoria 30 50",
+        subjects,
+    )
+    assert matched == {
+        20: (30, 50, 70, 85, 96),
+        30: (35, 50, 65, 80, 95),
+        40: (20, 40, 60, 80, 90),  # by subject id
+    }
+    # A typo in the name, and a line without ":" / five values.
+    assert unmatched == ["fizka: 30, 50, 70, 85, 96", "Historia 30 50"]
+    assert parse_point_thresholds_by_subject(None, subjects) == ({}, [])
+
+
+def test_point_thresholds_per_subject_override_the_general_scale() -> None:
+    data = _data([])
+    data.subjects = {10: "Matematyka", 20: "Historia", 30: "Fizyka"}
+    # 60 % in both subjects.
+    data.point_grades = [_points(1, 6, 10, 20), _points(2, 6, 10, 30)]
+    scales = PointThresholds(default=_POINTS, by_subject=((30, (30.0, 40.0, 50.0, 60.0, 90.0)),))
+    by_name = {f.subject: f for f in subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=scales)}
+    assert by_name["Historia"].predicted == 3  # 60 % on 40/55/75/90/98
+    assert by_name["Fizyka"].predicted == 5  # 60 % on its own 30/40/50/60/90
+    assert by_name["Fizyka"].next_grade_at == 90.0
+    # No general scale: only the subjects with their own one get a forecast.
+    only = PointThresholds(by_subject=((30, (30.0, 40.0, 50.0, 60.0, 90.0)),))
+    assert [f.subject for f in subject_forecasts(data, _TODAY, _THRESHOLDS, point_thresholds=only)] == [
+        "Fizyka"
+    ]
+    # A plain tuple still means "the general scale".
+    assert PointThresholds(default=_POINTS).for_subject(30) == _POINTS

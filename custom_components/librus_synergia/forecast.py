@@ -13,9 +13,11 @@ semester grade is given for), in the second semester the whole school year
 from __future__ import annotations
 
 import math
+import re
+import unicodedata
 import weakref
 from collections import OrderedDict
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, TypeVar
@@ -163,6 +165,79 @@ def parse_point_thresholds(text: str | None) -> tuple[float, ...] | None:
     return values
 
 
+@dataclass(frozen=True, slots=True)
+class PointThresholds:
+    """Percentages for a 2..6 in point-graded subjects: `default` for every
+    subject, `by_subject` ((subject id, thresholds) pairs) overriding it for
+    single subjects - teachers often set their own scale. Hashable, so it
+    can be part of a DataMemo key."""
+
+    default: tuple[float, ...] | None = None
+    by_subject: tuple[tuple[int | str, tuple[float, ...]], ...] = ()
+
+    def for_subject(self, subject_id: int | str | None) -> tuple[float, ...] | None:
+        """The thresholds for one subject: its own, else the default."""
+        for known, values in self.by_subject:
+            if known == subject_id:
+                return values
+        return self.default
+
+    def __bool__(self) -> bool:
+        return bool(self.default or self.by_subject)
+
+
+PointThresholdsArg = PointThresholds | tuple[float, ...] | None
+
+
+def as_point_thresholds(value: PointThresholdsArg) -> PointThresholds | None:
+    """A plain tuple (the default scale only) as `PointThresholds`; None
+    when nothing is set."""
+    if not value:
+        return None
+    if isinstance(value, PointThresholds):
+        return value
+    return PointThresholds(default=tuple(value))
+
+
+def _subject_key(name: str) -> str:
+    """A subject name for matching: case, Polish letters and spaces
+    don't matter ("Język polski" == "jezyk  POLSKI")."""
+    folded = unicodedata.normalize("NFKD", name.replace("ł", "l").replace("Ł", "L"))
+    plain = "".join(c for c in folded if not unicodedata.combining(c))
+    return " ".join(plain.casefold().split())
+
+
+def parse_point_thresholds_by_subject(
+    text: str | None, subjects: Mapping[int | str, str]
+) -> tuple[dict[int | str, tuple[float, ...]], list[str]]:
+    """Per-subject thresholds from lines like "fizyka: 30, 50, 70, 85, 96"
+    (one subject a line - ";" may separate the values, as in the general
+    field), matched to `subjects` by name (see `_subject_key`) or by the
+    subject id. Returns the matched subjects and the entries that didn't
+    work - an unknown subject or unusable thresholds - so the user can see
+    a typo."""
+    matched: dict[int | str, tuple[float, ...]] = {}
+    unmatched: list[str] = []
+    if not text:
+        return matched, unmatched
+    names = {_subject_key(name): subject_id for subject_id, name in subjects.items()}
+    for entry in re.split(r"[\r\n]+", text):
+        entry = entry.strip()
+        if not entry:
+            continue
+        name, separator, values = entry.partition(":")
+        thresholds = parse_point_thresholds(values) if separator else None
+        key = _subject_key(name)
+        subject_id = names.get(key)
+        if subject_id is None:
+            subject_id = next((sid for sid in subjects if str(sid) == name.strip()), None)
+        if thresholds is None or subject_id is None:
+            unmatched.append(entry)
+            continue
+        matched[subject_id] = thresholds
+    return matched, unmatched
+
+
 def _counts(grade: GradeData) -> bool:
     return not (
         grade.is_semester_proposition
@@ -298,14 +373,15 @@ def subject_forecasts(
     *,
     weighted: bool = True,
     owner: Hashable | None = None,
-    point_thresholds: tuple[float, ...] | None = None,
+    point_thresholds: PointThresholdsArg = None,
 ) -> list[SubjectForecast]:
     """One forecast per subject with at least one counted grade, worst
     first. The list is shared between callers - don't modify it. `owner`
     is the config entry id (see DataMemo). With `point_thresholds`
-    (percentages for a 2..6), a subject graded only in points gets a
-    forecast from its percentage as well."""
-    points = tuple(point_thresholds) if point_thresholds else None
+    (percentages for a 2..6, a plain tuple or `PointThresholds` with
+    per-subject scales), a subject graded only in points gets a forecast
+    from its percentage as well."""
+    points = as_point_thresholds(point_thresholds)
     return _FORECASTS.get(
         data,
         (today, tuple(thresholds), weighted, points),
@@ -322,7 +398,7 @@ def _subject_forecasts(
     thresholds: tuple[float, ...],
     *,
     weighted: bool,
-    point_thresholds: tuple[float, ...] | None = None,
+    point_thresholds: PointThresholds | None = None,
 ) -> list[SubjectForecast]:
     basis, semester = forecast_basis(data, today)
     # A grade without a semester number counts in either basis.
@@ -401,7 +477,7 @@ def _subject_forecasts(
 def _point_forecasts(
     data: LibrusData,
     today: date,
-    thresholds: tuple[float, ...],
+    scales: PointThresholds,
     *,
     semester: int | None,
     proposition: Callable[[GradeData], bool],
@@ -425,8 +501,10 @@ def _point_forecasts(
         by_subject.setdefault(grade.subject_id, []).append(grade)  # type: ignore[arg-type]
     result: list[SubjectForecast] = []
     for subject_id, subject_grades in by_subject.items():
+        thresholds = scales.for_subject(subject_id)
         percentage = point_grades_percentage(subject_grades)
-        if percentage is None:
+        if thresholds is None or percentage is None:
+            # No scale for this subject (no default, no own one): left out.
             continue
         predicted = predicted_grade(percentage, thresholds)
         older = point_grades_percentage(

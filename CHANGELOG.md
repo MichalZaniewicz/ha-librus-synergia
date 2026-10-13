@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- **Point grade thresholds per subject.** New option under Configure,
+  "Point grade thresholds per subject": one subject a line, e.g.
+  `fizyka: 30, 50, 70, 85, 96` (case and Polish letters don't matter). Those
+  subjects' point grades are forecast on their own scale; the rest use the
+  general "Point grade forecast thresholds" (or stay out if that's empty).
+  The Grade forecast sensor shows `point_thresholds_by_subject` and
+  `point_thresholds_unmatched` (entries that matched no subject or had
+  unusable numbers); a subject sensor shows the scale it uses in
+  `point_thresholds`. (Thanks @keysim86 for the idea)
 - **Class free days have a name.** A class's free day comes from Librus
   without a name of its own; the Free days calendar now shows its type
   ("Wycieczka", "Rekolekcje"...) instead of a plain "Dzień wolny". One more

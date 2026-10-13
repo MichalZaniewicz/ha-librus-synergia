@@ -136,3 +136,37 @@ async def test_assist_grades_tool_lists_point_grades(hass) -> None:
     assert data["point_grades"][0]["percent"] == 75.0
     assert data["point_grades"][1]["category"] == "Sprawdzian"
     assert "Matematyka" in data["points_percent_by_subject"]
+
+
+async def test_point_thresholds_per_subject(hass) -> None:
+    """A subject with its own scale (options) uses it; an entry for an
+    unknown subject is listed so the user can see the typo."""
+    client = build_mock_client(
+        async_get_point_grades=POINT_GRADES,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_subjects=SUBJECTS,
+    )
+    entry = await setup_integration(
+        hass,
+        client,
+        options={
+            "point_grade_thresholds": "40, 55, 75, 90, 98",
+            "point_grade_thresholds_by_subject": "MATEMATYKA: 30, 50, 70, 80, 95\nmatma: 1, 2, 3, 4, 5",
+        },
+    )
+    registry = er.async_get(hass)
+    forecast = hass.states.get(
+        registry.async_get_entity_id("sensor", "librus_synergia", f"{entry.entry_id}_grade_forecast")
+    )
+    assert forecast.attributes["point_thresholds"] == [40, 55, 75, 90, 98]
+    assert forecast.attributes["point_thresholds_by_subject"] == {"Matematyka": [30, 50, 70, 80, 95]}
+    assert forecast.attributes["point_thresholds_unmatched"] == ["matma: 1, 2, 3, 4, 5"]
+    # 84.1 % is a 5 on the subject's own scale (a 4 on the general one).
+    (row,) = [s for s in forecast.attributes["subjects"] if s["subject"] == "Matematyka"]
+    assert row["predicted"] == 5
+
+    subject = hass.states.get(
+        registry.async_get_entity_id("sensor", "librus_synergia", f"{entry.entry_id}_subject_100_average")
+    )
+    assert subject.attributes["point_thresholds"] == [30, 50, 70, 80, 95]
+    assert subject.attributes["predicted_grade"] == 5
