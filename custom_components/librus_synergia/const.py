@@ -296,6 +296,9 @@ REFERENCE_DATA_ENDPOINT_LABELS = (
     # wait for the next day.
     "Grades/Categories",
     "Attendances/Types",
+    # Names of the class free-day types ("Wycieczka", ...) - a ClassFreeDays
+    # entry has no name of its own.
+    "ClassFreeDays/Types",
 )
 
 # The handful of degradable fetches that don't belong to any of the three

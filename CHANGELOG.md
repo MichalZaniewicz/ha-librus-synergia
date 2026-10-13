@@ -2,8 +2,21 @@
 
 ## Unreleased
 
+### Added
+- **Class free days have a name.** A class's free day comes from Librus
+  without a name of its own; the Free days calendar now shows its type
+  ("Wycieczka", "Rekolekcje"...) instead of a plain "Dzień wolny". One more
+  request a day (`Calendars/ClassFreeDays/Types`); a school that doesn't
+  allow it just keeps "Dzień wolny". (Thanks @keysim86 for reporting)
+- **Free days that free only some lessons.** Such a day shows as
+  "Rekolekcje (lekcje 3–4)" in the Free days calendar, with the lessons'
+  times in the description. It no longer counts as a day off for the
+  school-day sensors (School day today/tomorrow, In school, School start/end),
+  and the weekly AI summary and Assist say only those lessons are off.
+  (Thanks @keysim86 for reporting)
+
 ### Changed
-- **librus-synergia 0.3.28.** The free days calendar now uses the library's
+- **librus-synergia 0.3.29.** The free days calendar now uses the library's
   own filter for the student's class (the library had the same bug the
   integration fixed in 0.12.18, now fixed there too) - the integration's
   copy of the filter is gone. Nothing changes in what you see.

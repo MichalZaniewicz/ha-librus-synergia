@@ -727,3 +727,55 @@ async def test_timetable_other_weeks_are_fetched_and_cached(hass) -> None:
         events = await _get_timetable_events(hass, entity_id, _ON_DEMAND_DAYS_AHEAD)
         assert [e["summary"] for e in events] == ["Edukacja wczesnoszkolna"]
     assert client.async_get_timetable.call_count == 1
+
+
+async def test_free_days_named_after_type_and_partial_days(hass) -> None:
+    """A class free day has no Name - it's named after its type; one that
+    frees only some lessons stays an all-day event with the lessons in the
+    title and their times (from the timetable) in the description, and the
+    day is still a school day."""
+    from custom_components.librus_synergia.calendar import _free_day_events
+    from custom_components.librus_synergia.school_day import _free_dates
+
+    day = dt_util.now().date() + timedelta(days=1)
+    client = build_mock_client(
+        async_get_classes={"Class": {"Id": 42, "Number": 1, "Symbol": "b"}},
+        async_get_class_free_days={
+            "ClassFreeDays": [
+                {"Id": 1, "Class": {"Id": 42}, "Type": {"Id": 7},
+                 "DateFrom": _TOMORROW, "DateTo": _TOMORROW},
+                {"Id": 2, "Class": {"Id": 42}, "Type": {"Id": 8},
+                 "DateFrom": _TOMORROW, "DateTo": _TOMORROW,
+                 "LessonNoFrom": "3", "LessonNoTo": "4"},
+            ]
+        },
+        async_get_class_free_day_types={
+            "Types": [{"Id": 7, "Name": "Wycieczka"}, {"Id": 8, "Name": "Rekolekcje"}]
+        },
+        async_get_timetable={
+            "Timetable": {
+                _TOMORROW: [
+                    [{"LessonNo": "3", "HourFrom": "09:50", "HourTo": "10:35",
+                      "Subject": {"Id": "1"}, "Teacher": {"Id": "2"}}],
+                    [{"LessonNo": "4", "HourFrom": "10:45", "HourTo": "11:30",
+                      "Subject": {"Id": "1"}, "Teacher": {"Id": "2"}}],
+                ]
+            }
+        },
+    )
+    entry = await setup_integration(hass, client)
+    data = entry.runtime_data.data
+
+    by_id = {d.id: d for d in data.free_days}
+    assert by_id[1].name == "Wycieczka" and by_id[1].whole_day
+    assert by_id[2].name == "Rekolekcje" and not by_id[2].whole_day
+
+    events = {event.summary: event for event in _free_day_events(data)}
+    partial = events["Rekolekcje (lekcje 3–4)"]
+    assert partial.start == day and partial.end == day + timedelta(days=1)
+    assert partial.description == "Wolne lekcje 3–4: 09:50–11:30"
+    assert events["Wycieczka"].description is None
+
+    # Only the whole free day makes it a day off.
+    assert _free_dates(dataclasses.replace(data, free_days=[by_id[2]])) == set()
+    assert _free_dates(dataclasses.replace(data, free_days=[by_id[1]])) == {day}

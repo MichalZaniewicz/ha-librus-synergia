@@ -41,6 +41,7 @@ from .coordinator import (
     calculate_average,
     days_since_last_absence,
     days_since_last_negative_note,
+    free_day_lessons,
     grade_improvements,
     infer_subject_id,
     lesson_change,
@@ -252,6 +253,8 @@ class TimetableTool(_LibrusTool):
             free = next(
                 (
                     f.name
+                    if f.whole_day
+                    else f"{f.name} (only lessons {free_day_lessons(f)} off)"
                     for f in data.free_days
                     if (_day(f.date_from) or date.max) <= day <= (_day(f.date_to) or date.min)
                 ),
@@ -634,7 +637,15 @@ class UpcomingTool(_LibrusTool):
             if (_day(trip.date_from) or date.max) <= until and (_day(trip.date_to) or date.min) >= today
         ]
         free_days = [
-            {"name": f.name, "from": _dated(f.date_from), "to": _dated(f.date_to)}
+            _compact(
+                {
+                    "name": f.name,
+                    "from": _dated(f.date_from),
+                    "to": _dated(f.date_to),
+                    # Only these lessons are off, not the whole day.
+                    "only_lessons": free_day_lessons(f),
+                }
+            )
             for f in data.free_days
             if (_day(f.date_from) or date.max) <= until and (_day(f.date_to) or date.min) >= today
         ]

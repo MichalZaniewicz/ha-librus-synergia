@@ -84,6 +84,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_descriptive_skills,
     parse_grading_system,
     parse_partial_grades,
+    parse_free_day_types,
     parse_free_days,
     parse_grade_categories,
     parse_grade_value,
@@ -254,7 +255,10 @@ _READ_RECEIPT_MESSAGES = 5
 _MESSAGES_QUICK_RECHECKS = 3
 # Reference endpoints for a school setting that may be closed to an account
 # (403/404): the default is used instead of a degraded-endpoint issue.
-_SCHOOL_SETTING_LABELS = frozenset({"GradingSystem"})
+# Lookups a school or account may not be allowed to read: a 401/403/404 is
+# an empty answer (the default grade scale, unnamed class free days), not a
+# degraded endpoint.
+_SCHOOL_SETTING_LABELS = frozenset({"GradingSystem", "ClassFreeDays/Types"})
 # Optional modules a school may not have at all (no e-library, no access
 # to the year's plan changes): a refusal (401/403/404) is an empty answer,
 # asked again on the endpoint's own schedule - not a degraded endpoint.
@@ -594,6 +598,23 @@ def lesson_change(day: date, lesson: LessonData, data: LibrusData) -> dict[str, 
             elif same_lesson and lesson.room_changed:
                 result["kind"] = "room_change"
     return result
+
+
+def free_day_lesson_range(item: FreeDayData) -> tuple[int | None, int | None]:
+    """The first and last freed lesson of a free day that frees only some
+    lessons (one end alone stands for both); (None, None) for a whole day."""
+    first = item.lesson_no_from if item.lesson_no_from is not None else item.lesson_no_to
+    last = item.lesson_no_to if item.lesson_no_to is not None else item.lesson_no_from
+    return first, last
+
+
+def free_day_lessons(item: FreeDayData) -> str | None:
+    """ "3-5" (or "3") for a free day that frees only some lessons
+    (`LessonNoFrom` / `LessonNoTo`), None for a whole day off."""
+    if item.whole_day:
+        return None
+    first, last = free_day_lesson_range(item)
+    return str(first) if first == last else f"{first}-{last}"
 
 
 def state_store_key(entry_id: str) -> str:
@@ -3754,7 +3775,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         behaviour_grades_enabled = self._feature_enabled(
             CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
         )
-        # Seventeen requests on one session, next to the rest of the cycle's
+        # Eighteen requests on one session, next to the rest of the cycle's
         # (which now run alongside): a few at a time through the shared
         # limit is gentler on Librus and on the session.
         requests = (
@@ -3777,6 +3798,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._client.async_get_grading_system(),
             self._client.async_get_grade_categories(),
             self._client.async_get_attendance_types(),
+            self._maybe(free_days_enabled, self._client.async_get_class_free_day_types),
         )
         results = await asyncio.gather(
             *(self._limited(request) for request in requests), return_exceptions=True
@@ -3890,12 +3912,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # ClassFreeDays lists every class in the school - the library keeps
         # the student's class only (unknown class, e.g. a kindergarten
         # group: everything).
+        # A class entry has no name of its own - it's named after its type.
         self._cached_free_days = parse_free_days(
             payload("SchoolFreeDays"), "SchoolFreeDays"
         ) + parse_free_days(
             payload("ClassFreeDays"),
             "ClassFreeDays",
             class_id=self._cached_class.id if self._cached_class else None,
+            type_names=parse_free_day_types(payload("ClassFreeDays/Types")),
         )
         self._cached_note_categories = parse_id_name_map(
             payload("NoteCategories"), ("Categories",)

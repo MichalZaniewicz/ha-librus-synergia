@@ -52,6 +52,7 @@ from .coordinator import (
     calculate_average,
     days_since_last_absence,
     days_since_last_negative_note,
+    free_day_lessons,
     good_grade_streak,
     infer_subject_id,
     lesson_change,
@@ -557,7 +558,15 @@ def build_context(
     ]
     year_cancelled = sum(1 for change in data.plan_changes if change.kind == "cancelled")
     free_days = [
-        {"name": free.name, "from": _dated(free.date_from), "to": _dated(free.date_to)}
+        _compact(
+            {
+                "name": free.name,
+                "from": _dated(free.date_from),
+                "to": _dated(free.date_to),
+                # Only these lessons are off, not the whole day.
+                "only_lessons": free_day_lessons(free),
+            }
+        )
         for free in data.free_days
         if (_day(free.date_from) or date.max) <= next_to
         and (_day(free.date_to) or date.min) >= week_from

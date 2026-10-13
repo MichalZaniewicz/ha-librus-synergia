@@ -44,6 +44,9 @@ class SchoolDay:
 def _free_dates(data: LibrusData) -> set[date]:
     dates: set[date] = set()
     for free in data.free_days:
+        if not free.whole_day:
+            # Only some lessons are off - still a school day.
+            continue
         start, end = _day(free.date_from), _day(free.date_to)
         if start is None or end is None or end < start or (end - start).days > 400:
             continue

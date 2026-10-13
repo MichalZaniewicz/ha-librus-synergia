@@ -29,7 +29,13 @@ from .const import (
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
 )
-from .coordinator import LibrusDataUpdateCoordinator, lesson_change, on_demand_week_starts
+from .coordinator import (
+    LibrusDataUpdateCoordinator,
+    free_day_lesson_range,
+    free_day_lessons,
+    lesson_change,
+    on_demand_week_starts,
+)
 from .forecast import DataMemo
 
 _LOGGER = logging.getLogger(__name__)
@@ -383,19 +389,36 @@ def _pt_conferences_not_in_agenda(data: LibrusData) -> list[ParentTeacherConfere
     ]
 
 
-def _free_day_to_event(item: FreeDayData) -> CalendarEvent | None:
+def _free_day_to_event(
+    item: FreeDayData, bells: dict[int, tuple[str, str]] | None = None
+) -> CalendarEvent | None:
     try:
         start = date.fromisoformat(item.date_from[:10])
         end = date.fromisoformat(item.date_to[:10])
     except ValueError:
         return None
+    summary = item.name or "Dzień wolny"
+    description = None
+    if (lessons := free_day_lessons(item)) is not None:
+        # Only some lessons are off: still an all-day event (one calendar
+        # never mixes all-day and timed events - their starts can't be
+        # compared), the lessons in the title and their times, from the
+        # bell schedule, in the description.
+        shown = lessons.replace("-", "–")
+        summary = f"{summary} (lekcje {shown})"
+        first, last = free_day_lesson_range(item)
+        times = bells or {}
+        description = f"Wolne lekcje {shown}"
+        if first in times and last in times:
+            description += f": {times[first][0]}–{times[last][1]}"
     return CalendarEvent(
         start=start,
         # CalendarEvent's `end` for an all-day event is EXCLUSIVE (the day
         # after the last free day), matching _homework_to_event's
         # single-day convention above.
         end=end + timedelta(days=1),
-        summary=item.name or "Dzień wolny",
+        summary=summary,
+        description=description,
     )
 
 
@@ -420,9 +443,28 @@ def _agenda_events(data: LibrusData) -> list[CalendarEvent]:
     return _sorted_events(events)
 
 
+def _bell_times(data: LibrusData) -> dict[int, tuple[str, str]]:
+    """lesson number -> (start, end) - the most common times per period in
+    the fetched timetable."""
+    seen: dict[int, dict[tuple[str, str], int]] = {}
+    for lessons in data.timetable.values():
+        for lesson in lessons:
+            if lesson.lesson_no is None or not lesson.hour_from or not lesson.hour_to:
+                continue
+            slot = seen.setdefault(lesson.lesson_no, {})
+            key = (lesson.hour_from, lesson.hour_to)
+            slot[key] = slot.get(key, 0) + 1
+    return {number: max(slots, key=slots.__getitem__) for number, slots in seen.items()}
+
+
 def _free_day_events(data: LibrusData) -> list[CalendarEvent]:
+    bells = _bell_times(data) if any(not item.whole_day for item in data.free_days) else None
     return _sorted_events(
-        [event for item in data.free_days if (event := _free_day_to_event(item)) is not None]
+        [
+            event
+            for item in data.free_days
+            if (event := _free_day_to_event(item, bells)) is not None
+        ]
     )
 
 
