@@ -737,7 +737,10 @@ async def test_free_days_named_after_type_and_partial_days(hass) -> None:
     from custom_components.librus_synergia.calendar import _free_day_events
     from custom_components.librus_synergia.school_day import _free_dates
 
-    day = dt_util.now().date() + timedelta(days=1)
+    # The day the payloads below use - not "tomorrow" worked out again here:
+    # _TOMORROW is fixed at import, and the test time zone (US/Pacific) can
+    # be a day behind by now.
+    day = date.fromisoformat(_TOMORROW)
     client = build_mock_client(
         async_get_classes={"Class": {"Id": 42, "Number": 1, "Symbol": "b"}},
         async_get_class_free_days={
