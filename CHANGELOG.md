@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.20
 
 ### Added
 - **More for point-graded subjects.** A subject average sensor of a subject
