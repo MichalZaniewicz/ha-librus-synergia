@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.22
 
 ### Added
 - **The average change in the new grade event.** `librus_synergia_new_grade` now
@@ -16,8 +16,10 @@
   `fewest_absences_left` / `fewest_absences_left_subject`,
   `absence_budget_semester` and `absence_budget_until`. The lessons still
   to come are counted from the known timetable weeks and the standing
-  weekly plan, skipping free days; no extra Librus requests. Assist's
-  attendance answer and the weekly AI summary include it too.
+  weekly plan, skipping free days; no extra Librus requests. A subject that
+  isn't in the student's plan (e.g. religion they don't attend, with a few
+  old records) gets no estimate. Assist's attendance answer and the weekly
+  AI summary include it too.
 - **New blueprint: Few Absences Left.** Notifies once only a few lessons
   of some subject can still be missed this semester.
 - **New action: `librus_synergia.mark_message_read`.** Marks Wiadomości
@@ -25,12 +27,6 @@
   Wiadomości has no separate "mark read" call, so each message is opened,
   exactly as reading it in Librus does; the unread count drops straight
   away.
-
-### Fixed
-- **Absences left: no estimate for a subject outside the plan.** A subject
-  with old attendance records but no lesson in the student's plan (e.g.
-  religion the student doesn't attend) read "over half" for good; it's now
-  left out (beta.2).
 
 ## 0.12.20
 

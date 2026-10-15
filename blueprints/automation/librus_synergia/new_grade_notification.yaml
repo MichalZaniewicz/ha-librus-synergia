@@ -30,7 +30,7 @@ blueprint:
       name: Show the average change
       description: >
         Add a line with the subject's average before and after the new grade,
-        e.g. "Średnia: 4,20 → 4,35" (needs integration 0.12.21 or newer).
+        e.g. "Średnia: 4,20 → 4,35" (needs integration 0.12.22 or newer).
       default: true
       selector:
         boolean: {}
