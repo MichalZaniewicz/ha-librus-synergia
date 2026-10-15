@@ -164,6 +164,22 @@ def absence_budget(data: LibrusData, today: date) -> AbsenceBudget | None:
         if not kind.is_presence_kind:
             absent[subject_id] = absent.get(subject_id, 0) + 1
 
+    # Only subjects still in the student's plan: one that's gone from it
+    # (FOUND LIVE: a student who doesn't attend religion, with two old
+    # records) has nothing to estimate - it would read "over half" forever.
+    iso_today = today.isoformat()
+    in_plan: set[int | str] = {
+        slot.subject_id
+        for slot in data.standing_timetable
+        if slot.subject_id is not None and (slot.date_to is None or slot.date_to[:10] >= iso_today)
+    }
+    in_plan.update(
+        subject_id
+        for lessons in data.timetable.values()
+        for lesson in lessons
+        if (subject_id := _as_id(lesson.subject_id)) is not None
+    )
+
     whole_free, partly_free = _free_lessons(data)
     remaining: dict[int | str, int] = {}
     day = today + timedelta(days=1)
@@ -199,7 +215,7 @@ def absence_budget(data: LibrusData, today: date) -> AbsenceBudget | None:
             remaining=remaining.get(subject_id, 0),
         )
         for subject_id in set(held) | set(remaining)
-        if (name := data.subjects.get(subject_id))
+        if subject_id in in_plan and (name := data.subjects.get(subject_id))
     ]
     subjects.sort(key=lambda b: (b.left, b.subject))
     return AbsenceBudget(semester=number, end=end, subjects=subjects)

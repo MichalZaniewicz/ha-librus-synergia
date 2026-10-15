@@ -159,3 +159,13 @@ def test_second_semester_starts_counting_again() -> None:
 def test_outside_the_school_year() -> None:
     assert current_semester(_data(), date(2027, 7, 10)) is None
     assert absence_budget(_data(), date(2027, 7, 10)) is None
+
+
+def test_subject_no_longer_in_the_plan_is_left_out() -> None:
+    # FOUND LIVE: a student who doesn't attend religion had two old records
+    # and no religion lesson anywhere in the plan - "over half" forever.
+    plan = [slot for slot in _PLAN if slot.subject_id != _RELIGION]
+    timetable = {date(2026, 10, 21): [_lesson(_MATH, 1)]}
+    budget = absence_budget(_data(standing_timetable=plan, timetable=timetable), _TODAY)
+    assert budget is not None
+    assert [b.subject for b in budget.subjects] == ["Matematyka"]
