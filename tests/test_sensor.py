@@ -382,6 +382,10 @@ async def test_subject_attendance_sensor_reports_lowest_subject(hass) -> None:
     }
     assert state.attributes["at_risk"] == ["Matematyka"]
     assert state.attributes["min_records"] == 5
+    # No standing plan in the mock - no estimate rather than a wrong one
+    # (absence_budget.py; worked through in test_absence_budget.py).
+    assert state.attributes["absence_budget"] is None
+    assert state.attributes["fewest_absences_left"] is None
 
 
 async def test_subject_attendance_ignores_subjects_with_few_records(hass) -> None:

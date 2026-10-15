@@ -33,6 +33,7 @@ from homeassistant.util import dt as dt_util
 from librus_synergia.models import LibrusData
 from librus_synergia.parsers import plan_differences, point_grades_percentage
 
+from .absence_budget import absence_budget
 from .ai_summary import _compact, _cut, _dated, _day
 from .catch_up import catch_up
 from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
@@ -665,6 +666,22 @@ class UpcomingTool(_LibrusTool):
         )
 
 
+def _absences_left(data: LibrusData, today: date) -> dict[str, Any] | None:
+    """The six tightest subjects of the absence allowance (absence_budget.py)."""
+    budget = absence_budget(data, today)
+    if budget is None or not budget.subjects:
+        return None
+    return {
+        "semester": budget.semester,
+        "semester_ends": budget.end.isoformat(),
+        "note": "An estimate from the timetable; a negative number means already over half.",
+        "subjects_fewest_first": {
+            b.subject: {"absences_left": b.left, "absences_so_far": b.absent, "lessons_in_semester": b.expected}
+            for b in budget.subjects[:6]
+        },
+    }
+
+
 class AttendanceTool(_LibrusTool):
     name = "librus_get_attendance"
     description = (
@@ -673,7 +690,8 @@ class AttendanceTool(_LibrusTool):
         "classified), the dates of absences that still need an excuse, the "
         "justifications the parent sent with the school's decision, and what to catch "
         "up on after the latest absence (missed lessons with their topics, homework "
-        "given meanwhile)."
+        "given meanwhile), and an estimate of how many more lessons can be missed in "
+        "each subject this semester before more than half of them are missed."
     )
     parameters = _schema(
         {
@@ -756,6 +774,7 @@ class AttendanceTool(_LibrusTool):
                 ]
                 or None,
                 "catch_up_after_latest_absence": _catch_up_summary(data, today),
+                "absences_left_this_semester": _absences_left(data, today),
             }
         )
 

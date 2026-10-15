@@ -343,6 +343,24 @@
         }
       }
     },
+    "mark_message_read": {
+      "name": "Oznacz wiadomość jako przeczytaną",
+      "description": "Oznacza wiadomości z Wiadomości jako przeczytane, otwierając je - tak jak ich przeczytanie w Librusie. Puste ID oznacza wszystkie nieprzeczytane z listy skrzynki.",
+      "fields": {
+        "device_id": {
+          "name": "Urządzenie",
+          "description": "Urządzenie Librus Synergia (uczeń)."
+        },
+        "message_id": {
+          "name": "ID wiadomości",
+          "description": "\"id\" wiadomości z atrybutu \"recent\" (lub \"<skrzynka>_recent\") sensora Nieprzeczytane wiadomości. Jedno lub więcej; puste oznacza wszystkie nieprzeczytane z listy."
+        },
+        "mailbox": {
+          "name": "Skrzynka",
+          "description": "Gdzie są wiadomości: inbox (domyślnie), substitutions, alerts, justifications albo archive/inbox."
+        }
+      }
+    },
     "withdraw_message": {
       "name": "Wycofaj wiadomość",
       "description": "Wycofuje wysłaną wiadomość, dopóki Librus na to pozwala. Wymaga włączonej opcji \"Pozwól wysyłać wiadomości (beta)\" w Konfiguracji.",

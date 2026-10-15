@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Absences left per subject.** The Lowest subject attendance sensor now
+  estimates, for every subject, how many more lessons can be missed this
+  semester before more than half of them are missed (the point past which
+  a student can be left unclassified): `absence_budget` (per subject:
+  `left`, `absent`, `allowed`, `held`, `remaining`),
+  `fewest_absences_left` / `fewest_absences_left_subject`,
+  `absence_budget_semester` and `absence_budget_until`. The lessons still
+  to come are counted from the known timetable weeks and the standing
+  weekly plan, skipping free days; no extra Librus requests. Assist's
+  attendance answer and the weekly AI summary include it too.
+- **New blueprint: Few Absences Left.** Notifies once only a few lessons
+  of some subject can still be missed this semester.
+- **New action: `librus_synergia.mark_message_read`.** Marks Wiadomości
+  messages read - one, a few, or every unread one on a mailbox's list.
+  Wiadomości has no separate "mark read" call, so each message is opened,
+  exactly as reading it in Librus does; the unread count drops straight
+  away.
+
 ## 0.12.20
 
 ### Added

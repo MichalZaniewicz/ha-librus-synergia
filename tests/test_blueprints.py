@@ -53,7 +53,7 @@ def _substitute(value: Any, inputs: dict[str, Any]) -> Any:
 
 
 def test_every_blueprint_is_checked() -> None:
-    assert len(BLUEPRINTS) >= 31
+    assert len(BLUEPRINTS) >= 32
 
 
 @pytest.mark.parametrize("path", BLUEPRINTS, ids=lambda p: p.name)

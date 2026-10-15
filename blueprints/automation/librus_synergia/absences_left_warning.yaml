@@ -1,0 +1,84 @@
+blueprint:
+  name: "Librus: Few Absences Left"
+  description: >
+    Runs your action when, in some subject, only a few more lessons can be
+    missed this semester before more than half of them are missed - the
+    point past which a student can be left unclassified
+    ("nieklasyfikowany"). Reads the Lowest subject attendance sensor's
+    `fewest_absences_left` attribute, an estimate from the timetable. Fires
+    once on the downward crossing, and again only after it has recovered
+    and dropped back.
+
+
+    Use `{{ absences_summary }}` in your action, or the raw fields:
+    `{{ trigger.to_state.attributes.fewest_absences_left }}` (absences
+    left, negative once over half),
+    `{{ trigger.to_state.attributes.fewest_absences_left_subject }}` (the
+    subject), `{{ trigger.to_state.attributes.absence_budget }}` (every
+    subject).
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/absences_left_warning.yaml
+  input:
+    subject_attendance_entity:
+      name: Lowest subject attendance sensor
+      description: The Librus "Lowest subject attendance" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    threshold:
+      name: Alert when fewer absences than this are left
+      description: >-
+        With 4, the action runs once only 3 or fewer lessons of a subject
+        can still be missed this semester.
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          mode: box
+    notify_action:
+      name: Notification action
+      description: The action to run when few absences are left in a subject.
+      selector:
+        action: {}
+
+variables:
+  threshold: !input threshold
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input subject_attendance_entity
+    attribute: fewest_absences_left
+    below: !input threshold
+
+conditions:
+  # numeric_state also fires when the attribute first gets a value; only
+  # act on a real downward crossing.
+  - condition: template
+    value_template: >-
+      {% set before = trigger.from_state.attributes.fewest_absences_left
+         if trigger.from_state is not none else none %}
+      {{ before is number and before >= (threshold | int(4)) }}
+
+actions:
+  - variables:
+      left: "{{ trigger.to_state.attributes.fewest_absences_left | int(0) }}"
+      subject_name: "{{ trigger.to_state.attributes.fewest_absences_left_subject | default('', true) }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(trigger.entity_id, 'name') or '') | replace('E-dziennik ', '') }}
+      absences_summary: >-
+        {% set what = ('z przedmiotu ' ~ subject_name) if subject_name else 'z jednego z przedmiotów' %}
+        {% set n = left | int(0) %}
+        {% set word = 'lekcje' if n % 10 in [2, 3, 4] and n % 100 not in [12, 13, 14] else 'lekcji' %}
+        {% if n < 0 %}{% set text = 'nieobecności ' ~ what ~ ' przekroczyły już połowę lekcji w tym semestrze.' %}
+        {% elif n == 0 %}{% set text = what ~ ' nie można już opuścić żadnej lekcji w tym semestrze, żeby nie przekroczyć połowy.' %}
+        {% elif n == 1 %}{% set text = what ~ ' można jeszcze opuścić tylko 1 lekcję w tym semestrze.' %}
+        {% else %}{% set text = what ~ ' można jeszcze opuścić tylko ' ~ n ~ ' ' ~ word ~ ' w tym semestrze.' %}
+        {% endif %}
+        {{ (student_name ~ ': ' ~ text) if student_name else (text[:1] | upper) ~ text[1:] }}
+  - sequence: !input notify_action
+
+mode: single

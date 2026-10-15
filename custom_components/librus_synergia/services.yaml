@@ -106,6 +106,30 @@ mark_announcement_read:
       selector:
         text:
           multiple: true
+mark_message_read:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    message_id:
+      required: false
+      example: "100002"
+      selector:
+        text:
+          multiple: true
+    mailbox:
+      required: false
+      default: inbox
+      selector:
+        select:
+          options:
+            - inbox
+            - substitutions
+            - alerts
+            - justifications
+            - archive/inbox
 withdraw_message:
   fields:
     device_id:

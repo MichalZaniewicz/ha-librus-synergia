@@ -19,6 +19,9 @@
 - `mark_announcement_read` - marks school notices read in Librus (one, a
   few, or every unread one), as opening them there does. A person's action
   (the Announcements card does it when you open a notice) - never polling.
+- `mark_message_read` - marks Wiadomości messages read (one, a few, or
+  every unread one on a mailbox's list) by opening them, the only way
+  Wiadomości offers. Also only ever a person's action.
 """
 
 from __future__ import annotations
@@ -63,6 +66,7 @@ SERVICE_GET_MESSAGE_RECIPIENTS = "get_message_recipients"
 SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_WITHDRAW_MESSAGE = "withdraw_message"
 SERVICE_MARK_ANNOUNCEMENT_READ = "mark_announcement_read"
+SERVICE_MARK_MESSAGE_READ = "mark_message_read"
 _SERVICES = (
     SERVICE_GET_MESSAGE,
     SERVICE_REFRESH,
@@ -71,6 +75,7 @@ _SERVICES = (
     SERVICE_SEND_MESSAGE,
     SERVICE_WITHDRAW_MESSAGE,
     SERVICE_MARK_ANNOUNCEMENT_READ,
+    SERVICE_MARK_MESSAGE_READ,
 )
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
@@ -109,6 +114,17 @@ _MARK_ANNOUNCEMENT_READ_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): cv.string,
         vol.Optional("announcement_id"): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
+
+# No `message_id`: every unread message on the mailbox's list.
+_MARK_MESSAGE_READ_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Optional("message_id"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("mailbox", default="inbox"): vol.In(
+            ["inbox", "substitutions", "alerts", "justifications", "archive/inbox"]
+        ),
     }
 )
 
@@ -357,6 +373,25 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_MARK_ANNOUNCEMENT_READ,
         _async_handle_mark_announcement_read,
         schema=_MARK_ANNOUNCEMENT_READ_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    async def _async_handle_mark_message_read(call: ServiceCall) -> ServiceResponse:
+        """Marks the given messages (or every unread one on the mailbox's
+        list) read, by opening each one - Wiadomości has no other way."""
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        ids: list[str] | None = call.data.get("message_id") or None
+        try:
+            marked = await coordinator.async_mark_messages_read(call.data["mailbox"], ids)
+        except LibrusError as err:
+            raise HomeAssistantError(f"Librus didn't mark the message read: {err}") from err
+        return {"marked": marked}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MARK_MESSAGE_READ,
+        _async_handle_mark_message_read,
+        schema=_MARK_MESSAGE_READ_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )
 

@@ -343,6 +343,24 @@
         }
       }
     },
+    "mark_message_read": {
+      "name": "Mark message read",
+      "description": "Marks Wiadomości messages read by opening them, as reading them in Librus does. Leave the ID empty to mark every unread message on the mailbox's list.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The Librus Synergia device (student)."
+        },
+        "message_id": {
+          "name": "Message ID",
+          "description": "The message's \"id\" from the Unread messages sensor's \"recent\" (or \"<mailbox>_recent\") attribute. One or more; empty marks every unread message on the list."
+        },
+        "mailbox": {
+          "name": "Mailbox",
+          "description": "Where the messages are: inbox (default), substitutions, alerts, justifications or archive/inbox."
+        }
+      }
+    },
     "withdraw_message": {
       "name": "Withdraw message",
       "description": "Withdraws a message you sent, while Librus still allows it. Needs \"Allow sending messages (beta)\" on under Configure.",

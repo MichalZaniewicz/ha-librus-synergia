@@ -40,6 +40,7 @@ from homeassistant.util import dt as dt_util
 
 from librus_synergia.models import LibrusData
 
+from .absence_budget import MIN_HELD, absence_budget
 from .const import (
     AI_AUDIENCE_STUDENT,
     AVERAGE_MODE_ARITHMETIC,
@@ -270,6 +271,22 @@ def _is_schema_error(err: BaseException) -> bool:
     return isinstance(err, ServiceValidationError) or any(
         cls.__name__ == "Invalid" for cls in type(err).__mro__
     )
+
+
+# A subject with at most this many absences left this semester is mentioned.
+_FEW_ABSENCES_LEFT = 3
+
+
+def _few_absences_left(data: LibrusData, today: date) -> dict[str, int] | None:
+    budget = absence_budget(data, today)
+    if budget is None:
+        return None
+    tight = {
+        b.subject: b.left
+        for b in budget.subjects
+        if b.held >= MIN_HELD and b.left <= _FEW_ABSENCES_LEFT
+    }
+    return tight or None
 
 
 def _compact(values: dict[str, Any]) -> dict[str, Any]:
@@ -693,6 +710,9 @@ def build_context(
                 "school_year_substituted": len(data.plan_changes) - year_cancelled
                 if data.plan_changes
                 else None,
+                # Subjects close to missing more than half of the semester's
+                # lessons (an estimate - absence_budget.py).
+                "few_absences_left_this_semester": _few_absences_left(data, today),
             }
         ),
         "new_school_documents": documents,

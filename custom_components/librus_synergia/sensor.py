@@ -69,6 +69,7 @@ from .coordinator import (
 from .coordinator import (
     calculate_average as _calculate_average,
 )
+from .absence_budget import MIN_HELD, AbsenceBudget, absence_budget
 from .catch_up import catch_up
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts
 from .average_history import points_statistic_id
@@ -1209,7 +1210,7 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     `subject` and `at_risk`."""
 
     _attr_translation_key = "subject_attendance"
-    _unrecorded_attributes = frozenset({"subjects"})
+    _unrecorded_attributes = frozenset({"subjects", "absence_budget"})
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 1
@@ -1241,6 +1242,18 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
             return None
         subjects = _subject_attendance(self.coordinator.data, self.coordinator.memo_owner)
         counted = self._counted(subjects)
+        budget = self._budget()
+        # The headline leaves out subjects with too few records this
+        # semester, like the state does (a teacher who doesn't take
+        # attendance would make it look alarming).
+        tightest = (
+            next(
+                (b for b in budget.subjects if b.held >= MIN_HELD),
+                None,
+            )
+            if budget
+            else None
+        )
         return {
             "subject": next(iter(counted), None),
             "subjects": subjects,
@@ -1250,7 +1263,23 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
                 if bucket["percentage"] < _SUBJECT_ATTENDANCE_RISK_PERCENTAGE
             ],
             "min_records": _SUBJECT_ATTENDANCE_MIN_RECORDS,
+            # How many more lessons can be missed this semester before more
+            # than half are missed - an estimate, see absence_budget.py.
+            "absence_budget": (
+                {b.subject: b.as_dict() for b in budget.subjects} if budget else None
+            ),
+            "absence_budget_semester": budget.semester if budget else None,
+            "absence_budget_until": budget.end.isoformat() if budget else None,
+            "fewest_absences_left": tightest.left if tightest else None,
+            "fewest_absences_left_subject": tightest.subject if tightest else None,
         }
+
+    def _budget(self) -> AbsenceBudget | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        today = dt_util.now().date()
+        return self._cached("absence_budget", today, lambda: absence_budget(data, today))
 
 
 # ----------------------------------------------------------------------

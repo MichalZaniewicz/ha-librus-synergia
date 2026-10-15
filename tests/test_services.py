@@ -432,3 +432,111 @@ async def test_mark_announcement_read_refused_raises(hass) -> None:
         )
     # Nothing shows read when Librus refused.
     assert hass.states.get(_notices_entity(hass, entry)).state == "2"
+
+
+def _inbox(*items: tuple[str, str | None]) -> dict:
+    return {
+        "data": [
+            {
+                "messageId": message_id,
+                "senderName": "Nowak Anna",
+                "topic": f"Temat {message_id}",
+                "content": "RHppZWQgZG9icnk=",
+                "sendDate": "2026-10-14T08:00:00",
+                "readDate": read_date,
+                "isAnyFileAttached": False,
+            }
+            for message_id, read_date in items
+        ]
+    }
+
+
+def _messages_entity(hass, entry) -> str:
+    from homeassistant.helpers import entity_registry as er
+
+    return next(
+        e.entity_id
+        for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        if e.unique_id.endswith("_unread_messages")
+    )
+
+
+def _client_with_inbox() -> object:
+    from .conftest import messages_by_mailbox
+
+    client = build_mock_client(
+        async_bootstrap_messages=True,
+        async_get_unread_messages_count={"data": {"inbox": 2}},
+    )
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {"inbox": _inbox(("100001", None), ("100002", None), ("100003", "2026-10-13T10:00:00"))}
+    )
+    return client
+
+
+async def test_mark_message_read_without_id_opens_every_unread(hass) -> None:
+    client = _client_with_inbox()
+    entry = await setup_integration(hass, client)
+    entity_id = _messages_entity(hass, entry)
+    assert hass.states.get(entity_id).state == "2"
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "mark_message_read",
+        {"device_id": _device_id(hass, entry)},
+        blocking=True,
+        return_response=True,
+    )
+    await hass.async_block_till_done()
+
+    assert response == {"marked": ["100001", "100002"]}
+    # Opening a message is what marks it read in Wiadomości.
+    assert [c.args for c in client.async_get_message.await_args_list] == [
+        ("inbox", "100001"),
+        ("inbox", "100002"),
+    ]
+    state = hass.states.get(entity_id)
+    assert state.state == "0"
+    assert state.attributes["mailbox_breakdown"]["inbox"] == 0
+    assert [m["unread"] for m in state.attributes["recent"]] == [False, False, False]
+
+
+async def test_mark_message_read_one_message(hass) -> None:
+    client = _client_with_inbox()
+    entry = await setup_integration(hass, client)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        "mark_message_read",
+        {"device_id": _device_id(hass, entry), "message_id": "100002"},
+        blocking=True,
+        return_response=True,
+    )
+    await hass.async_block_till_done()
+
+    assert response == {"marked": ["100002"]}
+    state = hass.states.get(_messages_entity(hass, entry))
+    assert state.state == "1"
+    unread = {m["id"]: m["unread"] for m in state.attributes["recent"]}
+    assert unread == {"100001": True, "100002": False, "100003": False}
+
+
+async def test_mark_message_read_refused_raises(hass) -> None:
+    from librus_synergia import LibrusUnexpectedResponseError
+
+    client = _client_with_inbox()
+    client.async_get_message.side_effect = LibrusUnexpectedResponseError(
+        "HTTP 500", status_code=500
+    )
+    entry = await setup_integration(hass, client)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "mark_message_read",
+            {"device_id": _device_id(hass, entry), "message_id": "100001"},
+            blocking=True,
+            return_response=True,
+        )
+    # Nothing shows read when Librus refused.
+    assert hass.states.get(_messages_entity(hass, entry)).state == "2"

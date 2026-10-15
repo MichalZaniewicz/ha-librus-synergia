@@ -543,6 +543,25 @@ _POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
 # `_async_get_messages`' result when nothing was fetched.
 _NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [], [], [])
 
+# Mailboxes `mark_message_read` takes -> the LibrusData list holding them,
+# and their place in the messages tuple above (count, counts, inbox,
+# substitutions, alerts, justifications, outbox, archive). Sent messages
+# are left out: there's nothing of ours to mark read there.
+_MARKABLE_MAILBOXES: dict[str, str] = {
+    "inbox": "messages",
+    "substitutions": "substitution_messages",
+    "alerts": "alert_messages",
+    "justifications": "justification_messages",
+    ARCHIVE_MAILBOX: "archived_messages",
+}
+_MESSAGE_TUPLE_POSITIONS: dict[str, int] = {
+    "inbox": 2,
+    "substitutions": 3,
+    "alerts": 4,
+    "justifications": 5,
+    ARCHIVE_MAILBOX: 7,
+}
+
 
 # Agenda fields whose change fires EVENT_AGENDA_CHANGED (names resolved
 # alongside, but compared by id so a renamed category isn't a change).
@@ -2630,6 +2649,82 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for n in self.data.school_notices
         ]
         self.data = dataclasses.replace(self.data, school_notices=notices)
+        self.async_update_listeners()
+
+    async def async_mark_messages_read(
+        self, mailbox: str, message_ids: list[str] | None
+    ) -> list[str]:
+        """Marks Wiadomości messages read (`mark_message_read` service) -
+        the given ids, or every unread one on the mailbox's list when None.
+        Wiadomości has no "mark read" call of its own: opening a message is
+        what marks it read (CONFIRMED live), so each one is opened through
+        `async_fetch_message` and its body dropped. They show read straight
+        away; the next poll brings Librus's own counts anyway. Returns the
+        ids marked; a refusal raises after the ones before it are shown
+        read."""
+        if mailbox not in _MARKABLE_MAILBOXES:
+            raise ValueError(f"Unknown mailbox: {mailbox}")
+        if message_ids is None:
+            listed = self._mailbox_messages(mailbox)
+            message_ids = [m.id for m in listed if m.read_date is None]
+        done: list[str] = []
+        try:
+            for message_id in message_ids:
+                await self.async_fetch_message(mailbox, message_id)
+                done.append(message_id)
+        finally:
+            if done:
+                self._show_messages_read(mailbox, set(done))
+        return done
+
+    def _mailbox_messages(self, mailbox: str) -> list[MessageData]:
+        if self.data is None:
+            return []
+        return list(getattr(self.data, _MARKABLE_MAILBOXES[mailbox]))
+
+    def _show_messages_read(self, mailbox: str, message_ids: set[str]) -> None:
+        """Shows the given messages read without waiting for the next poll:
+        `read_date` set on the listed copies and the mailbox's unread count
+        lowered by the ones that were unread - in the data and in the last
+        messages kept for a failed cycle."""
+        read_at = dt_util.utcnow().isoformat()
+
+        def mark(messages: list[MessageData]) -> tuple[list[MessageData], int]:
+            newly = 0
+            marked: list[MessageData] = []
+            for m in messages:
+                if m.id in message_ids and m.read_date is None:
+                    newly += 1
+                    marked.append(dataclasses.replace(m, read_date=read_at))
+                else:
+                    marked.append(m)
+            return marked, newly
+
+        def lower(counts: dict[str, int], newly: int) -> dict[str, int]:
+            counts = dict(counts)
+            if mailbox in counts:
+                counts[mailbox] = max(0, counts[mailbox] - newly)
+            return counts
+
+        position = _MESSAGE_TUPLE_POSITIONS[mailbox]
+        if self._last_messages is not None:
+            last = list(self._last_messages)
+            last[position], newly = mark(last[position])
+            last[1] = lower(last[1], newly)
+            if mailbox == "inbox":
+                last[0] = max(0, last[0] - newly)
+            self._last_messages = tuple(last)
+        if self.data is None:
+            return
+        field_name = _MARKABLE_MAILBOXES[mailbox]
+        messages, newly = mark(getattr(self.data, field_name))
+        changes: dict[str, Any] = {
+            field_name: messages,
+            "unread_messages_by_mailbox": lower(self.data.unread_messages_by_mailbox, newly),
+        }
+        if mailbox == "inbox":
+            changes["unread_message_count"] = max(0, self.data.unread_message_count - newly)
+        self.data = dataclasses.replace(self.data, **changes)
         self.async_update_listeners()
 
     async def _async_refresh_outbox(self) -> None:
