@@ -11,11 +11,14 @@ blueprint:
     `{{ trigger.event.data.subject }}`, `{{ trigger.event.data.value }}`,
     `{{ trigger.event.data.teacher }}`,
     `{{ trigger.event.data.category }}`, `{{ trigger.event.data.weight }}`,
-    `{{ trigger.event.data.comments }}` (a list), `{{ trigger.event.data.date }}`
+    `{{ trigger.event.data.comments }}` (a list), `{{ trigger.event.data.date }}`,
+    `{{ trigger.event.data.average_before }}` / `{{ trigger.event.data.average_after }}`
+    (the subject's average without and with the new grade)
     or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
     semester / final_proposition / final / text / descriptive - a descriptive
     grade's category is the skill it is for).
-    With "Include details" on, `grade_summary` gets a second line with the
+    With "Show the average change" on, `grade_summary` gets a line like
+    "Średnia: 4,20 → 4,35". With "Include details" on, it gets a line with the
     category, weight, date, teacher and the teacher's comment. If you use this
     blueprint for more than one child, `grade_summary` is already prefixed
     with `{{ trigger.event.data.student }}` (the child's name) so one shared
@@ -23,6 +26,14 @@ blueprint:
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_grade_notification.yaml
   input:
+    include_average:
+      name: Show the average change
+      description: >
+        Add a line with the subject's average before and after the new grade,
+        e.g. "Średnia: 4,20 → 4,35" (needs integration 0.12.21 or newer).
+      default: true
+      selector:
+        boolean: {}
     include_details:
       name: Include details
       description: >
@@ -38,6 +49,7 @@ blueprint:
         action: {}
 
 variables:
+  include_average: !input include_average
   include_details: !input include_details
 
 triggers:
@@ -55,6 +67,10 @@ actions:
           'final': 'Ocena roczna',
         } -%}
         {{ (d.student ~ ': ') if d.student else '' }}{{ kinds.get(d.kind, 'Nowa ocena') }}: {{ d.value }}{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}
+        {%- if include_average and d.average_after is number -%}
+          {%- set after = ('%.2f' | format(d.average_after)) | replace('.', ',') %}
+        Średnia: {{ (('%.2f' | format(d.average_before)) | replace('.', ',') ~ ' → ' ~ after) if d.average_before is number else after }}
+        {%- endif -%}
         {%- if include_details -%}
           {%- set parts = [] -%}
           {%- if d.category -%}{%- set parts = parts + [d.category] -%}{%- endif -%}

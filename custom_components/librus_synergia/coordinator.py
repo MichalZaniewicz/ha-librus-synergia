@@ -4815,6 +4815,24 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return data.subjects.get(subject_id, str(subject_id))
 
         improves, _ = grade_improvements(data.grades)
+        # The subject's average before this cycle's new grades and with them,
+        # computed like the subject average sensor (whole year, the selected
+        # average mode, the school's grading scale). Several new grades in one
+        # subject share the same pair.
+        new_ids = {grade.id for grade in changes.grades}
+        earlier = [grade for grade in data.grades if grade.id not in new_ids]
+
+        def subject_average(grades: list[GradeData], subject_id: Any) -> float | None:
+            if subject_id is None:
+                return None
+            return calculate_average(
+                grades,
+                data.grade_categories,
+                subject_id=subject_id,
+                weighted=self.weighted_average,
+                grading=data.grading_system,
+            )
+
         for grade in changes.grades:
             fire(
                 EVENT_NEW_GRADE,
@@ -4824,6 +4842,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     "subject": subject_name(grade.subject_id),
                     "value": grade.value,
                     "teacher": _teacher_name(data, grade.teacher_id),
+                    "average_before": subject_average(earlier, grade.subject_id),
+                    "average_after": subject_average(data.grades, grade.subject_id),
                     **_grade_event_details(grade, data.grade_categories, improves),
                 },
             )

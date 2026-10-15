@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- **The average change in the new grade event.** `librus_synergia_new_grade` now
+  carries `average_before` and `average_after`: the subject's average without
+  and with the new grade, computed like the subject average sensor. The New
+  Grade Notification blueprint shows it as "Średnia: 4,20 → 4,35" (new
+  input "Show the average change", on by default).
 - **Absences left per subject.** The Lowest subject attendance sensor now
   estimates, for every subject, how many more lessons can be missed this
   semester before more than half of them are missed (the point past which
@@ -20,6 +25,12 @@
   Wiadomości has no separate "mark read" call, so each message is opened,
   exactly as reading it in Librus does; the unread count drops straight
   away.
+
+### Fixed
+- **Absences left: no estimate for a subject outside the plan.** A subject
+  with old attendance records but no lesson in the student's plan (e.g.
+  religion the student doesn't attend) read "over half" for good; it's now
+  left out (beta.2).
 
 ## 0.12.20
 

@@ -152,6 +152,40 @@ async def test_new_grade_event_carries_details(hass) -> None:
     assert by_id[2]["kind"] == "semester_proposition"
 
 
+async def test_new_grade_event_carries_the_average_change(hass) -> None:
+    """The subject's average without and with the new grade, for a
+    notification like "Średnia: 3,00 → 4,00"."""
+    events = async_capture_events(hass, EVENT_NEW_GRADE)
+
+    def grade(grade_id: int, value: str) -> dict:
+        return {
+            "Id": grade_id,
+            "Grade": value,
+            "Category": {"Id": 10},
+            "Subject": {"Id": 100},
+            "Semester": 1,
+            "AddDate": "2026-09-01",
+        }
+
+    client = build_mock_client(
+        async_get_grade_categories={
+            "Categories": [{"Id": 10, "Name": "Sprawdzian", "Weight": 3, "CountToTheAverage": True}]
+        },
+        async_get_grades={"Grades": [grade(1, "3")]},
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    client.async_get_grades.return_value = {"Grades": [grade(1, "3"), grade(2, "5")]}
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    [event] = events
+    assert event.data["id"] == 2
+    assert event.data["average_before"] == 3.0
+    assert event.data["average_after"] == 4.0
+
+
 async def test_grade_seen_twice_is_not_re_announced(hass) -> None:
     """Union, not replace: a grade dropping out of a later fetch and then
     reappearing must not fire a second event for the same id."""
