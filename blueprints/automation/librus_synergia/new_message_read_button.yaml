@@ -1,0 +1,85 @@
+blueprint:
+  name: "Librus: New Message With a Read Button"
+  description: >
+    Sends a notification to a phone with the Home Assistant app whenever a
+    new Wiadomości message arrives, with a **Przeczytane** (read) button.
+    Tapping it marks the message read in Librus through
+    `librus_synergia.mark_message_read` - the same as opening it there - and
+    clears the notification. Ignoring the notification leaves the message
+    unread. The button stays active for 24 hours.
+
+
+    For any other notifier (a speaker, Telegram...) use the "New Message
+    Notification" blueprint instead.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_message_read_button.yaml
+  input:
+    notify_device:
+      name: Phone
+      description: The phone with the Home Assistant app to notify.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    open_path:
+      name: Open on tap
+      description: >-
+        The dashboard page to open when you tap the notification itself, e.g.
+        /szkola-dashboard/szkola.
+      default: /lovelace
+      selector:
+        text: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_message
+
+variables:
+  open_path: !input open_path
+
+actions:
+  - variables:
+      message_id: "{{ trigger.event.data.id }}"
+      action_id: "LIBRUS_READ_{{ trigger.event.data.entry_id }}_{{ trigger.event.data.id }}"
+      notification_tag: "librus-message-{{ trigger.event.data.id }}"
+      # The Librus device of the student the message is for (the event
+      # carries its config entry).
+      librus_device: >-
+        {%- set ns = namespace(dev=none) -%}
+        {%- for e in integration_entities('librus_synergia') if ns.dev is none and config_entry_id(e) == trigger.event.data.entry_id and device_id(e) -%}
+          {%- set ns.dev = device_id(e) -%}
+        {%- endfor -%}
+        {{ ns.dev }}
+  - device_id: !input notify_device
+    domain: mobile_app
+    type: notify
+    title: >-
+      {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość od {{ trigger.event.data.sender }}
+    message: "{{ trigger.event.data.topic }}"
+    data:
+      tag: "{{ notification_tag }}"
+      clickAction: "{{ open_path }}"
+      url: "{{ open_path }}"
+      actions:
+        - action: "{{ action_id }}"
+          title: "Przeczytane"
+  - wait_for_trigger:
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "{{ action_id }}"
+    timeout: "24:00:00"
+    continue_on_timeout: false
+  - action: librus_synergia.mark_message_read
+    data:
+      device_id: "{{ librus_device }}"
+      message_id: "{{ message_id }}"
+  - device_id: !input notify_device
+    domain: mobile_app
+    type: notify
+    message: clear_notification
+    data:
+      tag: "{{ notification_tag }}"
+
+mode: parallel
+max: 20

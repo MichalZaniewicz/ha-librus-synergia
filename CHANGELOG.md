@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Tests this week and next.** The Next exam sensor has `this_week` and
+  `next_week`: how many tests (`tests`) and short tests (`quizzes`,
+  "kartkówka") the Agenda has in that Monday-Sunday week, with each one's
+  day, subject and category (`items`). Also there when no test is coming.
+- **New blueprint: Heavy Week Ahead.** On the days and at the time you pick
+  (Sunday 18:00 by default) it counts the tests in the coming week and
+  notifies when there are at least 3: "Ola: w nadchodzącym tygodniu 3
+  sprawdziany i 2 kartkówki - pon Matematyka, wt Biologia (kartkówka), ...".
+- **New blueprint: New Message With a Read Button.** A notification on a
+  phone with the Home Assistant app for every new Wiadomości message, with
+  a **Przeczytane** button that marks it read in Librus
+  (`mark_message_read`) and clears the notification.
+
 ## 0.12.22
 
 ### Added

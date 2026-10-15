@@ -71,7 +71,7 @@ from .coordinator import (
 )
 from .absence_budget import MIN_HELD, AbsenceBudget, absence_budget
 from .catch_up import catch_up
-from .exam_prep import ExamPrep, exam_prep, topics_as_dicts
+from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, week_load
 from .average_history import points_statistic_id
 from .forecast import (
     HONOURS_AVERAGE,
@@ -2309,7 +2309,7 @@ class LibrusNextExamSensor(LibrusSensorBase):
     description (see `exam_prep.EXAM_RE`) - deliberately conservative."""
 
     _attr_translation_key = "next_exam"
-    _unrecorded_attributes = frozenset({"upcoming", "topics", "content"})
+    _unrecorded_attributes = frozenset({"upcoming", "topics", "content", "this_week", "next_week"})
     _attr_device_class = SensorDeviceClass.DATE
     _attr_icon = "mdi:file-document-alert-outline"
 
@@ -2330,14 +2330,32 @@ class LibrusNextExamSensor(LibrusSensorBase):
         preps = self._prep()
         return preps[0].day if preps else None
 
+    def _weeks(self) -> dict[str, Any]:
+        """Tests in this Monday-Sunday week and the next one (exam_prep.
+        week_load) - for "a heavy week ahead"."""
+        data = self.coordinator.data
+        if data is None:
+            return {}
+        today = dt_util.now().date()
+        monday = today - timedelta(days=today.weekday())
+        return self._cached(
+            "weeks",
+            today,
+            lambda: {
+                "this_week": week_load(data, monday),
+                "next_week": week_load(data, monday + timedelta(days=7)),
+            },
+        )
+
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         preps = self._prep()
         if not preps:
-            return None
+            return self._weeks() or None
         today = dt_util.now().date()
         first = preps[0]
         return {
+            **self._weeks(),
             "days_until": (first.day - today).days,
             "subject": first.subject,
             "category": first.category,

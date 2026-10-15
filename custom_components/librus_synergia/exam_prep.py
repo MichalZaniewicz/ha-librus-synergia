@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from librus_synergia.models import HomeworkEventData, LibrusData
@@ -106,6 +106,50 @@ def exam_dates_by_subject(data: LibrusData) -> dict[Any, list[date]]:
     for days in out.values():
         days.sort()
     return out
+
+
+# A short test ("kartkówka", "quiz") rather than a full one ("sprawdzian").
+QUIZ_RE = re.compile(r"kartków|quiz", re.IGNORECASE)
+
+
+def exam_kind(data: LibrusData, item: HomeworkEventData) -> str:
+    """"quiz" for a short test, "test" for anything else assessment-like -
+    by the category name first, then by the description (same order as
+    `is_exam`)."""
+    category = category_name(data, item)
+    if category is not None and EXAM_RE.search(category):
+        return "quiz" if QUIZ_RE.search(category) else "test"
+    return "quiz" if item.content and QUIZ_RE.search(item.content) else "test"
+
+
+def week_load(data: LibrusData, week_start: date) -> dict[str, Any]:
+    """The tests in one Monday-Sunday week of the Agenda: how many full
+    tests and short ones, and each with its day and subject - for a "heavy
+    week ahead" heads-up. Past days of the week count too."""
+    week_end = week_start + timedelta(days=6)
+    items: list[dict[str, Any]] = []
+    for item in data.homeworks:
+        day = _day(item.date)
+        if day is None or not week_start <= day <= week_end or not is_exam(data, item):
+            continue
+        items.append(
+            {
+                "date": day.isoformat(),
+                "subject": data.subjects.get(item.subject_id) if item.subject_id is not None else None,
+                "category": category_name(data, item),
+                "kind": exam_kind(data, item),
+            }
+        )
+    items.sort(key=lambda entry: (entry["date"], entry["subject"] or ""))
+    tests = sum(1 for entry in items if entry["kind"] == "test")
+    return {
+        "from": week_start.isoformat(),
+        "to": week_end.isoformat(),
+        "tests": tests,
+        "quizzes": len(items) - tests,
+        "total": len(items),
+        "items": items,
+    }
 
 
 def upcoming_exams(data: LibrusData, today: date) -> list[tuple[date, HomeworkEventData]]:
