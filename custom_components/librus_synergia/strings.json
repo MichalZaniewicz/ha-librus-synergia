@@ -353,7 +353,7 @@
         },
         "message_id": {
           "name": "Message ID",
-          "description": "The message's \"id\" from the Unread messages sensor's \"recent\" (or \"<mailbox>_recent\") attribute. One or more; empty marks every unread message on the list."
+          "description": "The message's \"id\" from the Unread messages sensor's \"recent\" (or a mailbox's own \"..._recent\") attribute. One or more; empty marks every unread message on the list."
         },
         "mailbox": {
           "name": "Mailbox",

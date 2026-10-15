@@ -353,7 +353,7 @@
         },
         "message_id": {
           "name": "ID wiadomości",
-          "description": "\"id\" wiadomości z atrybutu \"recent\" (lub \"<skrzynka>_recent\") sensora Nieprzeczytane wiadomości. Jedno lub więcej; puste oznacza wszystkie nieprzeczytane z listy."
+          "description": "\"id\" wiadomości z atrybutu \"recent\" (lub \"..._recent\" innej skrzynki) sensora Nieprzeczytane wiadomości. Jedno lub więcej; puste oznacza wszystkie nieprzeczytane z listy."
         },
         "mailbox": {
           "name": "Skrzynka",
