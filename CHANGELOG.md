@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.24
 
 ### Added
 - **Tests this week and next.** The Next exam sensor has `this_week` and
