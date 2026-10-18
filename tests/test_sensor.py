@@ -852,6 +852,36 @@ async def test_behaviour_grade_sensor_classic_scale(hass) -> None:
     assert state.attributes["comment"] == "Ocena zachowania miesiąc za IX/26."
     assert state.attributes["recent"][0]["grade"] == "bdb"
     assert state.attributes["recent"][0]["comments"] == ["Ocena zachowania miesiąc za IX/26."]
+    # The grade is for September, though it was added in October.
+    assert state.attributes["history"] == [
+        {
+            "month": "2026-09",
+            "grade": "bdb",
+            "name": "bardzo dobre",
+            "value": None,
+            "category": None,
+            "semester": None,
+            "date": "2026-10-05 08:20:25",
+        }
+    ]
+
+
+async def test_behaviour_grade_history_oldest_first(hass) -> None:
+    """Without a "za IX/26" comment the month comes from the add date."""
+    client = build_mock_client(
+        async_get_behaviour_grade_points={
+            "Grades": [
+                {"Id": 2, "BehaviourGrade": {"Id": 3}, "AddDate": "2026-11-04 10:00:00"},
+                {"Id": 1, "BehaviourGrade": {"Id": 1}, "AddDate": "2026-10-03 10:00:00"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "behaviour_grade"))
+    assert state.state == "db"
+    history = state.attributes["history"]
+    assert [(h["month"], h["grade"]) for h in history] == [("2026-10", "wz"), ("2026-11", "db")]
 
 
 async def test_descriptive_grades_sensor(hass) -> None:

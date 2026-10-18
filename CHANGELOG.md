@@ -15,6 +15,16 @@
   phone with the Home Assistant app for every new Wiadomości message, with
   a **Przeczytane** button that marks it read in Librus
   (`mark_message_read`) and clears the notification.
+- **Behaviour grade history.** The Behaviour grade sensor has `history`:
+  every grade of the year, oldest first, with `month` - the month the grade
+  is for ("2026-09"), read from a "za IX/26" comment, else the month it was
+  added. The Behaviour grade card draws a month strip from it.
+- **New blueprint: New Announcement With a Read Button.** A notification on a
+  phone with the Home Assistant app for every new announcement, with the
+  start of its text and a **Przeczytane** button that marks it read in Librus
+  (`mark_announcement_read`) and clears the notification.
+- `librus_synergia_new_announcement` now carries `content` (the first 500
+  characters).
 
 ## 0.12.22
 

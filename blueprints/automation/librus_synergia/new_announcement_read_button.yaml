@@ -1,0 +1,107 @@
+blueprint:
+  name: "Librus: New Announcement With a Read Button"
+  description: >
+    Sends a notification to a phone with the Home Assistant app whenever a
+    new school announcement ("ogłoszenie") appears, with the start of its
+    text and a **Przeczytane** (read) button. Tapping it marks the
+    announcement read in Librus through
+    `librus_synergia.mark_announcement_read` and clears the notification.
+    Ignoring the notification leaves it unread. The button stays active for
+    24 hours.
+
+
+    For any other notifier (a speaker, Telegram...) use the "New Announcement
+    Notification" blueprint instead.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_announcement_read_button.yaml
+  input:
+    notify_device:
+      name: Phone
+      description: The phone with the Home Assistant app to notify.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    text_length:
+      name: Text length
+      description: >-
+        How many characters of the announcement to show (0 = the title only).
+      default: 200
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 20
+          mode: slider
+    open_path:
+      name: Open on tap
+      description: >-
+        The dashboard page to open when you tap the notification itself, e.g.
+        /szkola-dashboard/szkola.
+      default: /lovelace
+      selector:
+        text: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_announcement
+
+variables:
+  open_path: !input open_path
+  text_length: !input text_length
+
+actions:
+  - variables:
+      announcement_id: "{{ trigger.event.data.id }}"
+      action_id: "LIBRUS_NOTICE_READ_{{ trigger.event.data.entry_id }}_{{ trigger.event.data.id }}"
+      notification_tag: "librus-notice-{{ trigger.event.data.id }}"
+      # Older integrations send no `content` - the title alone then.
+      body: >-
+        {%- set text = (trigger.event.data.content | default('', true)) | replace('\n', ' ') | trim -%}
+        {%- set limit = text_length | int(0) -%}
+        {%- if limit > 0 and text -%}
+          {{ trigger.event.data.subject }}: {{ text[:limit] }}{{ '…' if text | length > limit else '' }}
+        {%- else -%}
+          {{ trigger.event.data.subject }}
+        {%- endif -%}
+      # The Librus device of the student the announcement is for (the event
+      # carries its config entry).
+      librus_device: >-
+        {%- set ns = namespace(dev=none) -%}
+        {%- for e in integration_entities('librus_synergia') if ns.dev is none and config_entry_id(e) == trigger.event.data.entry_id and device_id(e) -%}
+          {%- set ns.dev = device_id(e) -%}
+        {%- endfor -%}
+        {{ ns.dev }}
+  - device_id: !input notify_device
+    domain: mobile_app
+    type: notify
+    title: >-
+      {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowe ogłoszenie
+    message: "{{ body }}"
+    data:
+      tag: "{{ notification_tag }}"
+      clickAction: "{{ open_path }}"
+      url: "{{ open_path }}"
+      actions:
+        - action: "{{ action_id }}"
+          title: "Przeczytane"
+  - wait_for_trigger:
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "{{ action_id }}"
+    timeout: "24:00:00"
+    continue_on_timeout: false
+  - action: librus_synergia.mark_announcement_read
+    data:
+      device_id: "{{ librus_device }}"
+      announcement_id: "{{ announcement_id }}"
+  - device_id: !input notify_device
+    domain: mobile_app
+    type: notify
+    message: clear_notification
+    data:
+      tag: "{{ notification_tag }}"
+
+mode: parallel
+max: 20

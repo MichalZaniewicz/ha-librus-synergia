@@ -4848,7 +4848,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 },
             )
         for notice in changes.announcements:
-            fire(EVENT_NEW_ANNOUNCEMENT, notice.id, {"subject": notice.subject})
+            fire(
+                EVENT_NEW_ANNOUNCEMENT,
+                notice.id,
+                {"subject": notice.subject, "content": (notice.content or "").strip()[:500]},
+            )
         for note in changes.notes:
             fire(
                 EVENT_NEW_NOTE,

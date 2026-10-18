@@ -37,7 +37,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 34 blueprints, 69 cards, no captcha" width="100%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 35 blueprints, 69 cards, no captcha" width="100%">
 </p>
 
 ## What it does

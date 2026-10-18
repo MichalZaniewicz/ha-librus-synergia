@@ -16,6 +16,7 @@ from custom_components.librus_synergia.const import (
     DOMAIN,
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_NEW_ABSENCE,
+    EVENT_NEW_ANNOUNCEMENT,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
@@ -1419,6 +1420,36 @@ async def test_new_homework_event_carries_resolved_subject_and_category(hass) ->
     assert events[0].data["subject"] == "Matematyka"
     assert events[0].data["category"] == "Sprawdzian"
     assert events[0].data["date"] == "2026-09-20"
+
+
+async def test_new_announcement_event_carries_content(hass) -> None:
+    """The Read-button blueprint shows the text and marks it read by id."""
+    events = async_capture_events(hass, EVENT_NEW_ANNOUNCEMENT)
+    client = build_mock_client()
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()
+
+    client.async_get_school_notices.return_value = {
+        "SchoolNotices": [
+            {
+                "Id": "LID-NBOARD-NOTICE-1",
+                "Subject": "Dzień otwarty",
+                "Content": "  Zapraszamy w sobotę. " + "x" * 600,
+                "StartDate": "2026-10-20",
+                "EndDate": "2026-10-25",
+                "CreationDate": "2026-10-18 09:00:00",
+                "WasRead": False,
+            }
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["id"] == "LID-NBOARD-NOTICE-1"
+    assert events[0].data["subject"] == "Dzień otwarty"
+    assert events[0].data["content"].startswith("Zapraszamy w sobotę.")
+    assert len(events[0].data["content"]) == 500
 
 
 async def test_timetable_change_event_not_re_fired_for_known_disruption(hass, freezer) -> None:
