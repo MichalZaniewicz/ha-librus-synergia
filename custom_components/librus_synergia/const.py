@@ -90,6 +90,12 @@ DEFAULT_HIDE_EMPTY_SUBJECTS = False
 CONF_MERGE_PARALLEL_LESSONS = "merge_parallel_lessons"
 DEFAULT_MERGE_PARALLEL_LESSONS = True
 
+# An emoji in front of timetable and Agenda calendar titles ("📐 Matematyka",
+# "📝 [Sprawdzian] ...") - see subject_emoji.py. Off by default: it changes
+# what every calendar consumer sees (the companion cards strip it).
+CONF_CALENDAR_EMOJI = "calendar_emoji"
+DEFAULT_CALENDAR_EMOJI = False
+
 # When False (set via the options flow), the coordinator skips the whole
 # Wiadomości (private messages) subsystem - its separate wiadomosci.librus.pl
 # session bootstrap plus the per-cycle unread-count/list calls. The Unread

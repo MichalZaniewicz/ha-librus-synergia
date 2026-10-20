@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Copy to calendar that keeps up.** New action
+  `librus_synergia.sync_calendar` copies tests, trips, meetings and days off
+  into another calendar (e.g. a family Google Calendar) and keeps the copies
+  up to date: a test moved to another day is moved there too, a cancelled
+  one is removed. Every copy carries a short `[librus-sync:...]` tag in its
+  description, so only those are ever changed - events people added by
+  hand and another child's copies stay untouched. Optional category filter,
+  title prefix (e.g. the child's name) and a dry run. The "Copy School
+  Events to a Calendar" blueprint now uses it and also runs when an Agenda
+  entry changes; events it copied before are taken over, not duplicated.
+  Moving and removing need a calendar that allows editing and deleting
+  (Google, Local Calendar); otherwise new entries are still added.
+- **Absences calendar.** One all-day entry per day with an absence or a
+  late arrival: "Nieobecność nieusprawiedliwiona (3 lekcje)", the lessons
+  and subjects in the description, and "Usprawiedliwienie wysłane" once a
+  justification was sent. Built from the attendance already fetched.
+- **Live lesson on the lock screen.** New blueprint "Live Lesson on the Lock
+  Screen": the lesson happening now, its room and a countdown to the bell,
+  or during a break what comes next - with a progress bar for the school
+  day. A Live Update on Android 16+, a Live Activity on iOS 17.2+ (Home
+  Assistant 2026.7+), an ordinary updating notification on older phones.
+  It updates only when a lesson starts or ends.
+- **Emoji in calendar titles** (option, off by default): "📐 Matematyka",
+  "📝 [Sprawdzian] Chemia: ..." in the timetable and Agenda calendars and
+  in calendar copies - easier to read on a phone or a watch. The companion
+  cards show titles without it.
+
+### Changed
+- **The class as the device model.** The device page shows "Klasa 7a by
+  Librus" instead of "Synergia by Librus", and follows the class into the
+  next school year.
+
 ## 0.12.26
 
 ### Added

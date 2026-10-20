@@ -22,6 +22,9 @@
 - `mark_message_read` - marks Wiadomości messages read (one, a few, or
   every unread one on a mailbox's list) by opening them, the only way
   Wiadomości offers. Also only ever a person's action.
+- `sync_calendar` - copies the Agenda and days off into another calendar
+  (e.g. a family Google Calendar) and keeps the copies up to date; see
+  calendar_sync.py.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.util import dt as dt_util
 
 from librus_synergia import LibrusError, LibrusMessageSendError
 from librus_synergia.parsers import (
@@ -45,7 +49,9 @@ from librus_synergia.parsers import (
 )
 
 from .const import (
+    CONF_CALENDAR_EMOJI,
     CONF_MESSAGE_SENDING_ENABLED,
+    DEFAULT_CALENDAR_EMOJI,
     DEFAULT_MESSAGE_SENDING_ENABLED,
     DOMAIN,
 )
@@ -67,6 +73,7 @@ SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_WITHDRAW_MESSAGE = "withdraw_message"
 SERVICE_MARK_ANNOUNCEMENT_READ = "mark_announcement_read"
 SERVICE_MARK_MESSAGE_READ = "mark_message_read"
+SERVICE_SYNC_CALENDAR = "sync_calendar"
 _SERVICES = (
     SERVICE_GET_MESSAGE,
     SERVICE_REFRESH,
@@ -76,6 +83,7 @@ _SERVICES = (
     SERVICE_WITHDRAW_MESSAGE,
     SERVICE_MARK_ANNOUNCEMENT_READ,
     SERVICE_MARK_MESSAGE_READ,
+    SERVICE_SYNC_CALENDAR,
 )
 
 _GET_MESSAGE_SCHEMA = vol.Schema(
@@ -125,6 +133,20 @@ _MARK_MESSAGE_READ_SCHEMA = vol.Schema(
         vol.Optional("mailbox", default="inbox"): vol.In(
             ["inbox", "substitutions", "alerts", "justifications", "archive/inbox"]
         ),
+    }
+)
+
+_SYNC_CALENDAR_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("target_calendar"): cv.entity_domain("calendar"),
+        vol.Optional("days", default=30): vol.All(vol.Coerce(int), vol.Range(min=1, max=180)),
+        # "sprawdzian, kartkówka" or a list; empty = every Agenda entry.
+        vol.Optional("categories"): vol.Any(cv.string, [cv.string]),
+        vol.Optional("free_days", default=True): cv.boolean,
+        # "Ola:" in front of every title - handy with more than one child.
+        vol.Optional("prefix"): cv.string,
+        vol.Optional("dry_run", default=False): cv.boolean,
     }
 )
 
@@ -560,6 +582,52 @@ def _async_setup_message_writing(hass: HomeAssistant) -> None:
         SERVICE_WITHDRAW_MESSAGE,
         _async_handle_withdraw,
         schema=_WITHDRAW_MESSAGE_SCHEMA,
+    )
+
+    async def _async_handle_sync_calendar(call: ServiceCall) -> ServiceResponse:
+        """Copy the student's Agenda (and days off) into another calendar,
+        keeping earlier copies up to date - see calendar_sync.py. Reads
+        `coordinator.data` only; no extra Librus request."""
+        # Here, not at the top: calendar_sync builds on calendar.py, which
+        # imports the package's __init__ - still loading when this module is.
+        from .calendar_sync import (  # noqa: PLC0415
+            async_sync_calendar,
+            parse_categories,
+            sync_items,
+        )
+
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        data = coordinator.data
+        entry = coordinator.config_entry
+        if data is None or entry is None:
+            raise HomeAssistantError("No Librus data yet - try again after the next refresh.")
+        today = dt_util.now().date()
+        days = call.data["days"]
+        items = sync_items(
+            data,
+            today=today,
+            days=days,
+            categories=parse_categories(call.data.get("categories")),
+            free_days=call.data["free_days"],
+            prefix=call.data.get("prefix") or "",
+            emoji=bool(entry.options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI)),
+        )
+        return await async_sync_calendar(
+            hass,
+            entry_id=entry.entry_id,
+            target_entity_id=call.data["target_calendar"],
+            items=items,
+            today=today,
+            days=days,
+            dry_run=call.data["dry_run"],
+        )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_CALENDAR,
+        _async_handle_sync_calendar,
+        schema=_SYNC_CALENDAR_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 

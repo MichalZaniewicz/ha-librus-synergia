@@ -1,0 +1,146 @@
+blueprint:
+  name: "Librus: Live Lesson on the Lock Screen"
+  description: >
+    Keeps today's lessons on the phone's lock screen for the whole school
+    day: the lesson happening now, its room and a countdown to the bell -
+    and during a break, what comes next and when. A progress bar shows how
+    much of the school day is behind. It starts with the first lesson and
+    disappears after the last one.
+
+
+    On Android 16+ it is a Live Update (pinned to the top of the shade, the
+    lock screen and the status bar); on iPhone with iOS 17.2+ a Live
+    Activity (lock screen and Dynamic Island, needs Home Assistant 2026.7+).
+    Older phones get an ordinary notification that is updated in place,
+    with a countdown on Android.
+
+
+    It updates only when a lesson starts or ends, never every minute - the
+    countdown runs on the phone itself.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/live_lesson_notification.yaml
+  input:
+    current_lesson:
+      name: Current lesson sensor
+      description: The student's Librus "Current lesson" sensor.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    next_lesson:
+      name: Next lesson sensor
+      description: The student's Librus "Next lesson" sensor.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+    in_school:
+      name: At school sensor
+      description: The student's Librus "At school" binary sensor (on from the first lesson to the last).
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: binary_sensor
+    notify_device:
+      name: Phone
+      description: The phone with the Home Assistant app.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    open_path:
+      name: Open on tap
+      description: The dashboard page to open when you tap it, e.g. /szkola-dashboard/szkola.
+      default: /lovelace
+      selector:
+        text: {}
+
+triggers:
+  - trigger: state
+    entity_id: !input in_school
+  - trigger: state
+    entity_id: !input current_lesson
+  - trigger: state
+    entity_id: !input next_lesson
+  - trigger: homeassistant
+    event: start
+
+variables:
+  current_entity: !input current_lesson
+  next_entity: !input next_lesson
+  school_entity: !input in_school
+  open_path: !input open_path
+  # The device is named "E-dziennik <first> <last>" by the integration.
+  student_first: >-
+    {{ ((device_attr(current_entity, 'name') or '') | replace('E-dziennik ', '')).split(' ')[0] }}
+  live_tag: "librus-live-{{ (device_id(current_entity) or 'student')[:40] }}"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_state(school_entity, 'on') }}"
+        sequence:
+          - variables:
+              day_start: "{{ as_timestamp(state_attr(school_entity, 'first_lesson_start'), 0) | int }}"
+              day_end: "{{ as_timestamp(state_attr(school_entity, 'last_lesson_end'), 0) | int }}"
+              now_ts: "{{ as_timestamp(now()) | int }}"
+              in_lesson: "{{ states(current_entity) not in ['unknown', 'unavailable', ''] }}"
+              lesson_entity: "{{ current_entity if in_lesson else next_entity }}"
+              subject: "{{ states(lesson_entity) }}"
+              room_raw: "{{ state_attr(lesson_entity, 'classroom') or '' }}"
+              room: >-
+                {{ '' if not room_raw else (room_raw if (room_raw | lower).startswith('sala') else 'sala ' ~ room_raw) }}
+              changed: >-
+                {{ {'substitution': 'zastępstwo', 'room_change': 'zmiana sali', 'moved': 'przeniesiona'}.get(state_attr(lesson_entity, 'change'), '') }}
+              target_ts: >-
+                {{ as_timestamp(state_attr(lesson_entity, 'end' if in_lesson else 'start'), 0) | int }}
+              next_is_today: >-
+                {{ (state_attr(next_entity, 'date') or '') == now().date().isoformat() }}
+              text: >-
+                {%- set parts = [subject] + ([room] if room else []) + ([changed] if changed else []) -%}
+                {%- if in_lesson -%}
+                  Teraz: {{ parts | join(' · ') }}
+                {%- elif next_is_today -%}
+                  Przerwa · dalej {{ parts | join(' · ') }} o {{ target_ts | timestamp_custom('%H:%M') }}
+                {%- else -%}
+                  Przerwa
+                {%- endif -%}
+              chip: >-
+                {{ ('do ' if in_lesson else 'o ') ~ (target_ts | timestamp_custom('%H:%M')) if target_ts else '' }}
+          - device_id: !input notify_device
+            domain: mobile_app
+            type: notify
+            title: "{{ (student_first ~ ' – ') if student_first else '' }}lekcje dziś"
+            message: "{{ text }}"
+            data:
+              tag: "{{ live_tag }}"
+              live_update: true
+              critical_text: "{{ chip }}"
+              chronometer: "{{ (target_ts > now_ts) and (in_lesson or next_is_today) }}"
+              when: "{{ target_ts }}"
+              progress: "{{ [now_ts - day_start, 0] | max }}"
+              progress_max: "{{ [day_end - day_start, 1] | max }}"
+              notification_icon: "{{ 'mdi:school' if in_lesson else 'mdi:coffee-outline' }}"
+              alert_once: true
+              sticky: true
+              silent: true
+              channel: Librus lekcje
+              importance: low
+              url: "{{ open_path }}"
+              clickAction: "{{ open_path }}"
+      # Lessons over (or Home Assistant restarted outside school hours):
+      # end it. Only then - not on every evening sensor change.
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.platform == 'homeassistant' or trigger.entity_id == school_entity }}
+        sequence:
+          - device_id: !input notify_device
+            domain: mobile_app
+            type: notify
+            message: clear_notification
+            data:
+              tag: "{{ live_tag }}"
+
+mode: restart

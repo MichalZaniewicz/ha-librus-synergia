@@ -2,21 +2,24 @@ blueprint:
   name: "Librus: Copy School Events to a Calendar"
   description: >
     Copies tests, quizzes, trips, meetings and days off (only those that fall
-    on a weekday) from Librus into a
-    calendar of your choice - for example a family Google Calendar - so the
-    whole family sees them outside Home Assistant.
+    on a weekday) from Librus into a calendar of your choice - for example a
+    family Google Calendar - so the whole family sees them outside Home
+    Assistant.
 
 
-    Runs once a day for the coming days and right after a new Agenda entry
-    appears. An entry already in the target calendar (same title, same day)
-    is skipped, so running it again never creates duplicates. Home Assistant
-    can only add events to a calendar, not move or remove them: if a teacher
-    moves a test, the new date is added and the old one has to be deleted by
-    hand.
+    Runs once a day, right after a new Agenda entry appears and when an
+    entry changes. The copies stay up to date: if a teacher moves a test,
+    it's moved in your calendar too, and a cancelled one is removed. Only
+    events this automation added are ever changed - they carry a short
+    "[librus-sync:...]" tag at the end of their description. Entries copied
+    by an older version of this blueprint (same title, same day) are taken
+    over instead of being added twice.
 
 
     The target calendar must allow adding events from Home Assistant (Google
-    Calendar, Local Calendar).
+    Calendar, Local Calendar). Moving and removing also need it to allow
+    editing and deleting events; otherwise new entries are still added and
+    old ones stay.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_calendar_sync.yaml
   input:
@@ -80,131 +83,27 @@ variables:
   # The device is named "E-dziennik <first> <last>" by the integration.
   student_first: >-
     {{ ((device_attr(agenda_cal, 'name') or '') | replace('E-dziennik ', '')).split(' ')[0] }}
-  # No trailing space here: Home Assistant trims rendered values, so the
-  # space after the colon is added where the title is built.
   prefix: "{{ (student_first ~ ':') if add_name and student_first else '' }}"
-  keywords: >-
-    {{ categories_raw.split(',') | map('trim') | map('lower') | reject('eq', '') | list }}
 
 triggers:
   - trigger: time
     at: !input sync_time
   - trigger: event
     event_type: librus_synergia_new_homework
+  - trigger: event
+    event_type: librus_synergia_agenda_changed
 
 conditions: []
 
 actions:
-  - action: calendar.get_events
-    target:
-      entity_id: "{{ target_cal }}"
+  - action: librus_synergia.sync_calendar
     data:
-      start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
-      duration:
-        days: "{{ days | int(30) + 1 }}"
-    response_variable: existing
-  - variables:
-      have_keys: >-
-        {%- set have = namespace(keys=[]) -%}
-        {%- for e in (existing[target_cal].events if target_cal in existing else []) -%}
-          {%- set have.keys = have.keys + [e.summary ~ '|' ~ (e.start | string)[:10]] -%}
-        {%- endfor -%}
-        {{ have.keys }}
-  - action: calendar.get_events
-    target:
-      entity_id: "{{ agenda_cal }}"
-    data:
-      start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
-      duration:
-        days: "{{ days | int(30) }}"
-    response_variable: agenda
-  - repeat:
-      for_each: >-
-        {%- set out = namespace(items=[]) -%}
-        {%- for e in (agenda[agenda_cal].events if agenda_cal in agenda else []) -%}
-          {%- set cat = (e.summary.split(']')[0][1:] if e.summary.startswith('[') else '') | lower -%}
-          {%- set ns = namespace(ok=(keywords | count == 0)) -%}
-          {%- for kw in keywords -%}{%- if kw in cat -%}{%- set ns.ok = true -%}{%- endif -%}{%- endfor -%}
-          {%- set title = ((prefix ~ ' ') if prefix else '') ~ e.summary -%}
-          {%- if ns.ok and (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
-            {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': e.description or ''}] -%}
-          {%- endif -%}
-        {%- endfor -%}
-        {{ out.items }}
-      sequence:
-        - if:
-            - condition: template
-              value_template: "{{ 'T' in (repeat.item.start | string) }}"
-          then:
-            - action: calendar.create_event
-              target:
-                entity_id: "{{ target_cal }}"
-              data:
-                summary: "{{ repeat.item.summary }}"
-                description: "{{ repeat.item.description }}"
-                start_date_time: "{{ repeat.item.start }}"
-                end_date_time: "{{ repeat.item.end }}"
-          else:
-            - action: calendar.create_event
-              target:
-                entity_id: "{{ target_cal }}"
-              data:
-                summary: "{{ repeat.item.summary }}"
-                description: "{{ repeat.item.description }}"
-                start_date: "{{ repeat.item.start }}"
-                end_date: "{{ repeat.item.end }}"
-  # Days off: fetched and copied inside their own block, so nothing
-  # depends on a response variable outliving the if.
-  - if:
-      - condition: template
-        value_template: "{{ free_cal not in ['', none] }}"
-    then:
-      - action: calendar.get_events
-        target:
-          entity_id: "{{ free_cal }}"
-        data:
-          start_date_time: "{{ now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat() }}"
-          duration:
-            days: "{{ days | int(30) }}"
-        response_variable: free_days
-      - repeat:
-          for_each: >-
-            {%- set out = namespace(items=[]) -%}
-            {%- for e in (free_days[free_cal].events if free_cal in free_days else []) -%}
-              {%- set title = ((prefix ~ ' ') if prefix else '') ~ 'Dzień wolny: ' ~ e.summary -%}
-              {#- A holiday on a Saturday or Sunday (e.g. 1 November 2026) is no
-                  day off from school: copy a free day only if it covers a weekday. -#}
-              {%- set s = as_datetime(e.start | string) -%}
-              {%- set n = (as_datetime(e.end | string) - s).days -%}
-              {%- set wk = namespace(any=false) -%}
-              {%- for i in range([n, 1] | max) -%}{%- if (s + timedelta(days=i)).weekday() < 5 -%}{%- set wk.any = true -%}{%- endif -%}{%- endfor -%}
-              {%- if wk.any and (title ~ '|' ~ (e.start | string)[:10]) not in have_keys -%}
-                {%- set out.items = out.items + [{'summary': title, 'start': e.start, 'end': e.end, 'description': ''}] -%}
-              {%- endif -%}
-            {%- endfor -%}
-            {{ out.items }}
-          sequence:
-            - if:
-                - condition: template
-                  value_template: "{{ 'T' in (repeat.item.start | string) }}"
-              then:
-                - action: calendar.create_event
-                  target:
-                    entity_id: "{{ target_cal }}"
-                  data:
-                    summary: "{{ repeat.item.summary }}"
-                    description: "{{ repeat.item.description }}"
-                    start_date_time: "{{ repeat.item.start }}"
-                    end_date_time: "{{ repeat.item.end }}"
-              else:
-                - action: calendar.create_event
-                  target:
-                    entity_id: "{{ target_cal }}"
-                  data:
-                    summary: "{{ repeat.item.summary }}"
-                    description: "{{ repeat.item.description }}"
-                    start_date: "{{ repeat.item.start }}"
-                    end_date: "{{ repeat.item.end }}"
+      device_id: "{{ device_id(agenda_cal) }}"
+      target_calendar: "{{ target_cal }}"
+      days: "{{ days | int(30) }}"
+      categories: "{{ categories_raw }}"
+      free_days: "{{ free_cal not in ['', none] }}"
+      prefix: "{{ prefix }}"
 
 mode: queued
 max: 3

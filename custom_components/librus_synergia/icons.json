@@ -36,6 +36,9 @@
       }
     },
     "calendar": {
+      "absences": {
+        "default": "mdi:account-cancel-outline"
+      },
       "agenda": {
         "default": "mdi:calendar-text-outline"
       },
@@ -310,6 +313,9 @@
     },
     "mark_message_read": {
       "service": "mdi:email-check-outline"
+    },
+    "sync_calendar": {
+      "service": "mdi:calendar-sync-outline"
     },
     "refresh": {
       "service": "mdi:refresh"

@@ -9,8 +9,8 @@ from datetime import time, timedelta
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_SCAN_INTERVAL, CONF_USERNAME
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
@@ -66,8 +66,20 @@ def librus_device_info(entry: LibrusConfigEntry) -> DeviceInfo:
         identifiers={(DOMAIN, entry.entry_id)},
         name=entry.title,
         manufacturer="Librus",
-        model="Synergia",
+        model=device_model(entry),
     )
+
+
+def device_model(entry: LibrusConfigEntry) -> str:
+    """The student's class as the device model ("Klasa 7a by Librus" on the
+    device page), "Synergia" until the class is known. A kindergarten group
+    (a name, no class number) keeps its own name."""
+    data = getattr(getattr(entry, "runtime_data", None), "data", None)
+    school_class = getattr(data, "school_class", None)
+    name = school_class.display_name if school_class is not None else ""
+    if not name:
+        return "Synergia"
+    return f"Klasa {name}" if school_class.number is not None else name
 
 
 def _reload_relevant(options: Any) -> dict[str, Any]:
@@ -177,6 +189,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    @callback
+    def _sync_device_model() -> None:
+        """The class changes with the school year (7a -> 8a) - keep the
+        device model in step without waiting for a reload."""
+        model = device_model(entry)
+        registry = dr.async_get(hass)
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+            if (DOMAIN, entry.entry_id) in device.identifiers and device.model != model:
+                registry.async_update_device(device.id, model=model)
+
+    entry.async_on_unload(coordinator.async_add_listener(_sync_device_model))
 
     # Grade-average history for long-term statistics (see average_history.py).
     average_history = LibrusAverageHistory(hass, coordinator)

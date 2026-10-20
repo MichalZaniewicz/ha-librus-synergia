@@ -48,7 +48,7 @@ AMBER = "#f6b14a"
 GREEN = "#5fc98a"
 RED = "#e27c81"
 
-STATS = [("35", "sensors"), ("16", "event entities"), ("35", "blueprints"), ("70", "cards"), ("0", "captcha")]
+STATS = [("35", "sensors"), ("16", "event entities"), ("36", "blueprints"), ("70", "cards"), ("0", "captcha")]
 
 _FONT_CACHE: dict[tuple[str, int], TTFont] = {}
 
@@ -240,7 +240,7 @@ def hero(fonts: Path) -> None:
 
 
 def stats(fonts: Path) -> None:
-    svg = Svg(1200, 120, "35 sensors, 16 event entities, 35 blueprints, 70 cards, no captcha")
+    svg = Svg(1200, 120, "35 sensors, 16 event entities, 36 blueprints, 70 cards, no captcha")
     svg.defs.append(f'<linearGradient id="sbg" x1="0" x2="1"><stop offset="0" stop-color="{DEEP}"/><stop offset="1" stop-color="#1d1946"/></linearGradient>')
     svg.add(f'<rect width="1200" height="120" rx="18" fill="url(#sbg)" stroke="{LINE}"/>')
     col = 1200 / len(STATS)

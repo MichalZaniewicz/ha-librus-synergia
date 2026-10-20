@@ -142,3 +142,43 @@ withdraw_message:
       example: "100002"
       selector:
         text:
+sync_calendar:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: librus_synergia
+    target_calendar:
+      required: true
+      selector:
+        entity:
+          domain: calendar
+    days:
+      required: false
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: days
+    categories:
+      required: false
+      example: "sprawdzian, kartkówka, wycieczka, zebranie"
+      selector:
+        text:
+    free_days:
+      required: false
+      default: true
+      selector:
+        boolean:
+    prefix:
+      required: false
+      example: "Ola:"
+      selector:
+        text:
+    dry_run:
+      required: false
+      default: false
+      selector:
+        boolean:

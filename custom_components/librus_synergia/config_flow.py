@@ -68,6 +68,7 @@ from .const import (
     CONF_ANNOUNCEMENTS_ENABLED,
     CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
+    CONF_CALENDAR_EMOJI,
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
@@ -92,6 +93,7 @@ from .const import (
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
+    DEFAULT_CALENDAR_EMOJI,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_HIDE_EMPTY_SUBJECTS,
@@ -468,6 +470,10 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     default=options.get(
                         CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS
                     ),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_CALENDAR_EMOJI,
+                    default=options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI),
                 ): BooleanSelector(),
                 vol.Required(
                     CONF_SMART_POLLING,

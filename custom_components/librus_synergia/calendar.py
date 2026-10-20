@@ -23,9 +23,12 @@ from librus_synergia.models import (
 )
 
 from . import LibrusConfigEntry, librus_device_info
+from .absence_days import absence_days
 from .const import (
+    CONF_CALENDAR_EMOJI,
     CONF_FREE_DAYS_ENABLED,
     CONF_MERGE_PARALLEL_LESSONS,
+    DEFAULT_CALENDAR_EMOJI,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
 )
@@ -37,6 +40,7 @@ from .coordinator import (
     on_demand_week_starts,
 )
 from .forecast import DataMemo
+from .subject_emoji import category_emoji, subject_emoji, with_emoji
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +64,7 @@ async def async_setup_entry(
     entities: list[CalendarEntity] = [
         LibrusTimetableCalendar(coordinator, entry),
         LibrusAgendaCalendar(coordinator, entry),
+        LibrusAbsencesCalendar(coordinator, entry),
     ]
     # Skipped entirely (not just left empty) when turned off in the options
     # flow - unlike the sensors gated the same way, a calendar entity has no
@@ -137,12 +142,12 @@ class _LessonParts:
     subject: str = ""
     cancelled: bool = False
 
-    def to_event(self) -> CalendarEvent:
+    def to_event(self, emoji: bool = False) -> CalendarEvent:
         description = "\n".join([self.teacher or "", *self.details]).strip() or None
         return CalendarEvent(
             start=self.start,
             end=self.end,
-            summary=self.summary,
+            summary=with_emoji(subject_emoji(self.subject), self.summary) if emoji else self.summary,
             location=self.location,
             description=description,
         )
@@ -160,7 +165,9 @@ def _join_unique(values: list[str | None], separator: str) -> str | None:
 
 
 def _merge_parts(
-    group: list[_LessonParts], cancelled: list[_LessonParts] | None = None
+    group: list[_LessonParts],
+    cancelled: list[_LessonParts] | None = None,
+    emoji: bool = False,
 ) -> CalendarEvent:
     """One event for lessons held at the same time (issue #14 - e.g. a
     subject plus "Wspomaganie", a support teacher in the same room, or
@@ -189,7 +196,9 @@ def _merge_parts(
         teacher=_join_unique([p.teacher for p in group], ", "),
         details=details,
         changed=False,
-    ).to_event()
+        # The first subject's emoji leads the whole merged title.
+        subject=group[0].subject,
+    ).to_event(emoji)
 
 
 def _day_events(
@@ -198,6 +207,7 @@ def _day_events(
     data: LibrusData,
     merge: bool,
     owner: Hashable | None = None,
+    emoji: bool = False,
 ) -> list[CalendarEvent]:
     """Calendar events for one day. With `merge`, lessons with the same
     start and end become one event. Changed lessons (substitution, room
@@ -222,15 +232,15 @@ def _day_events(
         else:
             if merge:
                 other_changes.add(slot)
-            events.append(parts.to_event())
+            events.append(parts.to_event(emoji))
     for slot, group in groups.items():
         dropped = [] if slot in other_changes else cancelled.pop(slot, [])
         if len(group) == 1 and not dropped:
-            events.append(group[0].to_event())
+            events.append(group[0].to_event(emoji))
         else:
-            events.append(_merge_parts(group, dropped))
+            events.append(_merge_parts(group, dropped, emoji))
     for parts_list in cancelled.values():
-        events.extend(parts.to_event() for parts in parts_list)
+        events.extend(parts.to_event(emoji) for parts in parts_list)
     events.sort(key=lambda event: event.start)
     return events
 
@@ -300,7 +310,9 @@ def _lesson_parts(
     )
 
 
-def _homework_to_event(item: HomeworkEventData, data: LibrusData) -> CalendarEvent | None:
+def _homework_to_event(
+    item: HomeworkEventData, data: LibrusData, emoji: bool = False
+) -> CalendarEvent | None:
     if not item.date:
         return None
     try:
@@ -323,6 +335,13 @@ def _homework_to_event(item: HomeworkEventData, data: LibrusData) -> CalendarEve
     )
     if category_name:
         summary = f"[{category_name}] {summary}"
+    if emoji:
+        # The category's emoji (a test, a trip...), else the subject's.
+        summary = with_emoji(
+            (category_emoji(category_name) if category_name else None)
+            or (subject_emoji(subject_name) if subject_name else None),
+            summary,
+        )
 
     # The entry stays all-day (like every other Agenda event); a time from
     # Librus (`TimeFrom`, e.g. a parent-teacher meeting at 17:30) leads the
@@ -343,7 +362,9 @@ def _hhmm(value: str | None) -> str | None:
     return value[:5]
 
 
-def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData) -> CalendarEvent | None:
+def _pt_conference_to_event(
+    item: ParentTeacherConferenceData, data: LibrusData, emoji: bool = False
+) -> CalendarEvent | None:
     """Defensive extra merge - see ParentTeacherConferenceData's docstring
     for why this is a belt-and-suspenders addition, not the primary
     source, of "wywiadówka"/"zebranie" events. Always an all-day event
@@ -360,6 +381,8 @@ def _pt_conference_to_event(item: ParentTeacherConferenceData, data: LibrusData)
 
     teacher_name = data.teachers.get(item.teacher_id) if item.teacher_id is not None else None
     summary = f"[Zebranie z Rodzicami] {item.topic}".strip() if item.topic else "Zebranie z Rodzicami"
+    if emoji:
+        summary = with_emoji(category_emoji("zebranie"), summary)
     description_parts = [p for p in (_hhmm(item.time), teacher_name) if p]
 
     return CalendarEvent(
@@ -429,16 +452,18 @@ def _sorted_events(events: list[CalendarEvent]) -> list[CalendarEvent]:
     return sorted(events, key=lambda event: (event.start, event.summary))
 
 
-def _agenda_events(data: LibrusData) -> list[CalendarEvent]:
+def _agenda_events(data: LibrusData, emoji: bool = False) -> list[CalendarEvent]:
     """Every Agenda entry and every parent-teacher conference HomeWorks
     doesn't already list, as all-day events, sorted."""
     events = [
-        event for item in data.homeworks if (event := _homework_to_event(item, data)) is not None
+        event
+        for item in data.homeworks
+        if (event := _homework_to_event(item, data, emoji)) is not None
     ]
     events += [
         event
         for item in _pt_conferences_not_in_agenda(data)
-        if (event := _pt_conference_to_event(item, data)) is not None
+        if (event := _pt_conference_to_event(item, data, emoji)) is not None
     ]
     return _sorted_events(events)
 
@@ -468,6 +493,26 @@ def _free_day_events(data: LibrusData) -> list[CalendarEvent]:
     )
 
 
+def _absence_events(data: LibrusData) -> list[CalendarEvent]:
+    """One all-day event per day with an absence or a late arrival (see
+    absence_days.py), oldest first."""
+    events = []
+    for day in absence_days(data):
+        try:
+            start = date.fromisoformat(day.date)
+        except ValueError:
+            continue
+        events.append(
+            CalendarEvent(
+                start=start,
+                end=start + timedelta(days=1),
+                summary=day.summary,
+                description=day.description or None,
+            )
+        )
+    return events
+
+
 def _first_not_over(events: list[CalendarEvent], today: date) -> CalendarEvent | None:
     """The first of start-sorted all-day events that isn't over by `today`
     (`end` is exclusive: yesterday's entry ends today and is over)."""
@@ -485,9 +530,12 @@ class _TimetableEvents:
     starts: list[datetime]
 
 
-def _timetable_events(data: LibrusData, merge: bool, owner: Hashable | None) -> _TimetableEvents:
+def _timetable_events(
+    data: LibrusData, merge: bool, owner: Hashable | None, emoji: bool = False
+) -> _TimetableEvents:
     by_day = {
-        day: _day_events(day, lessons, data, merge, owner) for day, lessons in data.timetable.items()
+        day: _day_events(day, lessons, data, merge, owner, emoji)
+        for day, lessons in data.timetable.items()
     }
     ordered = sorted((event for events in by_day.values() for event in events), key=lambda e: e.start)
     return _TimetableEvents(by_day, ordered, [event.start for event in ordered])
@@ -516,6 +564,7 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         self._merge = bool(
             entry.options.get(CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS)
         )
+        self._emoji = bool(entry.options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI))
 
     def _polled_events(self) -> _TimetableEvents | None:
         """The polled timetable's events, built once per coordinator data
@@ -526,7 +575,9 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             return None
         owner = self.coordinator.memo_owner
         return _CALENDAR_EVENTS.get(
-            data, ("timetable", self._merge), lambda: _timetable_events(data, self._merge, owner),
+            data,
+            ("timetable", self._merge, self._emoji),
+            lambda: _timetable_events(data, self._merge, owner, self._emoji),
             owner=owner,
         )
 
@@ -564,7 +615,9 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             day_events = (
                 polled.by_day[day]
                 if data.timetable.get(day) is lessons and day in polled.by_day
-                else _day_events(day, lessons, data, self._merge, self.coordinator.memo_owner)
+                else _day_events(
+                    day, lessons, data, self._merge, self.coordinator.memo_owner, self._emoji
+                )
             )
             for event in day_events:
                 # BUG FIX (2026-09-06, found live): compare the lesson's
@@ -601,6 +654,7 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_agenda"
         self._attr_device_info = librus_device_info(entry)
+        self._emoji = bool(entry.options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI))
 
     @property
     def event(self) -> CalendarEvent | None:
@@ -618,7 +672,10 @@ class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Calen
         if data is None:
             return []
         return _CALENDAR_EVENTS.get(
-            data, "agenda", lambda: _agenda_events(data), owner=self.coordinator.memo_owner
+            data,
+            ("agenda", self._emoji),
+            lambda: _agenda_events(data, self._emoji),
+            owner=self.coordinator.memo_owner,
         )
 
     async def async_get_events(
@@ -684,4 +741,42 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
         # Overlap check, not containment - a multi-day break can start
         # before the requested window and/or end after it. See
         # `_event_overlaps` (now shared with LibrusAgendaCalendar above).
+        return [event for event in self._events() if _event_overlaps(event, start, end)]
+
+
+class LibrusAbsencesCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
+    """Days the student was absent or late, one all-day event per day:
+    "Nieobecność nieusprawiedliwiona (3 lekcje)", the lessons in the
+    description, and "Usprawiedliwienie wysłane" once a justification for
+    an unexcused day was sent. Built from the attendance the coordinator
+    already polls - no extra request."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "absences"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_absences"
+        self._attr_device_info = librus_device_info(entry)
+
+    @property
+    def event(self) -> CalendarEvent | None:
+        if self.coordinator.data is None:
+            return None
+        return _first_not_over(self._events(), dt_util.now().date())
+
+    def _events(self) -> list[CalendarEvent]:
+        data = self.coordinator.data
+        if data is None:
+            return []
+        return _CALENDAR_EVENTS.get(
+            data, "absences", lambda: _absence_events(data), owner=self.coordinator.memo_owner
+        )
+
+    async def async_get_events(
+        self, hass: HomeAssistant, start_date: datetime, end_date: datetime
+    ) -> list[CalendarEvent]:
+        if self.coordinator.data is None:
+            return []
+        start, end = start_date.date(), _inclusive_end_date(end_date)
         return [event for event in self._events() if _event_overlaps(event, start, end)]

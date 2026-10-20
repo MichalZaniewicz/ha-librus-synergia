@@ -70,6 +70,7 @@ from .coordinator import (
     calculate_average as _calculate_average,
 )
 from .absence_budget import MIN_HELD, AbsenceBudget, absence_budget
+from .absence_days import is_late_type_name
 from .catch_up import catch_up
 from .semester_summary import semester_summary
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, week_load
@@ -887,20 +888,12 @@ def _attendance_type(data: LibrusData, type_id: int | str | None) -> AttendanceT
 # to tell "already resolved" from "still needs attention".
 
 
-# "Spóźnienie" (late) is a PRESENCE-kind type (IsPresenceKind: true, same
-# flag value as plain "Obecność") - Librus has no separate API flag telling
-# late apart from ordinary presence either, so (same best-effort text-match
-# approach as `AttendanceTypeData.is_excused_absence`) "późn" (rdzeń for
-# "spóźnienie") in the type's own name is the only signal. Needed for
-# by_weekday below -
+# "Spóźnienie" (late) is a PRESENCE-kind type - see
+# absence_days.is_late_type_name. Needed for by_weekday below -
 # _record_status()/by_date fold "late" into plain "good", which is fine for
 # a single worst-status-per-day heatmap but can't answer "how many lates
 # happened on a given weekday" on its own.
-_LATE_TYPE_NAME_RE = re.compile(r"późn", re.IGNORECASE)
-
-
-def _is_late_type_name(name: str) -> bool:
-    return _LATE_TYPE_NAME_RE.search(name) is not None
+_is_late_type_name = is_late_type_name
 
 
 # Same three-way status used by the companion cards' own attendanceStatus()

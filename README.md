@@ -37,7 +37,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 35 blueprints, 70 cards, no captcha" width="100%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 36 blueprints, 70 cards, no captcha" width="100%">
 </p>
 
 ## What it does
@@ -53,7 +53,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 - 📝 **Know what to revise.** For every upcoming test, the topics taught in that subject since the previous test, with the lessons your child missed marked - on a card, in a reminder a few days before, and in Assist's answers.
 - 📚 **Catch up after an absence.** On the day your child is back, the topics of the missed lessons and the homework given meanwhile, per subject - as a notification and a card to tick off.
 - 🎯 **Know the report card before it's written.** A forecast of every subject's report-card grade from its average and your school's thresholds, how many 6s lift it and how many 1s drop it, and an alarm when a subject heads for a 1.
-- 🔔 **Notifications that matter.** A new grade, a cancelled lesson or a room change, a test tomorrow, a test moved to another day, a school trip, an unexcused absence - 30 ready-made blueprints, one click to import.
+- 🔔 **Notifications that matter.** A new grade, a cancelled lesson or a room change, a test tomorrow, a test moved to another day, a school trip, an unexcused absence - 36 ready-made blueprints, one click to import.
 - 🏠 **The school day in your home.** *School day today/tomorrow* and *At school* sensors, school start and end times: wake the house before the first lesson, skip the alarm on a day off, remind you when to leave for pick-up. A sensor shows how this week differs from the usual timetable.
 - 🤖 **A weekly summary written by AI.** Once a week, your own AI model in Home Assistant sums up grades, attendance, behaviour and the week ahead, with 2-4 concrete to-dos.
 - 🗣️ **Ask Assist.** *"What does Ola have tomorrow?"* *"When is the next maths test?"* - by voice or in the chat.
