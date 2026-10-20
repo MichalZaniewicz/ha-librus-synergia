@@ -37,7 +37,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 36 blueprints, 70 cards, no captcha" width="100%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 36 blueprints, 71 cards, no captcha" width="100%">
 </p>
 
 ## What it does
@@ -94,13 +94,13 @@ Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Cla
 ## A dashboard in minutes
 
 <p align="center">
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="70 cards, one school dashboard" width="100%"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="71 cards, one school dashboard" width="100%"></a>
 </p>
 
-**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 70 cards made for this integration - add it in HACS as a *Dashboard*. Then pick **Szkoła (Librus)** under Settings → Dashboards → Add dashboard for a [ready-made dashboard](https://github.com/MichalZaniewicz/ha-librus-synergia-cards#ready-made-dashboard) with a tab for every child.
+**[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 71 cards made for this integration - add it in HACS as a *Dashboard*. Then pick **Szkoła (Librus)** under Settings → Dashboards → Add dashboard for a [ready-made dashboard](https://github.com/MichalZaniewicz/ha-librus-synergia-cards#ready-made-dashboard) with a tab for every child.
 
 <details>
-<summary><b>See all 70 cards</b></summary>
+<summary><b>See all 71 cards</b></summary>
 
 ![Librus Synergia Cards preview](https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia-cards/main/docs/screenshots/cards-overview-dark.png)
 
@@ -139,7 +139,7 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 
 ## Related projects
 
-- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 70 Lovelace cards for this integration.
+- **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)**: 71 Lovelace cards for this integration.
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
