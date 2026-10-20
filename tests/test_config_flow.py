@@ -317,6 +317,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
         CONF_SMART_POLLING: False,
         CONF_HIDE_EMPTY_SUBJECTS: False,
         "merge_parallel_lessons": True,
+        "calendar_emoji": False,
         "grade_thresholds": "1.75, 2.75, 3.75, 4.75, 5.50",
     }
 
@@ -345,6 +346,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
             CONF_SMART_POLLING: True,
             CONF_HIDE_EMPTY_SUBJECTS: True,
             "merge_parallel_lessons": False,
+            "calendar_emoji": True,
             "grade_thresholds": "1.6, 2.6, 3.6, 4.6, 5.3",
         },
     )
@@ -365,6 +367,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         CONF_SMART_POLLING: True,
         CONF_HIDE_EMPTY_SUBJECTS: True,
         "merge_parallel_lessons": False,
+        "calendar_emoji": True,
         "grade_thresholds": "1.6, 2.6, 3.6, 4.6, 5.3",
     }
 
