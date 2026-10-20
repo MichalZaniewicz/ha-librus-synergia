@@ -267,14 +267,24 @@ async def async_sync_calendar(
             if current is None:
                 # Copied before this action existed (by the old blueprint,
                 # same title and day): take it over instead of adding a
-                # second one, when the calendar lets us tag it.
+                # second one. Tagged in place where the calendar allows
+                # editing; Google Calendar only allows adding and deleting
+                # (seen live), so there it's deleted and added again with
+                # the tag - otherwise it could never be moved or removed.
                 legacy = untagged.pop((item.summary, item.start), None)
                 if legacy is not None:
-                    if can_update and legacy.uid:
-                        fields = _event_fields(item, student)
-                        uid = legacy.uid
+                    fields = _event_fields(item, student)
+                    uid = legacy.uid
+                    if can_update and uid:
                         if await run(
                             "adopt", partial(entity.async_update_event, uid, fields), item.summary
+                        ):
+                            adopted += 1
+                    elif can_delete and uid:
+                        if await run(
+                            "adopt", partial(entity.async_delete_event, uid), item.summary
+                        ) and await run(
+                            "adopt", partial(entity.async_create_event, **fields), item.summary
                         ):
                             adopted += 1
                     else:

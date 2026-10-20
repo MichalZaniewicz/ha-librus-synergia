@@ -322,6 +322,24 @@ async def test_sync_takes_over_copies_made_by_the_old_blueprint(hass) -> None:
     assert "[librus-sync:" in (calendar.events[uid].description or "")
 
 
+async def test_sync_takes_over_old_copies_without_editing(hass) -> None:
+    """Google Calendar only allows adding and deleting events (seen live,
+    supported_features 3): an old copy is deleted and added again with the
+    tag, so it can be moved or removed later."""
+    calendar = _FakeCalendar(CalendarEntityFeature.CREATE_EVENT | CalendarEntityFeature.DELETE_EVENT)
+    uid = calendar.add(
+        CalendarEvent(
+            start=date(2026, 10, 22), end=date(2026, 10, 23),
+            summary="[Sprawdzian] Matematyka: Dział 2", description="Dział 2",
+        )
+    )
+    result = await _sync(hass, calendar, _data())
+    assert result["adopted"] == 1 and result["created"] == 2
+    assert uid not in calendar.events
+    [copy] = [e for e in calendar.events.values() if e.summary.startswith("[Sprawdzian]")]
+    assert "[librus-sync:" in (copy.description or "")
+
+
 async def test_sync_without_delete_support_only_adds(hass) -> None:
     calendar = _FakeCalendar(CalendarEntityFeature.CREATE_EVENT)
     await _sync(hass, calendar, _data())
