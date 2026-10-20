@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.26
 
 ### Added
 - **The semester in numbers.** The Overall average sensor has a

@@ -37,7 +37,7 @@ into <ha-alert> and drops every child whose textContent is empty, which silently
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 35 blueprints, 69 cards, no captcha" width="100%">
+  <img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/stats.svg" alt="35 sensors, 16 event entities, 35 blueprints, 70 cards, no captcha" width="100%">
 </p>
 
 ## What it does
@@ -94,7 +94,7 @@ Once a week, the AI model you already use in Home Assistant (Gemini, OpenAI, Cla
 ## A dashboard in minutes
 
 <p align="center">
-  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="69 cards, one school dashboard" width="100%"></a>
+  <a href="https://github.com/MichalZaniewicz/ha-librus-synergia-cards"><img src="https://raw.githubusercontent.com/MichalZaniewicz/ha-librus-synergia/main/docs/readme/cards-wall.webp" alt="70 cards, one school dashboard" width="100%"></a>
 </p>
 
 **[Librus Synergia Cards](https://github.com/MichalZaniewicz/ha-librus-synergia-cards)** is a companion repo with 70 cards made for this integration - add it in HACS as a *Dashboard*. Then pick **Szkoła (Librus)** under Settings → Dashboards → Add dashboard for a [ready-made dashboard](https://github.com/MichalZaniewicz/ha-librus-synergia-cards#ready-made-dashboard) with a tab for every child.
