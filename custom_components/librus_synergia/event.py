@@ -46,7 +46,6 @@ class LibrusEventDescription:
     key: str
     bus_event: str
     event_types: tuple[str, ...]
-    icon: str
     # Picks the event type from the bus event's data.
     event_type: Callable[[dict[str, Any]], str]
 
@@ -58,99 +57,87 @@ def _note_type(data: dict[str, Any]) -> str:
 
 DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
     LibrusEventDescription(
-        "grade", EVENT_NEW_GRADE, ("new_grade",), "mdi:numeric-6-box-outline", lambda d: "new_grade"
+        "grade", EVENT_NEW_GRADE, ("new_grade",), lambda d: "new_grade"
     ),
     LibrusEventDescription(
-        "note", EVENT_NEW_NOTE, ("positive", "negative", "neutral"), "mdi:note-text-outline", _note_type
+        "note", EVENT_NEW_NOTE, ("positive", "negative", "neutral"), _note_type
     ),
     LibrusEventDescription(
         "absence",
         EVENT_NEW_ABSENCE,
         ("unexcused", "excused"),
-        "mdi:account-cancel-outline",
         lambda d: "excused" if d.get("excused") else "unexcused",
     ),
     LibrusEventDescription(
         "timetable_change",
         EVENT_TIMETABLE_CHANGED,
         ("canceled", "substitution"),
-        "mdi:calendar-alert",
         lambda d: "substitution" if d.get("kind") == "substitution" else "canceled",
     ),
     LibrusEventDescription(
         "homework",
         EVENT_NEW_HOMEWORK_ASSIGNMENT,
         ("new_homework",),
-        "mdi:notebook-edit-outline",
         lambda d: "new_homework",
     ),
     LibrusEventDescription(
-        "agenda", EVENT_NEW_HOMEWORK, ("new_entry",), "mdi:calendar-plus", lambda d: "new_entry"
+        "agenda", EVENT_NEW_HOMEWORK, ("new_entry",), lambda d: "new_entry"
     ),
     LibrusEventDescription(
         "agenda_change",
         EVENT_AGENDA_CHANGED,
         ("changed", "removed"),
-        "mdi:calendar-edit",
         lambda d: "removed" if d.get("kind") == "removed" else "changed",
     ),
     LibrusEventDescription(
         "justification",
         EVENT_JUSTIFICATION_STATUS,
         ("accepted", "rejected", "changed"),
-        "mdi:file-document-check-outline",
         lambda d: "accepted" if d.get("accepted") else "rejected" if d.get("rejected") else "changed",
     ),
     LibrusEventDescription(
         "school_trip",
         EVENT_NEW_SCHOOL_TRIP,
         ("new_trip",),
-        "mdi:bus-school",
         lambda d: "new_trip",
     ),
     LibrusEventDescription(
         "school_document",
         EVENT_NEW_SCHOOL_DOCUMENT,
         ("new_document",),
-        "mdi:file-document-plus-outline",
         lambda d: "new_document",
     ),
     LibrusEventDescription(
         "library",
         EVENT_LIBRARY_CHANGED,
         ("lent", "returned"),
-        "mdi:bookshelf",
         lambda d: "returned" if d.get("action") == "returned" else "lent",
     ),
     LibrusEventDescription(
         "announcement",
         EVENT_NEW_ANNOUNCEMENT,
         ("new_announcement",),
-        "mdi:bullhorn-outline",
         lambda d: "new_announcement",
     ),
     LibrusEventDescription(
-        "message", EVENT_NEW_MESSAGE, ("new_message",), "mdi:email-outline", lambda d: "new_message"
+        "message", EVENT_NEW_MESSAGE, ("new_message",), lambda d: "new_message"
     ),
     LibrusEventDescription(
         "message_read",
         EVENT_MESSAGE_READ,
         ("read",),
-        "mdi:email-check-outline",
         lambda d: "read",
     ),
     LibrusEventDescription(
         "forecast",
         EVENT_FORECAST_CHANGED,
         ("up", "down"),
-        "mdi:crystal-ball",
         lambda d: "up" if d.get("direction") == "up" else "down",
     ),
     LibrusEventDescription(
         "achievement",
         EVENT_ACHIEVEMENT_UNLOCKED,
         ("unlocked",),
-        "mdi:trophy-outline",
         lambda d: "unlocked",
     ),
 )
@@ -175,7 +162,6 @@ class LibrusEventEntity(EventEntity):
         self._attr_translation_key = f"{description.key}_event"
         self._attr_unique_id = f"{entry.entry_id}_{description.key}_event"
         self._attr_event_types = list(description.event_types)
-        self._attr_icon = description.icon
         self._attr_device_info = librus_device_info(entry)
 
     async def async_added_to_hass(self) -> None:

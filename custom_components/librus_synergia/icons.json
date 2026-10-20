@@ -1,0 +1,324 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "grade_risk": {
+        "default": "mdi:alert-circle-outline",
+        "state": {
+          "on": "mdi:alert-circle",
+          "off": "mdi:check-circle-outline"
+        }
+      },
+      "in_school": {
+        "default": "mdi:bag-personal-outline",
+        "state": {
+          "on": "mdi:bag-personal",
+          "off": "mdi:home-outline"
+        }
+      },
+      "school_day_today": {
+        "default": "mdi:school-outline",
+        "state": {
+          "on": "mdi:school-outline",
+          "off": "mdi:sofa-outline"
+        }
+      },
+      "school_day_tomorrow": {
+        "default": "mdi:calendar-arrow-right",
+        "state": {
+          "on": "mdi:calendar-arrow-right",
+          "off": "mdi:sofa-outline"
+        }
+      }
+    },
+    "button": {
+      "weekly_summary_generate": {
+        "default": "mdi:creation-outline"
+      }
+    },
+    "calendar": {
+      "agenda": {
+        "default": "mdi:calendar-text-outline"
+      },
+      "free_days": {
+        "default": "mdi:beach"
+      },
+      "timetable": {
+        "default": "mdi:timetable"
+      }
+    },
+    "event": {
+      "absence_event": {
+        "default": "mdi:account-cancel-outline"
+      },
+      "achievement_event": {
+        "default": "mdi:trophy-outline"
+      },
+      "agenda_change_event": {
+        "default": "mdi:calendar-edit"
+      },
+      "agenda_event": {
+        "default": "mdi:calendar-plus"
+      },
+      "announcement_event": {
+        "default": "mdi:bullhorn-outline"
+      },
+      "forecast_event": {
+        "default": "mdi:crystal-ball"
+      },
+      "grade_event": {
+        "default": "mdi:numeric-6-box-outline"
+      },
+      "homework_event": {
+        "default": "mdi:notebook-edit-outline"
+      },
+      "justification_event": {
+        "default": "mdi:file-document-check-outline"
+      },
+      "library_event": {
+        "default": "mdi:bookshelf"
+      },
+      "message_event": {
+        "default": "mdi:email-outline"
+      },
+      "message_read_event": {
+        "default": "mdi:email-check-outline"
+      },
+      "note_event": {
+        "default": "mdi:note-text-outline"
+      },
+      "school_document_event": {
+        "default": "mdi:file-document-plus-outline"
+      },
+      "school_trip_event": {
+        "default": "mdi:bus-school"
+      },
+      "timetable_change_event": {
+        "default": "mdi:calendar-alert"
+      }
+    },
+    "sensor": {
+      "attendance": {
+        "default": "mdi:calendar-remove"
+      },
+      "attendance_streak": {
+        "default": "mdi:fire",
+        "range": {
+          "0": "mdi:fire-off",
+          "1": "mdi:fire"
+        }
+      },
+      "behaviour_grade": {
+        "default": "mdi:medal-outline"
+      },
+      "behaviour_notices": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "behaviour_streak": {
+        "default": "mdi:fire",
+        "range": {
+          "0": "mdi:fire-off",
+          "1": "mdi:fire"
+        }
+      },
+      "cancelled_lessons": {
+        "default": "mdi:calendar-remove"
+      },
+      "current_lesson": {
+        "default": "mdi:clock-time-four-outline"
+      },
+      "descriptive_grades": {
+        "default": "mdi:text-box-outline"
+      },
+      "good_grade_streak": {
+        "default": "mdi:fire",
+        "range": {
+          "0": "mdi:fire-off",
+          "1": "mdi:fire"
+        }
+      },
+      "grade_forecast": {
+        "default": "mdi:crystal-ball",
+        "range": {
+          "0": "mdi:numeric-1-circle-outline",
+          "1.75": "mdi:numeric-2-circle-outline",
+          "2.75": "mdi:numeric-3-circle-outline",
+          "3.75": "mdi:numeric-4-circle-outline",
+          "4.75": "mdi:numeric-5-circle-outline",
+          "5.5": "mdi:numeric-6-circle-outline"
+        }
+      },
+      "homework_assignments": {
+        "default": "mdi:notebook-edit-outline",
+        "range": {
+          "0": "mdi:notebook-check-outline",
+          "1": "mdi:notebook-edit-outline"
+        }
+      },
+      "justifications": {
+        "default": "mdi:file-document-check-outline",
+        "range": {
+          "0": "mdi:file-document-check-outline",
+          "1": "mdi:file-clock-outline"
+        }
+      },
+      "last_update": {
+        "default": "mdi:cloud-clock-outline"
+      },
+      "lesson_topics": {
+        "default": "mdi:book-open-page-variant-outline"
+      },
+      "library_books": {
+        "default": "mdi:bookshelf"
+      },
+      "lucky_number": {
+        "default": "mdi:dice-5"
+      },
+      "next_exam": {
+        "default": "mdi:file-document-alert-outline"
+      },
+      "next_lesson": {
+        "default": "mdi:clock-start"
+      },
+      "overall_average": {
+        "default": "mdi:school-outline",
+        "range": {
+          "0": "mdi:numeric-1-circle-outline",
+          "1.75": "mdi:numeric-2-circle-outline",
+          "2.75": "mdi:numeric-3-circle-outline",
+          "3.75": "mdi:numeric-4-circle-outline",
+          "4.75": "mdi:numeric-5-circle-outline",
+          "5.5": "mdi:numeric-6-circle-outline"
+        }
+      },
+      "plan_changes": {
+        "default": "mdi:calendar-alert",
+        "range": {
+          "0": "mdi:calendar-check-outline",
+          "1": "mdi:calendar-alert"
+        }
+      },
+      "point_grades": {
+        "default": "mdi:percent-circle-outline"
+      },
+      "rank": {
+        "default": "mdi:trophy-outline",
+        "state": {
+          "bronze": "mdi:medal-outline",
+          "silver": "mdi:trophy-outline",
+          "gold": "mdi:trophy",
+          "diamond": "mdi:diamond-stone"
+        }
+      },
+      "school": {
+        "default": "mdi:school"
+      },
+      "school_class": {
+        "default": "mdi:google-classroom"
+      },
+      "school_documents": {
+        "default": "mdi:file-document-multiple-outline"
+      },
+      "school_end": {
+        "default": "mdi:home-import-outline"
+      },
+      "school_start": {
+        "default": "mdi:alarm"
+      },
+      "school_trips": {
+        "default": "mdi:bus-school"
+      },
+      "status": {
+        "default": "mdi:lan-check",
+        "state": {
+          "ok": "mdi:lan-check",
+          "degraded": "mdi:lan-pending",
+          "stale": "mdi:lan-disconnect",
+          "error": "mdi:alert-circle-outline"
+        }
+      },
+      "subject_attendance": {
+        "default": "mdi:account-check-outline",
+        "range": {
+          "0": "mdi:account-alert-outline",
+          "50": "mdi:account-clock-outline",
+          "75": "mdi:account-check-outline"
+        }
+      },
+      "subject_average": {
+        "default": "mdi:book-open-variant-outline",
+        "range": {
+          "0": "mdi:numeric-1-circle-outline",
+          "1.75": "mdi:numeric-2-circle-outline",
+          "2.75": "mdi:numeric-3-circle-outline",
+          "3.75": "mdi:numeric-4-circle-outline",
+          "4.75": "mdi:numeric-5-circle-outline",
+          "5.5": "mdi:numeric-6-circle-outline"
+        }
+      },
+      "unexcused_absences": {
+        "default": "mdi:account-alert-outline",
+        "range": {
+          "0": "mdi:account-check-outline",
+          "1": "mdi:account-alert-outline"
+        }
+      },
+      "unread_announcements": {
+        "default": "mdi:bullhorn",
+        "range": {
+          "0": "mdi:bullhorn-outline",
+          "1": "mdi:bullhorn"
+        }
+      },
+      "unread_messages": {
+        "default": "mdi:email-outline",
+        "range": {
+          "0": "mdi:email-open-outline",
+          "1": "mdi:email-alert-outline"
+        }
+      },
+      "weekly_summary": {
+        "default": "mdi:creation"
+      }
+    },
+    "switch": {
+      "weekly_summary_enabled": {
+        "default": "mdi:creation-outline",
+        "state": {
+          "on": "mdi:creation",
+          "off": "mdi:creation-outline"
+        }
+      }
+    },
+    "todo": {
+      "homework": {
+        "default": "mdi:notebook-check-outline"
+      }
+    }
+  },
+  "services": {
+    "get_grades": {
+      "service": "mdi:numeric-6-box-multiple-outline"
+    },
+    "get_message": {
+      "service": "mdi:email-open-outline"
+    },
+    "get_message_recipients": {
+      "service": "mdi:account-multiple-outline"
+    },
+    "mark_announcement_read": {
+      "service": "mdi:bullhorn-variant-outline"
+    },
+    "mark_message_read": {
+      "service": "mdi:email-check-outline"
+    },
+    "refresh": {
+      "service": "mdi:refresh"
+    },
+    "send_message": {
+      "service": "mdi:email-arrow-right-outline"
+    },
+    "withdraw_message": {
+      "service": "mdi:email-remove-outline"
+    }
+  }
+}

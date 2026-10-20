@@ -41,7 +41,6 @@ class LibrusHomeworkTodoList(
 ):
     _attr_has_entity_name = True
     _attr_translation_key = "homework"
-    _attr_icon = "mdi:notebook-check-outline"
     _attr_supported_features = TodoListEntityFeature.UPDATE_TODO_ITEM
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:

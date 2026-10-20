@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Icons that follow the state.** Every icon now comes from the
+  integration's `icons.json`, and many change with the state: the averages
+  and the grade forecast show the grade they point to (a circled 1-6), Rank
+  shows its tier, the count sensors switch to a calm icon at 0 (messages,
+  announcements, unexcused absences, pending justifications, plan changes,
+  homework), the streaks show a flame that goes out at 0, Lowest subject
+  attendance warns below 75% and 50%, Connection status shows a broken link
+  during an outage, the school-day sensors show a sofa on a day off, and
+  the lucky number shows a party popper on the student's own number. The
+  calendars and every action got their own icon too. Icons that depend on
+  a number need Home Assistant 2025.6 or newer; older versions show the
+  plain icon there.
+  If you set an icon yourself in the entity settings, yours still wins.
+
 ## 0.12.24
 
 ### Added

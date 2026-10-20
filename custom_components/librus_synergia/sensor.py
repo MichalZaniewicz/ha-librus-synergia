@@ -794,7 +794,6 @@ class LibrusGradeForecastSensor(LibrusSensorBase):
 
     _attr_translation_key = "grade_forecast"
     _unrecorded_attributes = frozenset({"subjects"})
-    _attr_icon = "mdi:crystal-ball"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
@@ -1025,7 +1024,6 @@ class LibrusAttendanceSensor(LibrusSensorBase):
         {"breakdown", "presence_by_type", "by_date", "by_semester", "by_weekday", "by_subject"}
     )
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:calendar-remove"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "attendance")
@@ -1098,7 +1096,6 @@ class LibrusUnexcusedAbsencesSensor(LibrusSensorBase):
         {"recent_dates", "awaiting_justification", "justification_sent"}
     )
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:account-alert-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "unexcused_absences")
@@ -1133,7 +1130,6 @@ class LibrusJustificationsSensor(LibrusSensorBase):
 
     _attr_translation_key = "justifications"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_icon = "mdi:file-document-check-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "justifications")
@@ -1214,7 +1210,6 @@ class LibrusSubjectAttendanceSensor(LibrusSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:account-check-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "subject_attendance")
@@ -1297,7 +1292,6 @@ class LibrusAttendanceStreakSensor(LibrusSensorBase):
 
     _attr_translation_key = "attendance_streak"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
-    _attr_icon = "mdi:fire"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "attendance_streak")
@@ -1323,7 +1317,6 @@ class LibrusBehaviourStreakSensor(LibrusSensorBase):
 
     _attr_translation_key = "behaviour_streak"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
-    _attr_icon = "mdi:fire"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "behaviour_streak")
@@ -1343,7 +1336,6 @@ class LibrusGoodGradeStreakSensor(LibrusSensorBase):
     `coordinator.good_grade_streak`'s own docstring for why."""
 
     _attr_translation_key = "good_grade_streak"
-    _attr_icon = "mdi:fire"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "good_grade_streak")
@@ -1363,21 +1355,22 @@ class LibrusGoodGradeStreakSensor(LibrusSensorBase):
 # on top of the Overall average sensor's own raw number. `SensorDeviceClass
 # .ENUM` + these internal (untranslated) keys, with the actual display text
 # coming from `entity.sensor.rank.state.<key>` in strings.json/en/pl, is
-# the idiomatic HA way to get a properly localized state value here.
-_RANK_TIERS: list[tuple[float, str, str]] = [
-    (5.0, "diamond", "mdi:diamond-stone"),
-    (4.0, "gold", "mdi:trophy"),
-    (3.0, "silver", "mdi:trophy-outline"),
-    (0.0, "bronze", "mdi:medal-outline"),
+# the idiomatic HA way to get a properly localized state value here. Each
+# tier's icon is in icons.json.
+_RANK_TIERS: list[tuple[float, str]] = [
+    (5.0, "diamond"),
+    (4.0, "gold"),
+    (3.0, "silver"),
+    (0.0, "bronze"),
 ]
 
 
-def _rank_for_average(average: float | None) -> tuple[str, str] | None:
+def _rank_for_average(average: float | None) -> str | None:
     if average is None:
         return None
-    for threshold, key, icon in _RANK_TIERS:
+    for threshold, key in _RANK_TIERS:
         if average >= threshold:
-            return key, icon
+            return key
     return None  # unreachable - the last tier's threshold is 0.0
 
 
@@ -1388,7 +1381,7 @@ class LibrusRankSensor(LibrusSensorBase):
 
     _attr_translation_key = "rank"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = [key for _, key, _ in _RANK_TIERS]
+    _attr_options = [key for _, key in _RANK_TIERS]
     _unrecorded_attributes = frozenset({"achievements", "badges"})
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
@@ -1403,7 +1396,7 @@ class LibrusRankSensor(LibrusSensorBase):
         data = self.coordinator.data
         if data is None:
             return None
-        # Read by the icon, the state and the attributes on every write.
+        # Read by the state and the attributes on every write.
         weighted = self._weighted
         return self._cached(
             "average",
@@ -1414,14 +1407,8 @@ class LibrusRankSensor(LibrusSensorBase):
         )
 
     @property
-    def icon(self) -> str | None:
-        tier = _rank_for_average(self._average())
-        return tier[1] if tier else "mdi:trophy-outline"
-
-    @property
     def native_value(self) -> str | None:
-        tier = _rank_for_average(self._average())
-        return tier[0] if tier else None
+        return _rank_for_average(self._average())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -1435,7 +1422,7 @@ class LibrusRankSensor(LibrusSensorBase):
         # How far above the CURRENT tier's own threshold, and how much
         # more average is needed to reach the next one up - `None` once
         # already at Diamond, the top tier.
-        next_threshold = next((t for t, _, _ in reversed(_RANK_TIERS) if t > average), None)
+        next_threshold = next((t for t, _ in reversed(_RANK_TIERS) if t > average), None)
         return {
             "average": average,
             "points_to_next_tier": round(next_threshold - average, 2)
@@ -1498,7 +1485,6 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
     """
 
     _attr_translation_key = "lucky_number"
-    _attr_icon = "mdi:dice-5"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "lucky_number")
@@ -1511,6 +1497,15 @@ class LibrusLuckyNumberSensor(LibrusSensorBase):
         if self.coordinator.data is None or self.coordinator.data.lucky_number is None:
             return None
         return self.coordinator.data.lucky_number.number
+
+    @property
+    def icon(self) -> str | None:
+        """Party popper when the number is the student's own; otherwise
+        None, so the icon comes from icons.json."""
+        number = self.native_value
+        if number is not None and _student_number(self.coordinator)[0] == number:
+            return "mdi:party-popper"
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -1543,7 +1538,6 @@ class LibrusUnreadAnnouncementsSensor(LibrusSensorBase):
 
     _attr_translation_key = "unread_announcements"
     _unrecorded_attributes = frozenset({"recent", "notices"})
-    _attr_icon = "mdi:bullhorn"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "unread_announcements")
@@ -1621,7 +1615,6 @@ class LibrusBehaviourNoticesSensor(LibrusSensorBase):
 
     _attr_translation_key = "behaviour_notices"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_icon = "mdi:alert-circle-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "behaviour_notices")
@@ -1667,7 +1660,6 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
 
     _attr_translation_key = "homework_assignments"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_icon = "mdi:notebook-edit-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "homework_assignments")
@@ -1767,7 +1759,6 @@ class LibrusBehaviourGradeSensor(LibrusSensorBase):
 
     _attr_translation_key = "behaviour_grade"
     _unrecorded_attributes = frozenset({"recent", "comment", "history"})
-    _attr_icon = "mdi:medal-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "behaviour_grade")
@@ -1849,7 +1840,6 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
 
     _attr_translation_key = "descriptive_grades"
     _unrecorded_attributes = frozenset({"recent", "grades"})
-    _attr_icon = "mdi:text-box-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "descriptive_grades")
@@ -1955,7 +1945,6 @@ class LibrusUnreadMessagesSensor(LibrusSensorBase):
             "archive_recent",
         }
     )
-    _attr_icon = "mdi:email-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "unread_messages")
@@ -2030,7 +2019,6 @@ class LibrusSchoolSensor(LibrusSensorBase):
 
     _attr_translation_key = "school"
     _unrecorded_attributes = frozenset({"bell_schedule", "subject_teachers"})
-    _attr_icon = "mdi:school"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school")
@@ -2072,7 +2060,6 @@ class LibrusClassSensor(LibrusSensorBase):
     attributes carry the homeroom teacher and semester boundary dates."""
 
     _attr_translation_key = "school_class"
-    _attr_icon = "mdi:google-classroom"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_class")
@@ -2191,7 +2178,6 @@ class LibrusNextLessonSensor(_LibrusLessonClockSensor):
     guessing."""
 
     _attr_translation_key = "next_lesson"
-    _attr_icon = "mdi:clock-start"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "next_lesson")
@@ -2229,7 +2215,6 @@ class LibrusCurrentLessonSensor(_LibrusLessonClockSensor):
     countdown."""
 
     _attr_translation_key = "current_lesson"
-    _attr_icon = "mdi:clock-time-four-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "current_lesson")
@@ -2302,7 +2287,6 @@ class LibrusSchoolStartSensor(_LibrusSchoolTimeSensor):
     next school day. For alarm clocks."""
 
     _attr_translation_key = "school_start"
-    _attr_icon = "mdi:alarm"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_start")
@@ -2323,7 +2307,6 @@ class LibrusSchoolEndSensor(_LibrusSchoolTimeSensor):
     school day. For pick-up reminders."""
 
     _attr_translation_key = "school_end"
-    _attr_icon = "mdi:home-import-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_end")
@@ -2352,7 +2335,6 @@ class LibrusNextExamSensor(LibrusSensorBase):
     _attr_translation_key = "next_exam"
     _unrecorded_attributes = frozenset({"upcoming", "topics", "content", "this_week", "next_week"})
     _attr_device_class = SensorDeviceClass.DATE
-    _attr_icon = "mdi:file-document-alert-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "next_exam")
@@ -2434,7 +2416,6 @@ class LibrusPointGradesSensor(LibrusSensorBase):
     _unrecorded_attributes = frozenset({"subjects", "recent"})
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 1
-    _attr_icon = "mdi:percent-circle-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "point_grades")
@@ -2487,7 +2468,6 @@ class LibrusLessonTopicsSensor(LibrusSensorBase):
 
     _attr_translation_key = "lesson_topics"
     _unrecorded_attributes = frozenset({"today", "recent", "catch_up"})
-    _attr_icon = "mdi:book-open-page-variant-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "lesson_topics")
@@ -2563,7 +2543,6 @@ class LibrusPlanChangesSensor(LibrusSensorBase):
 
     _attr_translation_key = "plan_changes"
     _unrecorded_attributes = frozenset({"changes"})
-    _attr_icon = "mdi:calendar-alert"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "plan_changes")
@@ -2620,7 +2599,6 @@ class LibrusSchoolTripsSensor(LibrusSensorBase):
     _attr_translation_key = "school_trips"
     _attr_device_class = SensorDeviceClass.DATE
     _unrecorded_attributes = frozenset({"upcoming", "past"})
-    _attr_icon = "mdi:bus-school"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_trips")
@@ -2679,7 +2657,6 @@ class LibrusSchoolDocumentsSensor(LibrusSensorBase):
 
     _attr_translation_key = "school_documents"
     _unrecorded_attributes = frozenset({"recent"})
-    _attr_icon = "mdi:file-document-multiple-outline"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school_documents")
@@ -2710,7 +2687,6 @@ class LibrusLibraryBooksSensor(LibrusSensorBase):
 
     _attr_translation_key = "library_books"
     _unrecorded_attributes = frozenset({"books"})
-    _attr_icon = "mdi:bookshelf"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "library_books")
@@ -2749,7 +2725,6 @@ class LibrusCancelledLessonsSensor(LibrusSensorBase):
 
     _attr_translation_key = "cancelled_lessons"
     _unrecorded_attributes = frozenset({"by_subject", "by_month", "by_date", "recent"})
-    _attr_icon = "mdi:calendar-remove"
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "cancelled_lessons")
@@ -2841,7 +2816,6 @@ class LibrusStatusSensor(LibrusSensorBase):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = STATUS_OPTIONS
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:lan-check"
     # Reports the cycle itself (data source, failures), not just the data.
     _always_write = True
 
@@ -2887,7 +2861,6 @@ class LibrusLastUpdateSensor(LibrusSensorBase):
     _attr_translation_key = "last_update"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:cloud-clock-outline"
     # Moves with every successful poll, identical data or not.
     _always_write = True
 
@@ -2908,7 +2881,6 @@ class LibrusWeeklySummarySensor(SensorEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "weekly_summary"
-    _attr_icon = "mdi:creation"
     _attr_should_poll = False
     # Long text is only useful live on a card, never worth keeping in history.
     _unrecorded_attributes = frozenset({"sections", "summary", "advice", "warning", "error"})

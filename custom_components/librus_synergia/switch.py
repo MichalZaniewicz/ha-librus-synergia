@@ -55,11 +55,6 @@ class LibrusWeeklySummarySwitch(SwitchEntity):
     def is_on(self) -> bool:
         return self._summary.enabled
 
-    @property
-    def icon(self) -> str:
-        """Filled sparkles while on, outlined while paused."""
-        return "mdi:creation" if self._summary.enabled else "mdi:creation-outline"
-
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._summary.async_set_enabled(True)
 

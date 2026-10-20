@@ -68,6 +68,7 @@ async def test_lucky_number_sensor_flags_is_yours_when_student_number_matches(ha
     state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
     assert state.attributes["student_number"] == 7
     assert state.attributes["is_yours"] is True
+    assert state.attributes["icon"] == "mdi:party-popper"
 
 
 async def test_lucky_number_sensor_flags_is_yours_false_when_student_number_differs(hass) -> None:
@@ -79,6 +80,8 @@ async def test_lucky_number_sensor_flags_is_yours_false_when_student_number_diff
     state = hass.states.get(_entity_id(hass, entry, "lucky_number"))
     assert state.attributes["student_number"] == 12
     assert state.attributes["is_yours"] is False
+    # Not the student's number: the icon comes from icons.json.
+    assert "icon" not in state.attributes
 
 
 async def test_lucky_number_sensor_is_yours_none_when_student_number_not_configured(hass) -> None:

@@ -34,7 +34,6 @@ class LibrusWeeklySummaryButton(ButtonEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "weekly_summary_generate"
-    _attr_icon = "mdi:creation-outline"
 
     def __init__(self, summary: LibrusWeeklySummary, entry: LibrusConfigEntry) -> None:
         self._summary = summary
