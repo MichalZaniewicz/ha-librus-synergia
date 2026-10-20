@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+- **The semester in numbers.** The Overall average sensor has a
+  `semester_summary` attribute with each semester summed up: the average
+  and how it changed in the last 30 days (with a week-by-week series), how
+  many grades and of which kind (1-6, tests, pluses, corrections), the best
+  week, every subject's semester average, attendance with absences by
+  weekday, lessons held and cancelled, praise and remarks, homework, tests
+  done and still to come, trips and badges. It feeds the new Semester in
+  numbers card. No extra requests to Librus.
+
 ### Changed
 - **Icons that follow the state.** Every icon now comes from the
   integration's `icons.json`, and many change with the state: the averages

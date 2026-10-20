@@ -71,6 +71,7 @@ from .coordinator import (
 )
 from .absence_budget import MIN_HELD, AbsenceBudget, absence_budget
 from .catch_up import catch_up
+from .semester_summary import semester_summary
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, week_load
 from .average_history import points_statistic_id
 from .forecast import (
@@ -544,6 +545,7 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
 
     _attr_translation_key = "overall_average"
     _attr_suggested_display_precision = 2
+    _unrecorded_attributes = frozenset({"semester_summary"})
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "overall_average")
@@ -576,7 +578,27 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
                 grading=self._grading),
             "average_semester_2": _calculate_average(grades, cats, semester=2, weighted=weighted,
                 grading=self._grading),
+            # Both semesters in numbers, for the Semester in numbers card.
+            "semester_summary": self._semester_summary(weighted),
         }
+
+    def _semester_summary(self, weighted: bool) -> dict[str, Any] | None:
+        data = self.coordinator.data
+        if data is None:
+            return None
+        today = dt_util.now().date()
+        achievements = self.coordinator.achievements
+        return self._cached(
+            "semester_summary",
+            (today, weighted, tuple((a["key"], a["date"]) for a in achievements)),
+            lambda: semester_summary(
+                data,
+                today,
+                weighted=weighted,
+                grading=data.grading_system,
+                achievements=achievements,
+            ),
+        )
 
 
 def _subject_averages(
