@@ -41,8 +41,9 @@ triggers:
 conditions:
   - condition: template
     value_template: >-
-      {% set v = (trigger.event.data.value | string | trim | regex_replace('[+\-]$', '')) %}
-      {{ v is match('^[1-6]$') and (v | int) <= (threshold | int(2)) }}
+      {# A point grade's value is points ("2" out of 2 is full marks), not a 1-6 grade. #}
+      {% set v = (trigger.event.data.value | string | trim | regex_replace('[-+]$', '')) %}
+      {{ trigger.event.data.kind != 'point' and v is match('^[1-6]$') and (v | int) <= (threshold | int(2)) }}
 
 actions:
   - variables:

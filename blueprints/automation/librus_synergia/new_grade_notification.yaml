@@ -15,8 +15,10 @@ blueprint:
     `{{ trigger.event.data.average_before }}` / `{{ trigger.event.data.average_after }}`
     (the subject's average without and with the new grade)
     or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
-    semester / final_proposition / final / text / descriptive - a descriptive
-    grade's category is the skill it is for).
+    semester / final_proposition / final / text / descriptive / point - a
+    descriptive grade's category is the skill it is for; a point grade's
+    value is the points, with `points`, `max_points` and `percentage` next
+    to it, and `grade_summary` shows it as "17/20 pkt (85%)").
     With "Show the average change" on, `grade_summary` gets a line like
     "Średnia: 4,20 → 4,35". With "Include details" on, it gets a line with the
     category, weight, date, teacher and the teacher's comment. If you use this
@@ -66,7 +68,14 @@ actions:
           'final_proposition': 'Propozycja oceny rocznej',
           'final': 'Ocena roczna',
         } -%}
-        {{ (d.student ~ ': ') if d.student else '' }}{{ kinds.get(d.kind, 'Nowa ocena') }}: {{ d.value }}{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}
+        {%- set value = d.value -%}
+        {%- if d.kind == 'point' and d.max_points is number -%}
+          {%- set value = value ~ '/' ~ ('%g' | format(d.max_points)) ~ ' pkt' -%}
+          {%- if d.percentage is number -%}
+            {%- set value = value ~ ' (' ~ (('%g' | format(d.percentage)) | replace('.', ',')) ~ '%)' -%}
+          {%- endif -%}
+        {%- endif -%}
+        {{ (d.student ~ ': ') if d.student else '' }}{{ kinds.get(d.kind, 'Nowa ocena') }}: {{ value }}{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}
         {%- if include_average and d.average_after is number -%}
           {%- set after = ('%.2f' | format(d.average_after)) | replace('.', ',') %}
         Średnia: {{ (('%.2f' | format(d.average_before)) | replace('.', ',') ~ ' → ' ~ after) if d.average_before is number else after }}
