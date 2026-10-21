@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.28
 
 ### Added
 - **Copy to calendar that keeps up.** New action
