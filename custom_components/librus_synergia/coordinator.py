@@ -1091,11 +1091,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.message_recipients_summary: dict[str, Any] | None = None
         self._sent_at: list[datetime] = []
         # Ids already announced per kind (text grades, descriptive grades,
-        # school trips, school documents); None until the first sync, which
-        # only seeds them.
+        # point grades, school trips, school documents); None until the first
+        # sync, which only seeds them.
         self._known_items: dict[str, set[Any] | None] = {
             "text_grades": None,
             "descriptive_grades": None,
+            "point_grades": None,
             "school_trips": None,
             "school_files": None,
         }
@@ -4928,9 +4929,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
 
     def _fire_extra_item_events(self, data: LibrusData) -> None:
-        """New text grades and descriptive grades (as EVENT_NEW_GRADE with
-        `kind: text` / `kind: descriptive`), school trips and school
-        documents - seeded silently on the first sync."""
+        """New text, descriptive and point grades (as EVENT_NEW_GRADE with
+        `kind: text` / `kind: descriptive` / `kind: point`), school trips and
+        school documents - seeded silently on the first sync."""
         entry_id = self.config_entry.entry_id if self.config_entry else None
         student = data.me.display_name
         text_grades = {
@@ -4969,6 +4970,29 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             }
             for grade in data.descriptive_grades
         }
+        # Point grades keep `value` as Librus shows it (the points) and add
+        # `points` / `max_points` / `percentage`, so a notification can say
+        # "26/30 pkt (86,7%)" without its own category lookup.
+        point_grades = {
+            grade.id: {
+                "subject_id": grade.subject_id,
+                "subject": data.subjects.get(grade.subject_id) if grade.subject_id is not None else None,
+                "value": grade.value,
+                "points": grade.points,
+                "max_points": grade.max_points,
+                "percentage": grade.percentage,
+                "teacher": _teacher_name(data, grade.teacher_id),
+                "category": grade.category,
+                "weight": grade.weight,
+                "counts_to_average": grade.counts_to_average,
+                "comments": [],
+                "date": grade.add_date,
+                "semester": grade.semester,
+                "kind": "point",
+                "improves": None,
+            }
+            for grade in data.point_grades
+        }
         descriptive_on = self._feature_enabled(
             CONF_DESCRIPTIVE_GRADES_ENABLED, DEFAULT_DESCRIPTIVE_GRADES_ENABLED
         )
@@ -4990,12 +5014,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for kind, event, items in (
             ("text_grades", EVENT_NEW_GRADE, text_grades),
             ("descriptive_grades", EVENT_NEW_GRADE, descriptive_grades),
+            ("point_grades", EVENT_NEW_GRADE, point_grades),
             ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
             ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
         ):
             label = {
                 "text_grades": "BaseTextGrades",
                 "descriptive_grades": "DescriptiveGrades",
+                "point_grades": "PointGrades",
                 "school_trips": "SchoolTrips",
                 "school_files": "SchoolFiles",
             }[kind]
@@ -5008,6 +5034,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 available = (
                     available and descriptive_on and "PartialGrades" not in self._failed_this_cycle
                 )
+            elif kind == "point_grades":
+                # Not asked when Units says the school doesn't grade in points:
+                # seeding that empty list would announce every point grade the
+                # day the school turns them on.
+                available = available and self.point_grades_enabled is not False
             self._known_items[kind] = self._fire_for_new_ids(
                 event,
                 entry_id,

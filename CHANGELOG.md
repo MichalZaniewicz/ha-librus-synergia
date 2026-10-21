@@ -29,6 +29,14 @@
   "📝 [Sprawdzian] Chemia: ..." in the timetable and Agenda calendars and
   in calendar copies - easier to read on a phone or a watch. The companion
   cards show titles without it.
+- **New point grades fire `librus_synergia_new_grade`.** Schools grading
+  in points never got a notification for a new point grade - only 1-6,
+  text and descriptive grades fired the event. Point grades now do too,
+  with `kind: point`, the points as `value` and `points` / `max_points` /
+  `percentage`, the category, weight and teacher. The ones already in the
+  diary are taken in silently on the first sync. The New Grade Notification
+  blueprint shows them as "17/20 pkt (85%)" (or "9,47/10 pkt"), and the Low Grade Notification
+  blueprint leaves them out (their value is points, not a 1-6 grade).
 
 ### Changed
 - **The class as the device model.** The device page shows "Klasa 7a by

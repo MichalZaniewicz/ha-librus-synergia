@@ -6,8 +6,11 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from pytest_homeassistant_custom_component.common import async_capture_events
 
+from custom_components.librus_synergia.const import EVENT_NEW_GRADE
 from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from librus_synergia import LibrusConnectionError
 
 from .conftest import build_mock_client, make_config_entry, setup_integration
 
@@ -201,3 +204,61 @@ async def test_point_subject_sums_semesters_and_statistic_id(hass) -> None:
     assert attrs["points_statistic_id"] == f"librus_synergia:{entry.entry_id.lower()}_average_points_100"
     # The forecast's own basis: semester 1 only here.
     assert (attrs["forecast_points_earned"], attrs["forecast_points_possible"]) == (185.0, 220.0)
+
+
+POINT_GRADE_NEW = {
+    "Id": 3, "Grade": "17", "GradeValue": 17, "Category": {"Id": 2}, "AddedBy": {"Id": 7},
+    "Subject": {"Id": 100}, "Semester": 1, "AddDate": "2026-10-21 11:40:49",
+}
+
+
+async def test_new_point_grade_fires_new_grade_event(hass) -> None:
+    grades = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(
+        async_get_subjects=SUBJECTS,
+        async_get_point_grades=POINT_GRADES,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+    )
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()  # first sync only seeds the two old ones
+    await hass.async_block_till_done()
+    assert grades == []
+
+    client.async_get_point_grades.return_value = {"Grades": [*POINT_GRADES["Grades"], POINT_GRADE_NEW]}
+    coordinator._fetched_at.clear()
+    await coordinator._async_update_data()
+    await hass.async_block_till_done()
+
+    assert len(grades) == 1
+    data = grades[0].data
+    assert (data["kind"], data["id"], data["subject"], data["category"]) == ("point", 3, "Matematyka", "Kartkówka")
+    assert (data["value"], data["points"], data["max_points"], data["percentage"]) == ("17", 17.0, 20.0, 85.0)
+    assert (data["weight"], data["counts_to_average"], data["date"]) == (1.0, True, "2026-10-21 11:40:49")
+    assert data["entry_id"] == coordinator.config_entry.entry_id
+
+    await coordinator._async_update_data()  # the same grade again: not re-announced
+    await hass.async_block_till_done()
+    assert len(grades) == 1
+
+
+async def test_point_grades_not_seeded_while_the_school_has_them_off(hass) -> None:
+    client = build_mock_client(
+        async_get_units={"Units": [{"GradesSettings": {"PointGradesEnabled": False}}]},
+        async_get_point_grades=POINT_GRADES,
+    )
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    await coordinator._async_update_data()
+
+    assert coordinator.point_grades_enabled is False
+    # Seeding the empty list would announce every grade once points get turned on.
+    assert coordinator._known_items["point_grades"] is None
+
+
+async def test_point_grades_not_seeded_when_their_fetch_failed(hass) -> None:
+    client = build_mock_client(async_get_point_grades=POINT_GRADES)
+    client.async_get_point_grades.side_effect = LibrusConnectionError("down")
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+
+    assert coordinator._known_items["point_grades"] is None
