@@ -51,8 +51,9 @@ async def test_new_grade_summary_shows_points_out_of_max(hass) -> None:
     summary = bp["actions"][0]["variables"]["grade_summary"]
     variables = bp["variables"]
 
-    point = {**POINT, "value": "17", "points": 17.0, "max_points": 20.0, "percentage": 85.0}
+    # Librus sends the points as text with two decimals.
+    point = {**POINT, "value": "17.00", "points": 17.0, "max_points": 20.0, "percentage": 85.0}
     assert _render(hass, summary, variables, point) == "Nowa ocena: 17/20 pkt (85%) (Fizyka)"
     point_frac = {**point, "value": "9.47", "points": 9.47, "max_points": 10.0, "percentage": 94.7}
-    assert _render(hass, summary, variables, point_frac) == "Nowa ocena: 9.47/10 pkt (94,7%) (Fizyka)"
+    assert _render(hass, summary, variables, point_frac) == "Nowa ocena: 9,47/10 pkt (94,7%) (Fizyka)"
     assert _render(hass, summary, variables, {**NORMAL, "value": "5"}) == "Nowa ocena: 5 (Fizyka)"

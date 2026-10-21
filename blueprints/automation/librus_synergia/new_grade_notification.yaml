@@ -68,9 +68,10 @@ actions:
           'final_proposition': 'Propozycja oceny rocznej',
           'final': 'Ocena roczna',
         } -%}
-        {%- set value = d.value -%}
+        {#- Librus sends the points as text ("26.00"); the number reads better: "26", "9,47". -#}
+        {%- set value = (('%g' | format(d.points)) | replace('.', ',')) if d.kind == 'point' and d.points is number else d.value -%}
         {%- if d.kind == 'point' and d.max_points is number -%}
-          {%- set value = value ~ '/' ~ ('%g' | format(d.max_points)) ~ ' pkt' -%}
+          {%- set value = value ~ '/' ~ (('%g' | format(d.max_points)) | replace('.', ',')) ~ ' pkt' -%}
           {%- if d.percentage is number -%}
             {%- set value = value ~ ' (' ~ (('%g' | format(d.percentage)) | replace('.', ',')) ~ '%)' -%}
           {%- endif -%}
