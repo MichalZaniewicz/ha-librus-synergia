@@ -10,27 +10,47 @@ blueprint:
 
     Inside your chosen action, use `{{ message_summary }}` for the ready-made
     summary, or reference the individual fields directly, e.g.
-    `{{ trigger.event.data.sender }}` or `{{ trigger.event.data.topic }}`.
+    `{{ trigger.event.data.sender }}`, `{{ trigger.event.data.topic }}` or
+    `{{ trigger.event.data.mailbox }}` (inbox / substitutions / alerts /
+    justifications - a message outside the inbox is labelled in
+    `message_summary`, e.g. "Nowa wiadomość (Zastępstwa) od ...").
     If you use this blueprint for more than one child, `message_summary` is
     already prefixed with `{{ trigger.event.data.student }}` (the child's
     name) so one shared notification still says whose mailbox it is.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_message_notification.yaml
   input:
+    other_mailboxes:
+      name: Other mailboxes too
+      description: >
+        Also notify about new messages in the substitutions, alerts and
+        justifications mailboxes (only schools that use them have them).
+      default: true
+      selector:
+        boolean: {}
     notify_action:
       name: Notification action
       description: The action to run for each new message.
       selector:
         action: {}
 
+variables:
+  other_mailboxes: !input other_mailboxes
+
 triggers:
   - trigger: event
     event_type: librus_synergia_new_message
 
+conditions:
+  - condition: template
+    value_template: "{{ other_mailboxes or (trigger.event.data.mailbox | default('inbox')) == 'inbox' }}"
+
 actions:
   - variables:
       message_summary: >-
-        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość od {{ trigger.event.data.sender }}: {{ trigger.event.data.topic }}
+        {%- set boxes = {'substitutions': 'Zastępstwa', 'alerts': 'Alerty', 'justifications': 'Usprawiedliwienia'} -%}
+        {%- set box = boxes.get(trigger.event.data.mailbox | default('inbox')) -%}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość{{ (' (' ~ box ~ ')') if box else '' }} od {{ trigger.event.data.sender }}: {{ trigger.event.data.topic }}
   - sequence: !input notify_action
 
 mode: queued

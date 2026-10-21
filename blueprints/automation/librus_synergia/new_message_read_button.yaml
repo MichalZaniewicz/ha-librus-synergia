@@ -9,6 +9,10 @@ blueprint:
     unread. The button stays active for 24 hours.
 
 
+    Messages in the substitutions, alerts and justifications mailboxes are
+    included too (labelled in the title) unless you turn that off.
+
+
     For any other notifier (a speaker, Telegram...) use the "New Message
     Notification" blueprint instead.
   domain: automation
@@ -30,16 +34,33 @@ blueprint:
       selector:
         text: {}
 
+    other_mailboxes:
+      name: Other mailboxes too
+      description: >
+        Also notify about new messages in the substitutions, alerts and
+        justifications mailboxes (only schools that use them have them).
+      default: true
+      selector:
+        boolean: {}
+
 triggers:
   - trigger: event
     event_type: librus_synergia_new_message
 
 variables:
   open_path: !input open_path
+  other_mailboxes: !input other_mailboxes
+
+conditions:
+  - condition: template
+    value_template: "{{ other_mailboxes or (trigger.event.data.mailbox | default('inbox')) == 'inbox' }}"
 
 actions:
   - variables:
       message_id: "{{ trigger.event.data.id }}"
+      mailbox: "{{ trigger.event.data.mailbox | default('inbox') }}"
+      mailbox_label: >-
+        {{ {'substitutions': 'Zastępstwa', 'alerts': 'Alerty', 'justifications': 'Usprawiedliwienia'}.get(trigger.event.data.mailbox | default('inbox'), '') }}
       action_id: "LIBRUS_READ_{{ trigger.event.data.entry_id }}_{{ trigger.event.data.id }}"
       notification_tag: "librus-message-{{ trigger.event.data.id }}"
       # The Librus device of the student the message is for (the event
@@ -54,7 +75,7 @@ actions:
     domain: mobile_app
     type: notify
     title: >-
-      {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość od {{ trigger.event.data.sender }}
+      {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Nowa wiadomość{{ (' (' ~ mailbox_label ~ ')') if mailbox_label else '' }} od {{ trigger.event.data.sender }}
     message: "{{ trigger.event.data.topic }}"
     data:
       tag: "{{ notification_tag }}"
@@ -74,6 +95,7 @@ actions:
     data:
       device_id: "{{ librus_device }}"
       message_id: "{{ message_id }}"
+      mailbox: "{{ mailbox }}"
   - device_id: !input notify_device
     domain: mobile_app
     type: notify

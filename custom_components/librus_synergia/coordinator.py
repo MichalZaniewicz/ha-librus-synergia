@@ -48,6 +48,7 @@ from librus_synergia.changes import timetable_changes as tracked_timetable_chang
 from librus_synergia.models import (
     AttendanceData,
     AttendanceTypeData,
+    BehaviourGradeData,
     ClassData,
     FreeDayData,
     GradeCategoryData,
@@ -554,6 +555,10 @@ _MARKABLE_MAILBOXES: dict[str, str] = {
     "justifications": "justification_messages",
     ARCHIVE_MAILBOX: "archived_messages",
 }
+# Mailboxes besides the inbox whose new messages fire EVENT_NEW_MESSAGE (the
+# inbox goes through the library's ChangeTracker). Not the outbox (our own
+# messages) or the archive (already read).
+_EVENT_MAILBOXES = ("substitutions", "alerts", "justifications")
 _MESSAGE_TUPLE_POSITIONS: dict[str, int] = {
     "inbox": 2,
     "substitutions": 3,
@@ -904,6 +909,30 @@ def _teacher_name(data: LibrusData, teacher_id: Any) -> str | None:
     return data.teachers.get(teacher_id) if teacher_id is not None else None
 
 
+# "Ocena zachowania miesiąc za IX/26." - the month a monthly behaviour grade
+# is for (seen live 2026-10-05: a September grade added on 5 October).
+_BEHAVIOUR_MONTH_RE = re.compile(r"\bza\s+([IVX]{1,4})\s*/\s*(\d{2}|\d{4})\b", re.IGNORECASE)
+_ROMAN_MONTHS = {
+    "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6,
+    "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12,
+}
+
+
+def behaviour_month(grade: BehaviourGradeData) -> str | None:
+    """"YYYY-MM" the grade is for: from a "za IX/26" comment or text, else
+    the month it was added in."""
+    for text in (*grade.comments, grade.text):
+        match = _BEHAVIOUR_MONTH_RE.search(text or "")
+        if match and match.group(1).upper() in _ROMAN_MONTHS:
+            year = int(match.group(2))
+            if year < 100:
+                year += 2000
+            return f"{year:04d}-{_ROMAN_MONTHS[match.group(1).upper()]:02d}"
+    if grade.add_date and len(grade.add_date) >= 7:
+        return grade.add_date[:7]
+    return None
+
+
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     """Fetches everything Librus Synergia exposes for one student."""
 
@@ -1090,15 +1119,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # What the last recipient-list fetch saw (diagnostics only, no names).
         self.message_recipients_summary: dict[str, Any] | None = None
         self._sent_at: list[datetime] = []
-        # Ids already announced per kind (text grades, descriptive grades,
-        # point grades, school trips, school documents); None until the first
-        # sync, which only seeds them.
+        # Ids already announced per kind (text, descriptive, point and
+        # behaviour grades, school trips, school documents, messages in the
+        # mailboxes other than the inbox); None until the first sync, which
+        # only seeds them.
         self._known_items: dict[str, set[Any] | None] = {
             "text_grades": None,
             "descriptive_grades": None,
             "point_grades": None,
+            "behaviour_grades": None,
             "school_trips": None,
             "school_files": None,
+            **{f"{box}_messages": None for box in _EVENT_MAILBOXES},
         }
         # When each throttled optional endpoint last answered (see
         # _async_optional).
@@ -4871,7 +4903,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             fire(
                 EVENT_NEW_MESSAGE,
                 message.id,
-                {"sender": message.sender_name, "topic": message.topic},
+                {"sender": message.sender_name, "topic": message.topic, "mailbox": "inbox"},
             )
         for homework in changes.agenda:
             fire(
@@ -4929,9 +4961,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
 
     def _fire_extra_item_events(self, data: LibrusData) -> None:
-        """New text, descriptive and point grades (as EVENT_NEW_GRADE with
-        `kind: text` / `kind: descriptive` / `kind: point`), school trips and
-        school documents - seeded silently on the first sync."""
+        """New text, descriptive, point and behaviour grades (as
+        EVENT_NEW_GRADE with `kind: text` / `descriptive` / `point` /
+        `behaviour`), school trips, school documents and messages in the
+        substitutions / alerts / justifications mailboxes (as
+        EVENT_NEW_MESSAGE with their `mailbox`) - seeded silently on the
+        first sync."""
         entry_id = self.config_entry.entry_id if self.config_entry else None
         student = data.me.display_name
         text_grades = {
@@ -5011,17 +5046,83 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             item.id: {"name": item.name, "added": item.added, "url": school_file_url(item.download_path)}
             for item in data.school_files
         }
+        # Behaviour grades ("ocena zachowania"): `value` is the short form
+        # ("bdb", or the points "+5"), `name` the full one ("bardzo dobre"),
+        # `month` the month it is for. A grade with nothing set yet is left
+        # out, so it is announced once it gets a value.
+        behaviour_grades = {
+            grade.id: {
+                "subject_id": None,
+                "subject": None,
+                "value": grade.display,
+                "name": grade.name,
+                "points": grade.value if grade.grade_id is None else None,
+                "month": behaviour_month(grade),
+                "teacher": _teacher_name(data, grade.teacher_id),
+                "category": data.behaviour_grade_categories.get(grade.category_id)
+                if grade.category_id is not None
+                else None,
+                "weight": None,
+                "counts_to_average": None,
+                "comments": list(grade.comments),
+                "date": grade.add_date,
+                "semester": grade.semester,
+                "kind": "behaviour",
+                "improves": None,
+            }
+            for grade in data.behaviour_grades
+            if grade.display
+        }
+        behaviour_on = self._feature_enabled(
+            CONF_BEHAVIOUR_GRADES_ENABLED, DEFAULT_BEHAVIOUR_GRADES_ENABLED
+        )
+        # The other mailboxes (substitutions, alerts, justifications) - same
+        # event and fields as the inbox, plus which mailbox it came from.
+        mailbox_items = {
+            box: {
+                message.id: {"sender": message.sender_name, "topic": message.topic, "mailbox": box}
+                for message in getattr(data, _MARKABLE_MAILBOXES[box])
+            }
+            for box in _EVENT_MAILBOXES
+        }
+        messages_ok = (
+            data.messages_available
+            and "Messages" not in self._failed_this_cycle
+            and "Messages" not in self.fallback_sections
+        )
         for kind, event, items in (
             ("text_grades", EVENT_NEW_GRADE, text_grades),
             ("descriptive_grades", EVENT_NEW_GRADE, descriptive_grades),
             ("point_grades", EVENT_NEW_GRADE, point_grades),
+            ("behaviour_grades", EVENT_NEW_GRADE, behaviour_grades),
             ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
             ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
+            *((f"{box}_messages", EVENT_NEW_MESSAGE, mailbox_items[box]) for box in _EVENT_MAILBOXES),
         ):
+            if kind.endswith("_messages"):
+                box = kind.removesuffix("_messages")
+                # Not when the fetch failed, nor while the account doesn't
+                # have the mailbox (404): seeding that empty list would
+                # announce everything in it once it shows up.
+                available = (
+                    messages_ok
+                    and box not in self._failed_mailboxes
+                    and box not in self.missing_mailboxes
+                )
+                self._known_items[kind] = self._fire_for_new_ids(
+                    event,
+                    entry_id,
+                    self._known_items[kind],
+                    items,
+                    student=student,
+                    available=available,
+                )
+                continue
             label = {
                 "text_grades": "BaseTextGrades",
                 "descriptive_grades": "DescriptiveGrades",
                 "point_grades": "PointGrades",
+                "behaviour_grades": "BehaviourGrades/Points",
                 "school_trips": "SchoolTrips",
                 "school_files": "SchoolFiles",
             }[kind]
@@ -5039,6 +5140,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 # seeding that empty list would announce every point grade the
                 # day the school turns them on.
                 available = available and self.point_grades_enabled is not False
+            elif kind == "behaviour_grades":
+                # Turned off in the options: nothing fetched, nothing to seed.
+                available = available and behaviour_on
             self._known_items[kind] = self._fire_for_new_ids(
                 event,
                 entry_id,

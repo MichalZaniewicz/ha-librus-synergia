@@ -15,10 +15,13 @@ blueprint:
     `{{ trigger.event.data.average_before }}` / `{{ trigger.event.data.average_after }}`
     (the subject's average without and with the new grade)
     or `{{ trigger.event.data.kind }}` (normal / semester_proposition /
-    semester / final_proposition / final / text / descriptive / point - a
-    descriptive grade's category is the skill it is for; a point grade's
-    value is the points, with `points`, `max_points` and `percentage` next
-    to it, and `grade_summary` shows it as "17/20 pkt (85%)").
+    semester / final_proposition / final / text / descriptive / point /
+    behaviour - a descriptive grade's category is the skill it is for; a
+    point grade's value is the points, with `points`, `max_points` and
+    `percentage` next to it, and `grade_summary` shows it as "17/20 pkt
+    (85%)"; a behaviour grade has no subject, `name` holds the full name and
+    `month` the month it is for, shown as "Ocena z zachowania: bdb (bardzo
+    dobre) za październik").
     With "Show the average change" on, `grade_summary` gets a line like
     "Średnia: 4,20 → 4,35". With "Include details" on, it gets a line with the
     category, weight, date, teacher and the teacher's comment. If you use this
@@ -67,6 +70,7 @@ actions:
           'semester': 'Ocena semestralna',
           'final_proposition': 'Propozycja oceny rocznej',
           'final': 'Ocena roczna',
+          'behaviour': 'Ocena z zachowania',
         } -%}
         {#- Librus sends the points as text ("26.00"); the number reads better: "26", "9,47". -#}
         {%- set value = (('%g' | format(d.points)) | replace('.', ',')) if d.kind == 'point' and d.points is number else d.value -%}
@@ -75,6 +79,11 @@ actions:
           {%- if d.percentage is number -%}
             {%- set value = value ~ ' (' ~ (('%g' | format(d.percentage)) | replace('.', ',')) ~ '%)' -%}
           {%- endif -%}
+        {%- endif -%}
+        {%- if d.kind == 'behaviour' -%}
+          {%- set months = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'] -%}
+          {%- if d.name -%}{%- set value = value ~ ' (' ~ d.name ~ ')' -%}{%- endif -%}
+          {%- if d.month and d.month[5:7] | int(0) > 0 -%}{%- set value = value ~ ' za ' ~ months[(d.month[5:7] | int) - 1] -%}{%- endif -%}
         {%- endif -%}
         {{ (d.student ~ ': ') if d.student else '' }}{{ kinds.get(d.kind, 'Nowa ocena') }}: {{ value }}{{ (' (' ~ d.subject ~ ')') if d.subject else '' }}
         {%- if include_average and d.average_after is number -%}

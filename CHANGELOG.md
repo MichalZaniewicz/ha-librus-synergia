@@ -37,6 +37,20 @@
   diary are taken in silently on the first sync. The New Grade Notification
   blueprint shows them as "17/20 pkt (85%)" (or "9,47/10 pkt"), and the Low Grade Notification
   blueprint leaves them out (their value is points, not a 1-6 grade).
+- **New behaviour grades fire `librus_synergia_new_grade`** with
+  `kind: behaviour`: `value` is the short form ("bdb", or the points),
+  `name` the full one ("bardzo dobre"), `month` the month it is for. The New
+  Grade Notification blueprint shows "Ocena z zachowania: bdb (bardzo
+  dobre) za październik"; the Low Grade Notification blueprint leaves them
+  out. Nothing fires while behaviour grades are turned off in the options.
+- **New messages in the substitutions, alerts and justifications
+  mailboxes fire `librus_synergia_new_message`** too (only schools that use
+  these mailboxes have them). Every new-message event now carries
+  `mailbox`. Both message blueprints label these messages ("Nowa wiadomość
+  (Zastępstwa) od ...") and have an "Other mailboxes too" switch (on by
+  default); the read button marks the message read in the right mailbox. A
+  mailbox without an unread count in Librus is checked hourly, so its
+  messages can arrive up to an hour late.
 
 ### Changed
 - **The class as the device model.** The device page shows "Klasa 7a by

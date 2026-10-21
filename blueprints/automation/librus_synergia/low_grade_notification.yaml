@@ -4,7 +4,8 @@ blueprint:
     Runs your action only when a new grade is at or below a threshold you
     set - so you hear about a 1 or a 2 without a ping for every single
     grade. A trailing "+"/"-" is ignored ("2+" counts as 2); non-numeric
-    marks (bz, np, nk, ...) never trigger it.
+    marks (bz, np, nk, ...) never trigger it, and neither do point grades
+    or behaviour grades.
 
 
     Use `{{ grade_summary }}` in your action, or the raw fields:
@@ -41,9 +42,9 @@ triggers:
 conditions:
   - condition: template
     value_template: >-
-      {# A point grade's value is points ("2" out of 2 is full marks), not a 1-6 grade. #}
+      {# A point grade's value is points ("2" out of 2 is full marks), and a behaviour grade isn't on the 1-6 scale. #}
       {% set v = (trigger.event.data.value | string | trim | regex_replace('[-+]$', '')) %}
-      {{ trigger.event.data.kind != 'point' and v is match('^[1-6]$') and (v | int) <= (threshold | int(2)) }}
+      {{ trigger.event.data.kind not in ['point', 'behaviour'] and v is match('^[1-6]$') and (v | int) <= (threshold | int(2)) }}
 
 actions:
   - variables:

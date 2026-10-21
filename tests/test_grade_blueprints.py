@@ -57,3 +57,32 @@ async def test_new_grade_summary_shows_points_out_of_max(hass) -> None:
     point_frac = {**point, "value": "9.47", "points": 9.47, "max_points": 10.0, "percentage": 94.7}
     assert _render(hass, summary, variables, point_frac) == "Nowa ocena: 9,47/10 pkt (94,7%) (Fizyka)"
     assert _render(hass, summary, variables, {**NORMAL, "value": "5"}) == "Nowa ocena: 5 (Fizyka)"
+
+
+BEHAVIOUR = {"kind": "behaviour", "value": "bdb", "name": "bardzo dobre", "month": "2026-10", "subject": None}
+
+
+async def test_behaviour_grade_in_summaries(hass) -> None:
+    low = _load("low_grade_notification.yaml", threshold=5)
+    condition = low["conditions"][0]["value_template"]
+    # Points-scale behaviour grades can look like "5" - still not a 1-6 grade.
+    assert _render(hass, condition, low["variables"], {**BEHAVIOUR, "value": "5"}) is False
+
+    bp = _load("new_grade_notification.yaml", include_average=False, include_details=False)
+    summary = bp["actions"][0]["variables"]["grade_summary"]
+    assert (
+        _render(hass, summary, bp["variables"], BEHAVIOUR)
+        == "Ocena z zachowania: bdb (bardzo dobre) za październik"
+    )
+
+
+async def test_message_summary_names_the_mailbox(hass) -> None:
+    bp = _load("new_message_notification.yaml")
+    summary = bp["actions"][0]["variables"]["message_summary"]
+    condition = bp["conditions"][0]["value_template"]
+    event = {"sender": "Sekretariat", "topic": "Zmiana", "mailbox": "substitutions"}
+
+    assert _render(hass, summary, {}, event) == "Nowa wiadomość (Zastępstwa) od Sekretariat: Zmiana"
+    assert _render(hass, summary, {}, {**event, "mailbox": "inbox"}) == "Nowa wiadomość od Sekretariat: Zmiana"
+    assert _render(hass, condition, {"other_mailboxes": False}, event) is False
+    assert _render(hass, condition, {"other_mailboxes": False}, {**event, "mailbox": "inbox"}) is True

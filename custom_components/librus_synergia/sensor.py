@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timedelta
 from typing import Any, TypeVar
@@ -67,6 +66,7 @@ from .coordinator import (
     teacher_subject_ids,
 )
 from .coordinator import (
+    behaviour_month as _behaviour_month,
     calculate_average as _calculate_average,
 )
 from .absence_budget import MIN_HELD, AbsenceBudget, absence_budget
@@ -1737,30 +1737,6 @@ class LibrusHomeworkAssignmentsSensor(LibrusSensorBase):
                 for a in recent
             ]
         }
-
-
-# "Ocena zachowania miesiąc za IX/26." - the month a monthly behaviour grade
-# is for (seen live 2026-10-05: a September grade added on 5 October).
-_BEHAVIOUR_MONTH_RE = re.compile(r"\bza\s+([IVX]{1,4})\s*/\s*(\d{2}|\d{4})\b", re.IGNORECASE)
-_ROMAN_MONTHS = {
-    "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6,
-    "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12,
-}
-
-
-def _behaviour_month(grade: BehaviourGradeData) -> str | None:
-    """"YYYY-MM" the grade is for: from a "za IX/26" comment or text, else
-    the month it was added in."""
-    for text in (*grade.comments, grade.text):
-        match = _BEHAVIOUR_MONTH_RE.search(text or "")
-        if match and match.group(1).upper() in _ROMAN_MONTHS:
-            year = int(match.group(2))
-            if year < 100:
-                year += 2000
-            return f"{year:04d}-{_ROMAN_MONTHS[match.group(1).upper()]:02d}"
-    if grade.add_date and len(grade.add_date) >= 7:
-        return grade.add_date[:7]
-    return None
 
 
 class LibrusBehaviourGradeSensor(LibrusSensorBase):
