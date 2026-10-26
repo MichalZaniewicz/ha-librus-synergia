@@ -12,6 +12,11 @@ A tiered badge (e.g. 5 / 10 / 25 sixes) earns one key per tier
 ("sixes_10"); a single badge earns its bare key ("first_six"). The keys of
 the original ten achievements are unchanged, so existing automations that
 match on them keep working.
+
+Point grades count like 1-6 grades once `point_grade_thresholds` gives their
+subject a scale: each one as the grade its percentage makes on it (the
+forecast's thresholds) - a 100 % quiz is a six, a 45 % test breaks the good
+grade streak. Without a scale they stay out, as before.
 """
 
 from __future__ import annotations
@@ -28,13 +33,17 @@ from librus_synergia.models import (
     AttendanceData,
     GradeData,
     LibrusData,
+    PointGradeData,
 )
-from librus_synergia.parsers import parse_grade_value
+from librus_synergia.parsers import parse_grade_value, point_grades_percentage
 
 from .forecast import (
     HONOURS_AVERAGE,
     PointThresholdsArg,
+    as_point_thresholds,
     average_sums,
+    point_grade_value,
+    predicted_grade,
     report_average,
     subject_forecasts,
 )
@@ -251,6 +260,22 @@ def compute_badges(
         key=lambda g: (g.add_date or "", g.id),
     )
     numeric = [(g, v) for g in grades if (v := parse_grade_value(g.value, grading)) is not None]
+    # Point grades count like 1-6 grades: each one at the grade its
+    # percentage makes on its subject's scale (`point_grade_thresholds` - the
+    # forecast's). Without a scale they stay out, as before.
+    scales = as_point_thresholds(point_thresholds)
+    points: list[tuple[PointGradeData, float]] = (
+        [
+            (g, float(v))
+            for g in data.point_grades
+            if _day(g.add_date) and (v := point_grade_value(g, scales)) is not None
+        ]
+        if scales
+        else []
+    )
+    scored: list[tuple[GradeData | PointGradeData, float]] = sorted(
+        [*numeric, *points], key=lambda gv: (gv[0].add_date or "", gv[0].id)
+    )
     badges: list[Badge] = []
 
     def badge(key: str, tiers: tuple[int, ...] = (), **kwargs: Any) -> Badge:
@@ -259,7 +284,7 @@ def compute_badges(
         return item
 
     # --- grades -----------------------------------------------------
-    six_dates = [(g.add_date or "")[:10] for g, v in numeric if v >= 6.0]
+    six_dates = [(g.add_date or "")[:10] for g, v in scored if v >= 6.0]
     first_six = badge("first_six")
     if six_dates:
         first_six.earned["first_six"] = six_dates[0]
@@ -269,7 +294,7 @@ def compute_badges(
 
     streak_badge = badge("good_grade_streak", (5, 10, 20), unit="grades")
     streak = 0
-    for g, value in numeric:
+    for g, value in scored:
         if value < GOOD_GRADE:
             streak = 0
             continue
@@ -290,9 +315,13 @@ def compute_badges(
     hat_trick.value = min(best, 3)
 
     test_ace = badge("test_ace")
-    for g, value in numeric:
-        category = categories.get(g.category_id) if g.category_id is not None else None
-        if value >= 5.0 and category and _TEST_CATEGORY_RE.search(category.name):
+    for g, value in scored:
+        if isinstance(g, PointGradeData):
+            category_name = g.category  # point grades carry their own category name
+        else:
+            category = categories.get(g.category_id) if g.category_id is not None else None
+            category_name = category.name if category else None
+        if value >= 5.0 and category_name and _TEST_CATEGORY_RE.search(category_name):
             test_ace.earned["test_ace"] = (g.add_date or "")[:10]
             break
 
@@ -322,6 +351,26 @@ def compute_badges(
         )
         if weight:
             best_average = max(best_average or 0.0, round(total / weight, 2))
+    # A point-graded subject: the grade its percentage of points so far makes
+    # (the forecast's way), from the 3rd point grade on.
+    by_point_subject: dict[Any, list[PointGradeData]] = defaultdict(list)
+    for g, _value in points:
+        if g.subject_id is None or scales is None:
+            continue
+        thresholds = scales.for_subject(g.subject_id)
+        prefix = by_point_subject[g.subject_id]
+        prefix.append(g)
+        percentage = point_grades_percentage(prefix)
+        if thresholds is None or percentage is None or len(prefix) < SUBJECT_STAR_MIN_GRADES:
+            continue
+        grade = predicted_grade(percentage, thresholds)
+        if grade >= SUBJECT_STAR_AVERAGE and "subject_star" not in star.earned:
+            star.earned["subject_star"] = (g.add_date or "")[:10]
+    for subject_id, subject_points in by_point_subject.items():
+        thresholds = scales.for_subject(subject_id) if scales else None
+        percentage = point_grades_percentage(subject_points)
+        if thresholds is not None and percentage is not None and len(subject_points) >= SUBJECT_STAR_MIN_GRADES:
+            best_average = max(best_average or 0.0, float(predicted_grade(percentage, thresholds)))
     star.value = best_average
 
     honours = badge("honours", target=HONOURS_AVERAGE, unit="average")
@@ -342,6 +391,7 @@ def compute_badges(
     if report is not None and report >= HONOURS_AVERAGE and year_end and today >= year_end:
         honours.earned["honours"] = _iso(year_end)
 
+    # 1-6 grades only: a point grade has no link to the grade it improves.
     comeback = badge("comeback")
     by_id = {g.id: g for g in data.grades}
     for g, value in numeric:
@@ -357,13 +407,17 @@ def compute_badges(
         if begin is None or end is None:
             continue
         in_semester = [
-            g
-            for g, _v in numeric
+            (g, v)
+            for g, v in scored
             if g.semester == number
             or (g.semester is None and begin <= (_day(g.add_date) or begin) <= end)
         ]
-        # A "1", "1+" or "1-" - not a 2- (worth 1.75).
-        has_one = any(g.value.strip().startswith("1") for g in in_semester)
+        # A "1", "1+" or "1-" - not a 2- (worth 1.75); a point grade below the
+        # scale's threshold for a 2.
+        has_one = any(
+            v <= 1.0 if isinstance(g, PointGradeData) else g.value.strip().startswith("1")
+            for g, v in in_semester
+        )
         if end < today:
             if in_semester and not has_one and "no_ones" not in no_ones.earned:
                 no_ones.earned["no_ones"] = _iso(end)

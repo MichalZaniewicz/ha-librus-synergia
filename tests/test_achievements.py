@@ -15,6 +15,7 @@ from librus_synergia.models import (
     LuckyNumberData,
     MeData,
     NoteData,
+    PointGradeData,
 )
 
 from custom_components.librus_synergia.achievements import compute_badges, key_title
@@ -253,3 +254,82 @@ def test_a_two_minus_is_not_a_one() -> None:
     grades = [_grade(1, "2-", "2026-10-01")]
     badges = _badges(_data(grades=grades), today=date(2027, 2, 2))
     assert badges["no_ones"].earned == {"no_ones": "2027-01-31"}
+
+
+# ----------------------------------------------------------------------
+# Point grades (on the `point_grade_thresholds` scale)
+# ----------------------------------------------------------------------
+
+_POINT_SCALE = (40.0, 50.0, 70.0, 90.0, 100.0)
+
+
+def _point(
+    pid: int, points: float, max_points: float, day: str, subject: int = 20, category: str = "Kartkówka"
+) -> PointGradeData:
+    return PointGradeData(
+        id=pid,
+        subject_id=subject,
+        value=str(points),
+        points=points,
+        max_points=max_points,
+        category_id=None,
+        category=category,
+        weight=1.0,
+        counts_to_average=True,
+        semester=1,
+        add_date=f"{day} 10:00:00",
+    )
+
+
+def test_point_grades_count_as_grades_on_their_scale() -> None:
+    data = _data(
+        grades=[_grade(1, "6", "2026-09-10")],
+        point_grades=[_point(10 + i, 10, 10, f"2026-09-{11 + i:02d}") for i in range(4)],
+    )
+    badges = _badges(data, point_thresholds=_POINT_SCALE)
+    # A full score is a six: the 1-6 six and four 100 % point grades.
+    assert badges["sixes"].value == 5
+    assert badges["sixes"].earned == {"sixes_5": "2026-09-14"}
+    assert badges["hat_trick"].earned == {"hat_trick": "2026-09-12"}
+    assert badges["good_grade_streak"].earned == {"good_grade_streak_5": "2026-09-14"}
+    # Four point grades, all full: a 6 on the subject's scale from the 3rd one.
+    assert badges["subject_star"].earned == {"subject_star": "2026-09-13"}
+    assert badges["subject_star"].value == 6.0
+
+
+def test_point_grades_stay_out_without_a_scale() -> None:
+    data = _data(
+        grades=[_grade(1, "6", "2026-09-10")],
+        point_grades=[_point(10 + i, 10, 10, f"2026-09-{11 + i:02d}") for i in range(4)],
+    )
+    badges = _badges(data)
+    assert badges["sixes"].value == 1
+    assert badges["hat_trick"].earned == {}
+    assert badges["subject_star"].earned == {}
+
+
+def test_low_point_grade_breaks_the_good_grade_streak() -> None:
+    grades = [_grade(i, "5", f"2026-09-{10 + i:02d}") for i in range(1, 4)]
+    # 9 / 20 = 45 %: a 2 on the scale.
+    data = _data(grades=grades, point_grades=[_point(20, 9, 20, "2026-09-20")])
+    assert _badges(data, point_thresholds=_POINT_SCALE)["good_grade_streak"].value == 0
+    assert _badges(data)["good_grade_streak"].value == 3
+
+
+def test_point_test_earns_the_test_ace() -> None:
+    # 46 / 50 = 92 %: a 5 on a test ("Sprawdzian" - the point grade's own category).
+    data = _data(point_grades=[_point(30, 46, 50, "2026-09-12", category="Sprawdzian")])
+    assert _badges(data, point_thresholds=_POINT_SCALE)["test_ace"].earned == {"test_ace": "2026-09-12"}
+
+
+def test_point_grade_below_a_two_spoils_no_ones() -> None:
+    after_semester = date(2027, 2, 5)
+    grades = [_grade(1, "5", "2026-10-01")]
+    # 3 / 10 = 30 %: below the 40 % for a 2 - a 1.
+    one = _data(grades=grades, point_grades=[_point(40, 3, 10, "2026-10-02")])
+    clean = _data(grades=grades, point_grades=[_point(40, 9, 10, "2026-10-02")])
+    assert _badges(one, after_semester, point_thresholds=_POINT_SCALE)["no_ones"].earned == {}
+    assert _badges(clean, after_semester, point_thresholds=_POINT_SCALE)["no_ones"].earned == {
+        "no_ones": "2027-01-31"
+    }
+

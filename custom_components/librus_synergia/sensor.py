@@ -80,6 +80,7 @@ from .forecast import (
     DataMemo,
     SubjectForecast,
     forecast_basis,
+    overall_with_points,
     point_sums,
     report_average,
     subject_forecasts,
@@ -1346,8 +1347,9 @@ class LibrusBehaviourStreakSensor(LibrusSensorBase):
 
 class LibrusGoodGradeStreakSensor(LibrusSensorBase):
     """Consecutive most-recent numeric grades of 4 ("dobry") or better -
-    "passa dobrych ocen". A non-numeric mark (bz/np/...) doesn't break the
-    streak, only an actual low grade does - see
+    "passa dobrych ocen", point grades included once their subject has a
+    scale (`point_grade_thresholds`). A non-numeric mark (bz/np/...) doesn't
+    break the streak, only an actual low grade does - see
     `coordinator.good_grade_streak`'s own docstring for why."""
 
     _attr_translation_key = "good_grade_streak"
@@ -1359,8 +1361,12 @@ class LibrusGoodGradeStreakSensor(LibrusSensorBase):
     def native_value(self) -> int | None:
         if self.coordinator.data is None:
             return None
+        data = self.coordinator.data
         return good_grade_streak(
-            self.coordinator.data.grades, self.coordinator.data.grading_system
+            data.grades,
+            data.grading_system,
+            data.point_grades,
+            self.coordinator.point_grade_thresholds,
         )
 
 
@@ -1392,7 +1398,10 @@ def _rank_for_average(average: float | None) -> str | None:
 class LibrusRankSensor(LibrusSensorBase):
     """A cosmetic Bronze/Silver/Gold/Diamond tier derived from the Overall
     average sensor's own state - turns a raw number into
-    something a bit more game-like on a dashboard. No extra API calls."""
+    something a bit more game-like on a dashboard. No extra API calls.
+    Point-graded subjects count too once they have a scale
+    (`point_grade_thresholds`): each at its forecast grade, weighted by its
+    number of point grades - the same average the Hero card shows."""
 
     _attr_translation_key = "rank"
     _attr_device_class = SensorDeviceClass.ENUM
@@ -1413,13 +1422,26 @@ class LibrusRankSensor(LibrusSensorBase):
             return None
         # Read by the state and the attributes on every write.
         weighted = self._weighted
-        return self._cached(
-            "average",
-            weighted,
-            lambda: _calculate_average(
+        scales = self.coordinator.point_grade_thresholds
+        today = dt_util.now().date()
+
+        def compute() -> float | None:
+            overall = _calculate_average(
                 data.grades, data.grade_categories, weighted=weighted, grading=data.grading_system
-            ),
-        )
+            )
+            if not scales:
+                return overall
+            forecasts = subject_forecasts(
+                data,
+                today,
+                self.coordinator.grade_thresholds,
+                weighted=weighted,
+                owner=self.coordinator.memo_owner,
+                point_thresholds=scales,
+            )
+            return overall_with_points(overall, data, forecasts)
+
+        return self._cached("average", (weighted, scales, today), compute)
 
     @property
     def native_value(self) -> str | None:
