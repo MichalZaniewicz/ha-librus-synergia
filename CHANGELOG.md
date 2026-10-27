@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.29
 
 ### Fixed
 - **Point grades count in the badges, the good grade streak and the rank.**
