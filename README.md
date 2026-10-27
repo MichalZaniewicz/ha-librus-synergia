@@ -143,6 +143,13 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
+## Contributors
+
+Thank you to everyone who sent code to this project:
+
+- <img src="https://github.com/keysim86.png?size=40" width="20" height="20" alt=""> [@keysim86](https://github.com/keysim86): point-graded subjects in the forecast, the new-grade event, the badges, the streak and the rank; only the student's own class free days
+- <img src="https://github.com/Lucaspog.png?size=40" width="20" height="20" alt=""> [@Lucaspog](https://github.com/Lucaspog): kindergarten timetable and classroom names
+
 ## Supporters
 
 Thank you to everyone who [bought me a coffee](https://buymeacoffee.com/zanula) for the Librus projects:
