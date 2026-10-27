@@ -15,7 +15,9 @@
   grade has no link to the grade it improves). The rank's average adds each
   point-graded subject at its forecast grade, weighted by its number of
   point grades - the same average the Hero card shows. Without a scale
-  nothing changes.
+  nothing changes. The weekly AI summary gets the same streak as the sensor.
+  With a scale the Rank's `average` can differ from the Overall average
+  sensor, which stays 1-6 grades only.
 
 ## 0.12.28
 

@@ -354,7 +354,7 @@ def compute_badges(
     # A point-graded subject: the grade its percentage of points so far makes
     # (the forecast's way), from the 3rd point grade on.
     by_point_subject: dict[Any, list[PointGradeData]] = defaultdict(list)
-    for g, _value in points:
+    for g, _value in sorted(points, key=lambda gv: (gv[0].add_date or "", gv[0].id)):
         if g.subject_id is None or scales is None:
             continue
         thresholds = scales.for_subject(g.subject_id)

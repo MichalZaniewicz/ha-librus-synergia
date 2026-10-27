@@ -333,3 +333,12 @@ def test_point_grade_below_a_two_spoils_no_ones() -> None:
         "no_ones": "2027-01-31"
     }
 
+
+def test_subject_star_from_points_goes_by_date_not_list_order() -> None:
+    # Librus's list order isn't the date order: the 3rd point grade by date
+    # (13.09) earns the star, whatever order they come in.
+    points = [_point(10 + i, 10, 10, f"2026-09-{11 + i:02d}") for i in range(4)]
+    data = _data(point_grades=list(reversed(points)))
+    badges = _badges(data, point_thresholds=_POINT_SCALE)
+    assert badges["subject_star"].earned == {"subject_star": "2026-09-13"}
+

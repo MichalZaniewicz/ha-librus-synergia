@@ -720,7 +720,9 @@ def build_context(
         "behaviour_grade": behaviour_grade,
         "streaks": _compact(
             {
-                "good_grade_streak": good_grade_streak(data.grades, data.grading_system),
+                "good_grade_streak": good_grade_streak(
+                    data.grades, data.grading_system, data.point_grades, point_thresholds
+                ),
                 "days_without_absence": days_since_last_absence(
                     data.attendances, data.attendance_types, school_class, today
                 ),
