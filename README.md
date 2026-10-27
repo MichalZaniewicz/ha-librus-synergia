@@ -143,6 +143,14 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 - **[librus-synergia](https://github.com/MichalZaniewicz/librus-synergia)**: the Python library this integration is built on (`pip install librus-synergia`). Use it in your own scripts, or from the command line.
 - **[Unofficial Librus API notes](https://michalzaniewicz.github.io/librus-synergia/)**: the login flow and every endpoint's response shape.
 
+## Supporters
+
+Thank you to everyone who [bought me a coffee](https://buymeacoffee.com/zanula) for the Librus projects:
+
+- **Paweł**
+- **devNull**
+- **M4hSzyna**
+
 ## Acknowledgments
 
 - [`emsi/librus_pyapi`](https://github.com/emsi/librus_pyapi) (MIT): the current login flow is based on this project's implementation.
