@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Point grades count in the badges, the good grade streak and the rank.**
+  With `point_grade_thresholds` set, a point grade now counts like a 1-6
+  grade: as the grade its percentage makes on its subject's scale (the
+  forecast's thresholds) - a 100 % quiz is a six, a 45 % test breaks the
+  streak. Before, only 1-6 grades counted, so a student graded mostly in
+  points had few sixes, a streak that ignored half the grades and a rank
+  from the 1-6 grades alone. Badges: sixes, hat-trick, good grade streak,
+  test ace (a point test by its category name), subject star (a point
+  subject's percentage so far) and no ones; comeback stays 1-6 only (a point
+  grade has no link to the grade it improves). The rank's average adds each
+  point-graded subject at its forecast grade, weighted by its number of
+  point grades - the same average the Hero card shows. Without a scale
+  nothing changes.
+
 ## 0.12.28
 
 ### Added

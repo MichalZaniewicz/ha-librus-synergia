@@ -262,3 +262,50 @@ async def test_point_grades_not_seeded_when_their_fetch_failed(hass) -> None:
     await coordinator._async_update_data()
 
     assert coordinator._known_items["point_grades"] is None
+
+
+ONE_SIX = {
+    "Grades": [
+        {"Id": 1, "Grade": "6", "Category": {"Id": 10}, "Subject": {"Id": 200},
+         "Semester": 1, "AddDate": "2026-09-01 10:00:00"},
+    ]
+}
+
+
+async def _streak_and_rank(hass, options: dict | None) -> tuple[str, str, float]:
+    client = build_mock_client(
+        async_get_grades=ONE_SIX,
+        async_get_point_grades=POINT_GRADES,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_subjects=SUBJECTS,
+    )
+    entry = await setup_integration(hass, client, options=options)
+    registry = er.async_get(hass)
+
+    def state(key: str):
+        return hass.states.get(
+            registry.async_get_entity_id("sensor", "librus_synergia", f"{entry.entry_id}_{key}")
+        )
+
+    rank = state("rank")
+    return state("good_grade_streak").state, rank.state, rank.attributes["average"]
+
+
+async def test_point_grades_count_in_the_good_grade_streak_and_rank(hass) -> None:
+    """With a scale, the point grades (85 % and 75 % - both a 4 on it) extend
+    the streak, and the point-graded subject (its 84.1 % forecast: a 4,
+    from 2 point grades) brings the rank's average down from the lone 6."""
+    streak, rank, average = await _streak_and_rank(
+        hass, {"point_grade_thresholds": "40, 55, 75, 90, 98"}
+    )
+    assert streak == "3"
+    assert average == round((6 * 1 + 4 * 2) / 3, 2)
+    assert rank == "gold"
+
+
+async def test_point_grades_stay_out_of_the_streak_and_rank_without_a_scale(hass) -> None:
+    streak, rank, average = await _streak_and_rank(hass, None)
+    assert streak == "1"
+    assert average == 6.0
+    assert rank == "diamond"
+

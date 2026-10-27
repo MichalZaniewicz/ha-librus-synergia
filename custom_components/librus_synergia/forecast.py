@@ -558,6 +558,54 @@ def point_sums(grades: list[PointGradeData]) -> tuple[float, float]:
     return round(earned, 2), round(possible, 2)
 
 
+def point_grade_value(grade: PointGradeData, scales: PointThresholdsArg) -> int | None:
+    """One point grade as a 1-6 grade on its subject's percentage scale - the
+    thresholds the forecast uses. None without a scale for the subject (no
+    `point_grade_thresholds`) or without a known maximum."""
+    resolved = as_point_thresholds(scales)
+    thresholds = resolved.for_subject(grade.subject_id) if resolved else None
+    percentage = grade.percentage
+    if thresholds is None or percentage is None:
+        return None
+    return predicted_grade(percentage, thresholds)
+
+
+def overall_with_points(
+    overall: float | None, data: LibrusData, forecasts: list[SubjectForecast]
+) -> float | None:
+    """The 1-6 grade average with the point-graded subjects added: each one
+    at its forecast grade, weighted by its number of point grades against the
+    number of 1-6 grades behind `overall` - what the Hero card shows since
+    point grades count there. `overall` unchanged without point-graded
+    forecasts (no `point_grade_thresholds`)."""
+    total = count = 0.0
+    for forecast in forecasts:
+        if forecast.percentage is None:
+            continue
+        grades = sum(
+            1
+            for g in data.point_grades
+            if g.subject_id == forecast.subject_id and g.percentage is not None
+        )
+        total += forecast.predicted * grades
+        count += grades
+    if not count:
+        return overall
+    graded = sum(
+        1
+        for g in data.grades
+        if not g.is_semester_proposition
+        and not g.is_final_proposition
+        and not g.is_semester
+        and not g.is_final
+        and parse_grade_value(g.value, data.grading_system) is not None
+    )
+    if overall is not None and graded:
+        total += overall * graded
+        count += graded
+    return round(total / count, 2)
+
+
 def report_average(forecasts: list[SubjectForecast]) -> float | None:
     """The plain mean of the forecast grades - what the report card average
     would be."""

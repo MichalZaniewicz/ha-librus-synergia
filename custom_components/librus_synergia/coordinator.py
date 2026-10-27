@@ -200,11 +200,13 @@ from .const import (
 from .achievements import Badge, compute_badges, key_title
 from .forecast import (
     PointThresholds,
+    PointThresholdsArg,
     average_sums,
     forecast_basis,
     parse_point_thresholds,
     parse_point_thresholds_by_subject,
     parse_thresholds,
+    point_grade_value,
     subject_forecasts,
 )
 
@@ -722,7 +724,10 @@ _GOOD_GRADE_STREAK_THRESHOLD = 4.0
 
 
 def good_grade_streak(
-    grades: list[GradeData], grading: GradingSystemData | None = None
+    grades: list[GradeData],
+    grading: GradingSystemData | None = None,
+    point_grades: list[PointGradeData] | None = None,
+    point_thresholds: PointThresholdsArg = None,
 ) -> int:
     """Consecutive most-recent NUMERIC grades >= _GOOD_GRADE_STREAK_THRESHOLD,
     counting back from the newest until the first one below it. Semester/
@@ -733,23 +738,28 @@ def good_grade_streak(
     unfair for what this is meant to be: a small, motivating "passa" a
     student can watch grow. `grading` is the school's grade scale (what
     "+"/"-" add) - the same one every average here uses; without it the
-    streak used the default +0.5/-0.25 whatever the school's scale says."""
-    dated = sorted(
-        (
-            g
-            for g in grades
-            if g.add_date
-            and not g.is_semester_proposition
-            and not g.is_final_proposition
-            and not g.is_semester
-            and not g.is_final
-        ),
-        key=lambda g: g.add_date,
-        reverse=True,
-    )
+    streak used the default +0.5/-0.25 whatever the school's scale says.
+    Point grades count too when `point_thresholds` gives their subject a
+    scale: each one as the grade its percentage makes on it (the forecast's
+    thresholds); without one they're skipped like a non-numeric mark."""
+    dated: list[tuple[str, float | None]] = [
+        (grade.add_date, parse_grade_value(grade.value, grading))
+        for grade in grades
+        if grade.add_date
+        and not grade.is_semester_proposition
+        and not grade.is_final_proposition
+        and not grade.is_semester
+        and not grade.is_final
+    ]
+    if point_thresholds:
+        dated += [
+            (grade.add_date, point_grade_value(grade, point_thresholds))
+            for grade in point_grades or []
+            if grade.add_date
+        ]
+    dated.sort(key=lambda item: item[0], reverse=True)
     streak = 0
-    for grade in dated:
-        value = parse_grade_value(grade.value, grading)
+    for _added, value in dated:
         if value is None:
             continue
         if value < _GOOD_GRADE_STREAK_THRESHOLD:
