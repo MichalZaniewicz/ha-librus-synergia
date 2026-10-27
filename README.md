@@ -145,14 +145,14 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 
 ## Contributors
 
-Thank you to everyone who sent code to this project:
+Thanks to everyone who sent code to this project:
 
 - <img src="https://github.com/keysim86.png?size=40" width="20" height="20" alt=""> [@keysim86](https://github.com/keysim86): point-graded subjects in the forecast, the new-grade event, the badges, the streak and the rank; only the student's own class free days
 - <img src="https://github.com/Lucaspog.png?size=40" width="20" height="20" alt=""> [@Lucaspog](https://github.com/Lucaspog): kindergarten timetable and classroom names
 
 ## Supporters
 
-Thank you to everyone who [bought me a coffee](https://buymeacoffee.com/zanula) for the Librus projects:
+Thanks to everyone who [bought me a coffee](https://buymeacoffee.com/zanula) for the Librus projects:
 
 - **Paweł**
 - **devNull**
