@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.30
 
 ### Added
 - **Weekly AI summary for the parent and the student.** "Written to" under
