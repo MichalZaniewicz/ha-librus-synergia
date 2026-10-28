@@ -18,6 +18,11 @@ blueprint:
     to-dos for the coming week, which fits a phone notification. "Full" adds
     every section's text; use it with a persistent notification, an e-mail or
     a messenger that shows long text.
+
+
+    With "Written to: Parent and student" under Configure, two summaries
+    arrive each week. Make one automation per phone and pick the version
+    for each in "Version".
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/weekly_ai_summary_notification.yaml
   input:
@@ -29,6 +34,22 @@ blueprint:
       default: []
       selector:
         action: {}
+    audience:
+      name: Version
+      description: >
+        Which summary this automation sends. Matters only with "Written to:
+        Parent and student" under Configure, where two arrive each week -
+        with "Any", this automation sends both.
+      default: any
+      selector:
+        select:
+          options:
+            - label: Any
+              value: any
+            - label: For the parent
+              value: parent
+            - label: For the student
+              value: student
     detail:
       name: Report format
       description: What `{{ message }}` contains.
@@ -98,6 +119,7 @@ variables:
   wanted_statuses: !input statuses
   include_advice: !input include_advice
   include_manual: !input include_manual
+  wanted_audience: !input audience
   detail: !input detail
   section_order: [grades, attendance, behaviour, next_week, school_news]
 
@@ -105,6 +127,7 @@ conditions:
   - condition: template
     value_template: >-
       {{ (include_manual or not trigger.event.data.manual)
+         and (wanted_audience == 'any' or trigger.event.data.audience == wanted_audience)
          and (trigger.event.data.status is none
               or trigger.event.data.status in wanted_statuses) }}
 

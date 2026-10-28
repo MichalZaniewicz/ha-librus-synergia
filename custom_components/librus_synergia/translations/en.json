@@ -62,7 +62,7 @@
         },
         "data_description": {
           "ai_task_entity": "The AI Task entity to use. Leave empty to turn the feature off.",
-          "ai_audience": "The parent (third person, what you can do) or the student (written to them directly, encouraging).",
+          "ai_audience": "The parent (third person, what you can do), the student (written to them directly, encouraging), or both: two separate texts each week, so you can send each one to a different phone.",
           "ai_weekday": "The summary covers the 7 days up to this day and previews the 7 days after it.",
           "ai_time": "Local time of the automatic run. A run missed because Home Assistant was off is made up within 2 days.",
           "ai_include_messages": "Off by default: private messages and school announcements are then never sent to the AI provider. On adds a \"From the school\" section.",
@@ -125,7 +125,8 @@
     "ai_audience": {
       "options": {
         "parent": "Parent",
-        "student": "Student"
+        "student": "Student",
+        "both": "Parent and student"
       }
     },
     "ai_weekday": {

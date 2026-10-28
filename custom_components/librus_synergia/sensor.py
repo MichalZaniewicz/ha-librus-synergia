@@ -2896,7 +2896,9 @@ class LibrusWeeklySummarySensor(SensorEntity):
     _attr_translation_key = "weekly_summary"
     _attr_should_poll = False
     # Long text is only useful live on a card, never worth keeping in history.
-    _unrecorded_attributes = frozenset({"sections", "summary", "advice", "warning", "error"})
+    _unrecorded_attributes = frozenset(
+        {"sections", "summary", "advice", "warning", "error", "versions"}
+    )
 
     def __init__(self, summary: LibrusWeeklySummary, entry: LibrusConfigEntry) -> None:
         self._summary = summary
@@ -2916,7 +2918,7 @@ class LibrusWeeklySummarySensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         result = self._summary.result or {}
-        return {
+        attrs: dict[str, Any] = {
             "status": result.get("status"),
             # {"grades" | "attendance" | "behaviour" | "next_week" |
             # "school_news": {"status", "text"}}, in display order; a section
@@ -2937,3 +2939,16 @@ class LibrusWeeklySummarySensor(SensorEntity):
             "paused": not self._summary.enabled,
             "error": self._summary.last_error,
         }
+        if len(self._summary.audiences) > 1:
+            # "Parent and student": the state and the attributes above are
+            # the parent's text; here are both, for a card or an automation
+            # that wants the student's.
+            attrs["versions"] = {
+                audience: {
+                    key: version.get(key)
+                    for key in ("headline", "status", "sections", "summary", "advice", "warning")
+                }
+                for audience in self._summary.audiences
+                if (version := self._summary.results.get(audience))
+            }
+        return attrs

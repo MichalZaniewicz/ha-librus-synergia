@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Weekly AI summary for the parent and the student.** "Written to" under
+  Configure -> Weekly AI summary has a third choice, "Parent and student":
+  each week two separate texts are written (two AI Task calls), one to the
+  parent and one to the child. `librus_synergia_weekly_summary` fires once
+  per text, with `audience` telling which. The Weekly summary sensor keeps
+  the parent's text as its state and attributes, and a new `versions`
+  attribute holds both. The Weekly AI Summary Report blueprint has a new
+  "Version" input (Any / For the parent / For the student) - make one
+  automation per phone. With "Any" (the default) one automation sends both.
+  (Thanks @xdw15c for the idea)
+
 ## 0.12.29
 
 ### Fixed

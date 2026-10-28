@@ -54,6 +54,7 @@ from librus_synergia import (
 )
 
 from .const import (
+    AI_AUDIENCE_BOTH,
     AI_AUDIENCE_PARENT,
     AI_AUDIENCE_STUDENT,
     AI_OPTION_KEYS,
@@ -538,7 +539,7 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     default=options.get(CONF_AI_AUDIENCE, DEFAULT_AI_AUDIENCE),
                 ): SelectSelector(
                     SelectSelectorConfig(
-                        options=[AI_AUDIENCE_PARENT, AI_AUDIENCE_STUDENT],
+                        options=[AI_AUDIENCE_PARENT, AI_AUDIENCE_STUDENT, AI_AUDIENCE_BOTH],
                         mode=SelectSelectorMode.LIST,
                         translation_key=CONF_AI_AUDIENCE,
                     )

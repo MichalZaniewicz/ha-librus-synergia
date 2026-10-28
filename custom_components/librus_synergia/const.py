@@ -177,10 +177,11 @@ CONF_STUDENT_NUMBER = "student_number"
 # feature is off and its sensor/button/switch are not created.
 CONF_AI_TASK_ENTITY = "ai_task_entity"
 # Who the summary is written to: the parent (third person, parent's to-dos)
-# or the student (second person, encouraging).
+# or the student (second person, encouraging), or both - two texts a week.
 CONF_AI_AUDIENCE = "ai_audience"
 AI_AUDIENCE_PARENT = "parent"
 AI_AUDIENCE_STUDENT = "student"
+AI_AUDIENCE_BOTH = "both"
 DEFAULT_AI_AUDIENCE = AI_AUDIENCE_PARENT
 # ISO weekday as a string ("1" = Monday .. "7" = Sunday) - a SelectSelector
 # value - plus the local time of the automatic run.

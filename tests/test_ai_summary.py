@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import date, datetime, time
+from unittest.mock import patch
 
 from homeassistant.core import SupportsResponse
 from homeassistant.helpers import entity_registry as er
@@ -29,7 +30,7 @@ from custom_components.librus_synergia.const import (
 
 from librus_synergia.models import DescriptiveGradeData, PlanChangeData
 
-from .conftest import build_mock_client, setup_integration
+from .conftest import build_mock_client, make_config_entry, setup_integration
 
 # Sunday 2026-10-04 is the run day in these tests: the window is 28.09-4.10,
 # the coming week 5.10-11.10.
@@ -401,3 +402,56 @@ async def test_provider_failure_is_reported_on_the_sensor(hass) -> None:
         pass
     sensor_id = _entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary")
     assert "quota exceeded" in hass.states.get(sensor_id).attributes["error"]
+
+
+async def test_parent_and_student_get_their_own_text(hass) -> None:
+    calls: list[dict] = []
+
+    async def _handler(call):
+        calls.append(dict(call.data))
+        headline = "Do rodzica" if "PARENT of Ola" in call.data["instructions"] else "Do Oli"
+        return {"data": {**_ANSWER, "headline": headline}}
+
+    hass.services.async_register(
+        "ai_task", "generate_data", _handler, supports_response=SupportsResponse.ONLY
+    )
+    events = []
+    hass.bus.async_listen(EVENT_WEEKLY_SUMMARY, events.append)
+    entry = await setup_integration(
+        hass, _client(), options={**_AI_OPTIONS, CONF_AI_AUDIENCE: "both"}
+    )
+    button_id = _entity_id(hass, "button", f"{entry.entry_id}_weekly_summary_generate")
+    await hass.services.async_call("button", "press", {"entity_id": button_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert len(calls) == 2
+    assert [(e.data["audience"], e.data["headline"]) for e in events] == [
+        ("parent", "Do rodzica"),
+        ("student", "Do Oli"),
+    ]
+    state = hass.states.get(_entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary"))
+    assert state.state == "Do rodzica"
+    assert state.attributes["audience"] == "parent"
+    versions = state.attributes["versions"]
+    assert versions["student"]["headline"] == "Do Oli"
+    assert versions["student"]["advice"] == _ANSWER["advice"]
+    assert list(versions) == ["parent", "student"]
+
+
+async def test_one_audience_has_no_versions_and_old_store_still_loads(hass, hass_storage) -> None:
+    entry = make_config_entry(options={**_AI_OPTIONS, CONF_AI_AUDIENCE: "student"})
+    entry.add_to_hass(hass)
+    hass_storage[f"{DOMAIN}.weekly_summary.{entry.entry_id}"] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": f"{DOMAIN}.weekly_summary.{entry.entry_id}",
+        # Saved before there could be two texts: a single "result".
+        "data": {"result": {"headline": "Stary tekst", "audience": "student"}},
+    }
+    with patch("custom_components.librus_synergia.LibrusApiClient", return_value=_client()):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    state = hass.states.get(_entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary"))
+    assert state.state == "Stary tekst"
+    assert "versions" not in state.attributes
