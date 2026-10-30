@@ -16,6 +16,33 @@
   before the start has finished doesn't lose them either: the next start
   fires them.
 
+## 0.12.34
+
+### Added
+- **Activities outside the timetable in the timetable calendar.** Synergia's
+  timetable page has three extra lists: extra activities ("zajęcia
+  dodatkowe"), the individualised learning path (ZŚK) and one-to-one
+  teaching (NI). They now show in the Timetable calendar next to the lessons,
+  at their own times (they don't follow the bell), with the teacher and room;
+  a cancelled one gets "(odwołane)" like a lesson. Each kind can be switched
+  off under Configure -> Settings -> "Activities outside the timetable" (all
+  on by default). This week and next are asked for once an hour (one request
+  per kind); other weeks with their timetable when a dashboard asks. They
+  don't count as lessons: school start and end, attendance and the bell
+  schedule stay as they were. Needs librus-synergia 0.3.30. (Thanks
+  @Flower7C3 for reporting)
+
+## 0.12.32
+
+### Added
+- **Language of the weekly AI summary.** Configure -> Weekly AI summary has a
+  new "Language" choice: Automatic, Polish or English. Automatic keeps the old
+  behaviour and follows Home Assistant's server language (Settings -> System
+  -> General), not the language of your user profile, which is why an
+  English-language Home Assistant always got an English summary. The labels
+  in the `librus_synergia_weekly_summary` event follow the same language.
+  (Thanks @pmajkutewicz for reporting)
+
 ## 0.12.30
 
 ### Added

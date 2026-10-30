@@ -55,6 +55,7 @@
         "data": {
           "ai_task_entity": "Model AI",
           "ai_audience": "Adresat",
+          "ai_language": "Język",
           "ai_weekday": "Dzień",
           "ai_time": "Godzina",
           "ai_include_messages": "Uwzględnij wiadomości i ogłoszenia",
@@ -63,6 +64,7 @@
         "data_description": {
           "ai_task_entity": "Encja AI Task, której używać. Zostaw puste, aby wyłączyć funkcję.",
           "ai_audience": "Rodzic (w trzeciej osobie, co możesz zrobić), uczeń (pisane bezpośrednio do niego, motywująco) albo obaj: co tydzień dwa osobne teksty, każdy możesz wysłać na inny telefon.",
+          "ai_language": "Język, w którym powstaje podsumowanie. Automatycznie oznacza język serwera Home Assistant (Ustawienia → System → Ogólne), nie język Twojego profilu.",
           "ai_weekday": "Podsumowanie obejmuje 7 dni do tego dnia włącznie i zapowiada 7 kolejnych.",
           "ai_time": "Godzina automatycznego uruchomienia. Jeśli Home Assistant był wtedy wyłączony, podsumowanie powstanie w ciągu 2 dni.",
           "ai_include_messages": "Domyślnie wyłączone: wiadomości prywatne i ogłoszenia szkoły nie trafiają wtedy do dostawcy AI. Włączenie dodaje sekcję \"Szkoła pisze\".",
@@ -87,6 +89,7 @@
           "point_grade_thresholds_by_subject": "Progi ocen punktowych dla przedmiotów",
           "hide_empty_subjects": "Ukryj przedmioty bez ocen",
           "merge_parallel_lessons": "Łącz lekcje odbywające się w tym samym czasie",
+          "extra_activities": "Zajęcia spoza planu lekcji",
           "calendar_emoji": "Emoji w tytułach kalendarza",
           "smart_polling": "Sprytne odświeżanie",
           "quiet_hours_enabled": "Włącz ciszę nocną (bez odpytywania w nocy)",
@@ -110,6 +113,7 @@
           "hide_empty_subjects": "Średnia z przedmiotu pojawia się dopiero po jego pierwszej ocenie (np. Religia na początku roku). Istniejące sensory takich przedmiotów zostaną usunięte i wrócą z pierwszą oceną.",
           "calendar_emoji": "Emoji przed wpisami w kalendarzach planu lekcji i terminarza, np. „📐 Matematyka” albo „📝 [Sprawdzian] Chemia: ...” - łatwiej czytać na telefonie i zegarku. Używa go też akcja Kopiuj do kalendarza. Karty pokazują tytuł bez emoji.",
           "merge_parallel_lessons": "Lekcje o tej samej godzinie rozpoczęcia i zakończenia (np. przedmiot i Wspomaganie albo grupy) są jednym wpisem w kalendarzu planu lekcji, np. „Edukacja wczesnoszkolna + Wspomaganie”. Odwołana lekcja i jej zastępstwo zawsze zostają osobno.",
+          "extra_activities": "Pokazywane w kalendarzu planu lekcji obok lekcji, z własnymi godzinami, nauczycielem i salą. To dodatkowe listy ze strony planu lekcji w Synergii: zajęcia dodatkowe, zindywidualizowana ścieżka kształcenia (ZŚK) i nauczanie indywidualne (NI). Odznacz te, których nie chcesz; szkoła, która ich nie prowadzi, po prostu ich nie ma.",
           "smart_polling": "Oszczędza zapytania, kiedy nic się nie dzieje. W dni szkolne od 6:00 do 22:00 dane odświeżają się co interwał ustawiony wyżej. W dzień bez lekcji (weekend, ferie) najwyżej raz na godzinę, a w nocy (22:00-6:00) najwyżej co 3 godziny. Akcja Odśwież (librus_synergia.refresh) zawsze pobiera od razu. Godziny ciszy poniżej, jeśli włączone, nadal działają.",
           "quiet_hours_enabled": "Gdy włączone, w oknie poniżej nie są pobierane żadne dane z Librusa - encje po prostu zachowują ostatni znany stan przez noc.",
           "quiet_hours_start": "Używane tylko, gdy cisza nocna jest włączona powyżej.",
@@ -122,6 +126,20 @@
     }
   },
   "selector": {
+    "extra_activities": {
+      "options": {
+        "other": "Zajęcia dodatkowe",
+        "individual_path": "Zindywidualizowana ścieżka kształcenia (ZŚK)",
+        "one_to_one": "Nauczanie indywidualne (NI)"
+      }
+    },
+    "ai_language": {
+      "options": {
+        "auto": "Automatycznie (język Home Assistant)",
+        "pl": "Polski",
+        "en": "Angielski"
+      }
+    },
     "ai_audience": {
       "options": {
         "parent": "Rodzic",

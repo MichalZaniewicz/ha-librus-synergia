@@ -55,6 +55,7 @@
         "data": {
           "ai_task_entity": "AI model",
           "ai_audience": "Written to",
+          "ai_language": "Language",
           "ai_weekday": "Day",
           "ai_time": "Time",
           "ai_include_messages": "Include messages and announcements",
@@ -63,6 +64,7 @@
         "data_description": {
           "ai_task_entity": "The AI Task entity to use. Leave empty to turn the feature off.",
           "ai_audience": "The parent (third person, what you can do), the student (written to them directly, encouraging), or both: two separate texts each week, so you can send each one to a different phone.",
+          "ai_language": "The language the summary is written in. Automatic follows Home Assistant's server language (Settings → System → General), not your profile language.",
           "ai_weekday": "The summary covers the 7 days up to this day and previews the 7 days after it.",
           "ai_time": "Local time of the automatic run. A run missed because Home Assistant was off is made up within 2 days.",
           "ai_include_messages": "Off by default: private messages and school announcements are then never sent to the AI provider. On adds a \"From the school\" section.",
@@ -87,6 +89,7 @@
           "point_grade_thresholds_by_subject": "Point grade thresholds per subject",
           "hide_empty_subjects": "Hide subjects without grades",
           "merge_parallel_lessons": "Merge lessons held at the same time",
+          "extra_activities": "Activities outside the timetable",
           "calendar_emoji": "Emoji in calendar titles",
           "smart_polling": "Smart polling",
           "quiet_hours_enabled": "Enable quiet hours (skip polling overnight)",
@@ -110,6 +113,7 @@
           "hide_empty_subjects": "No average sensor for a subject until it gets its first grade (e.g. Religia early in the year). Existing sensors of such subjects are removed; they come back with the first grade.",
           "calendar_emoji": "An emoji in front of timetable and Agenda calendar entries, e.g. \"📐 Matematyka\" or \"📝 [Sprawdzian] Chemia: ...\" - easier to read on a phone or a watch. Also used by the Copy to calendar action. The companion cards show the title without it.",
           "merge_parallel_lessons": "Lessons with the same start and end (e.g. a subject plus Wspomaganie, or split groups) show as one timetable calendar entry, e.g. \"Edukacja wczesnoszkolna + Wspomaganie\". A cancelled lesson and its substitution always stay separate.",
+          "extra_activities": "Shown in the timetable calendar next to the lessons, with their own times, teacher and room. These are the extra lists of Synergia's timetable page: extra activities, the individualised learning path (ZŚK) and one-to-one teaching (NI). Uncheck the ones you don't want; a school without them just has none.",
           "smart_polling": "Saves requests when nothing is happening. On school days between 06:00 and 22:00 data is refreshed at the poll interval above. On a day without lessons (weekend, holidays) at most once an hour, and at night (22:00-06:00) at most every 3 hours. The Refresh action (librus_synergia.refresh) always fetches straight away. Quiet hours below, if on, still apply.",
           "quiet_hours_enabled": "When on, no data is fetched from Librus during the window below - entities just keep their last known state overnight.",
           "quiet_hours_start": "Only used while quiet hours are enabled above.",
@@ -122,6 +126,20 @@
     }
   },
   "selector": {
+    "extra_activities": {
+      "options": {
+        "other": "Extra activities",
+        "individual_path": "Individualised learning path (ZŚK)",
+        "one_to_one": "One-to-one teaching (NI)"
+      }
+    },
+    "ai_language": {
+      "options": {
+        "auto": "Automatic (Home Assistant language)",
+        "pl": "Polish",
+        "en": "English"
+      }
+    },
     "ai_audience": {
       "options": {
         "parent": "Parent",
