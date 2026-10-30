@@ -45,6 +45,7 @@ from .const import (
     AI_AUDIENCE_BOTH,
     AI_AUDIENCE_PARENT,
     AI_AUDIENCE_STUDENT,
+    AI_LANGUAGE_AUTO,
     AVERAGE_MODE_ARITHMETIC,
     CONF_AVERAGE_MODE,
     DEFAULT_AVERAGE_MODE,
@@ -870,6 +871,7 @@ class LibrusWeeklySummary:
         audience: str,
         weekday: int,
         at: time,
+        language: str = AI_LANGUAGE_AUTO,
         extra_context: str | None,
         include_news: bool,
     ) -> None:
@@ -879,6 +881,7 @@ class LibrusWeeklySummary:
         self._coordinator = coordinator
         self.ai_task_entity = ai_task_entity
         self.audience = audience
+        self._language = language
         self.weekday = weekday
         self.at = at
         self._extra = extra_context
@@ -900,6 +903,13 @@ class LibrusWeeklySummary:
         # The "Automatic weekly summary" switch: off pauses scheduled runs
         # and catch-ups; the button still works.
         self.enabled = True
+
+    @property
+    def language(self) -> str:
+        """The language the summary is written in: the option, or HA's own."""
+        if self._language and self._language != AI_LANGUAGE_AUTO:
+            return self._language
+        return self.hass.config.language
 
     @property
     def audiences(self) -> list[str]:
@@ -1049,7 +1059,7 @@ class LibrusWeeklySummary:
     def _fire_events(self, manual: bool) -> None:
         """Announce a fresh summary, one event per audience; ``manual`` =
         started from the button."""
-        labels = labels_for(self.hass.config.language)
+        labels = labels_for(self.language)
         for audience in self.audiences:
             if (result := self.results.get(audience)) is None:
                 continue
@@ -1112,7 +1122,7 @@ class LibrusWeeklySummary:
             "task_name": "Librus weekly summary",
             "entity_id": self.ai_task_entity,
             "instructions": build_instructions(
-                context, today, self.hass.config.language, audience, self._extra
+                context, today, self.language, audience, self._extra
             ),
         }
         try:

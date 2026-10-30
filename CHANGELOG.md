@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Language of the weekly AI summary.** Configure -> Weekly AI summary has a
+  new "Language" choice: Automatic, Polish or English. Automatic keeps the old
+  behaviour and follows Home Assistant's server language (Settings -> System
+  -> General), not the language of your user profile, which is why an
+  English-language Home Assistant always got an English summary. The labels
+  in the `librus_synergia_weekly_summary` event follow the same language.
+  (Thanks @pmajkutewicz for reporting)
+
 ## 0.12.30
 
 ### Added

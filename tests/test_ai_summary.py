@@ -21,6 +21,7 @@ from custom_components.librus_synergia.ai_summary import (
 )
 from custom_components.librus_synergia.const import (
     CONF_AI_AUDIENCE,
+    CONF_AI_LANGUAGE,
     CONF_AI_TASK_ENTITY,
     CONF_AI_TIME,
     CONF_AI_WEEKDAY,
@@ -337,6 +338,27 @@ async def test_button_generates_summary_and_fires_event(hass) -> None:
     assert events[0].data["manual"] is True
     assert events[0].data["student"] == "Ola Kowalska"
     assert events[0].data["labels"]["sections"]["grades"]
+
+
+async def test_language_option_overrides_the_home_assistant_language(hass) -> None:
+    """Automatic follows HA's server language; the option forces another one."""
+    assert hass.config.language == "en"
+    calls = _register_ai_task(hass)
+    events = []
+    hass.bus.async_listen(EVENT_WEEKLY_SUMMARY, events.append)
+    entry = await setup_integration(
+        hass, _client(), options={**_AI_OPTIONS, CONF_AI_LANGUAGE: "pl"}
+    )
+    button_id = _entity_id(hass, "button", f"{entry.entry_id}_weekly_summary_generate")
+    await hass.services.async_call("button", "press", {"entity_id": button_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert "Write every field in Polish" in calls[0]["instructions"]
+    assert events[0].data["labels"]["sections"]["grades"] == "Oceny"
+
+    summary = entry.runtime_data.weekly_summary
+    summary._language = "auto"
+    assert summary.language == "en"
 
 
 async def test_scheduled_run_fires_once_at_the_chosen_time(hass, freezer) -> None:

@@ -18,6 +18,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
     CONF_AI_AUDIENCE,
+    CONF_AI_LANGUAGE,
     CONF_AI_CONTEXT,
     CONF_AI_INCLUDE_MESSAGES,
     CONF_AI_TASK_ENTITY,
@@ -429,6 +430,7 @@ async def test_options_ai_summary_and_settings_keep_each_other(hass) -> None:
         {
             CONF_AI_TASK_ENTITY: "ai_task.google",
             CONF_AI_AUDIENCE: "student",
+            CONF_AI_LANGUAGE: "pl",
             CONF_AI_WEEKDAY: "5",
             CONF_AI_TIME: "16:30:00",
             CONF_AI_INCLUDE_MESSAGES: True,
@@ -441,6 +443,7 @@ async def test_options_ai_summary_and_settings_keep_each_other(hass) -> None:
         CONF_STUDENT_NUMBER: 4,
         CONF_AI_TASK_ENTITY: "ai_task.google",
         CONF_AI_AUDIENCE: "student",
+        CONF_AI_LANGUAGE: "pl",
         CONF_AI_WEEKDAY: "5",
         CONF_AI_TIME: "16:30:00",
         CONF_AI_INCLUDE_MESSAGES: True,

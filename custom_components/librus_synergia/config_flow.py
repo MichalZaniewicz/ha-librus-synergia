@@ -57,12 +57,14 @@ from .const import (
     AI_AUDIENCE_BOTH,
     AI_AUDIENCE_PARENT,
     AI_AUDIENCE_STUDENT,
+    AI_LANGUAGES,
     AI_OPTION_KEYS,
     AVERAGE_MODE_ARITHMETIC,
     AVERAGE_MODE_WEIGHTED,
     CONF_AI_AUDIENCE,
     CONF_AI_CONTEXT,
     CONF_AI_INCLUDE_MESSAGES,
+    CONF_AI_LANGUAGE,
     CONF_AI_TASK_ENTITY,
     CONF_AI_TIME,
     CONF_AI_WEEKDAY,
@@ -89,6 +91,7 @@ from .const import (
     CONF_STUDENT_NUMBER,
     DEFAULT_AI_AUDIENCE,
     DEFAULT_AI_INCLUDE_MESSAGES,
+    DEFAULT_AI_LANGUAGE,
     DEFAULT_AI_TIME,
     DEFAULT_AI_WEEKDAY,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
@@ -517,6 +520,7 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
             ai_options = {
                 CONF_AI_TASK_ENTITY: user_input.get(CONF_AI_TASK_ENTITY),
                 CONF_AI_AUDIENCE: user_input.get(CONF_AI_AUDIENCE, DEFAULT_AI_AUDIENCE),
+                CONF_AI_LANGUAGE: user_input.get(CONF_AI_LANGUAGE, DEFAULT_AI_LANGUAGE),
                 CONF_AI_WEEKDAY: user_input.get(CONF_AI_WEEKDAY, DEFAULT_AI_WEEKDAY),
                 CONF_AI_TIME: user_input.get(CONF_AI_TIME, DEFAULT_AI_TIME),
                 CONF_AI_CONTEXT: (user_input.get(CONF_AI_CONTEXT) or "").strip(),
@@ -542,6 +546,16 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         options=[AI_AUDIENCE_PARENT, AI_AUDIENCE_STUDENT, AI_AUDIENCE_BOTH],
                         mode=SelectSelectorMode.LIST,
                         translation_key=CONF_AI_AUDIENCE,
+                    )
+                ),
+                vol.Required(
+                    CONF_AI_LANGUAGE,
+                    default=options.get(CONF_AI_LANGUAGE, DEFAULT_AI_LANGUAGE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(AI_LANGUAGES),
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key=CONF_AI_LANGUAGE,
                     )
                 ),
                 vol.Required(

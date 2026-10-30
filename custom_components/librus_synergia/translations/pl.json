@@ -55,6 +55,7 @@
         "data": {
           "ai_task_entity": "Model AI",
           "ai_audience": "Adresat",
+          "ai_language": "Język",
           "ai_weekday": "Dzień",
           "ai_time": "Godzina",
           "ai_include_messages": "Uwzględnij wiadomości i ogłoszenia",
@@ -63,6 +64,7 @@
         "data_description": {
           "ai_task_entity": "Encja AI Task, której używać. Zostaw puste, aby wyłączyć funkcję.",
           "ai_audience": "Rodzic (w trzeciej osobie, co możesz zrobić), uczeń (pisane bezpośrednio do niego, motywująco) albo obaj: co tydzień dwa osobne teksty, każdy możesz wysłać na inny telefon.",
+          "ai_language": "Język, w którym powstaje podsumowanie. Automatycznie oznacza język serwera Home Assistant (Ustawienia → System → Ogólne), nie język Twojego profilu.",
           "ai_weekday": "Podsumowanie obejmuje 7 dni do tego dnia włącznie i zapowiada 7 kolejnych.",
           "ai_time": "Godzina automatycznego uruchomienia. Jeśli Home Assistant był wtedy wyłączony, podsumowanie powstanie w ciągu 2 dni.",
           "ai_include_messages": "Domyślnie wyłączone: wiadomości prywatne i ogłoszenia szkoły nie trafiają wtedy do dostawcy AI. Włączenie dodaje sekcję \"Szkoła pisze\".",
@@ -122,6 +124,13 @@
     }
   },
   "selector": {
+    "ai_language": {
+      "options": {
+        "auto": "Automatycznie (język Home Assistant)",
+        "pl": "Polski",
+        "en": "Angielski"
+      }
+    },
     "ai_audience": {
       "options": {
         "parent": "Rodzic",

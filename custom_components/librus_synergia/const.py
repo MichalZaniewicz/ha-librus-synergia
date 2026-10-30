@@ -195,9 +195,16 @@ CONF_AI_CONTEXT = "ai_extra_context"
 # external provider - opt-in, off by default.
 CONF_AI_INCLUDE_MESSAGES = "ai_include_messages"
 DEFAULT_AI_INCLUDE_MESSAGES = False
+# The language the summary is written in: "auto" follows Home Assistant's
+# server language (Settings > System > General), not a user's profile.
+CONF_AI_LANGUAGE = "ai_language"
+AI_LANGUAGE_AUTO = "auto"
+AI_LANGUAGES = (AI_LANGUAGE_AUTO, "pl", "en")
+DEFAULT_AI_LANGUAGE = AI_LANGUAGE_AUTO
 AI_OPTION_KEYS = (
     CONF_AI_TASK_ENTITY,
     CONF_AI_AUDIENCE,
+    CONF_AI_LANGUAGE,
     CONF_AI_WEEKDAY,
     CONF_AI_TIME,
     CONF_AI_CONTEXT,
