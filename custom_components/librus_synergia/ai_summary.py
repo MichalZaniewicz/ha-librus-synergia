@@ -1063,7 +1063,8 @@ class LibrusWeeklySummary:
         for audience in self.audiences:
             if (result := self.results.get(audience)) is None:
                 continue
-            self.hass.bus.async_fire(
+            # Through the coordinator: held until Home Assistant has started.
+            self._coordinator.async_fire_event(
                 EVENT_WEEKLY_SUMMARY,
                 {
                     "entry_id": self._entry.entry_id,

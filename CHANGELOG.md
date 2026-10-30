@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Events found right after a restart reach automations.** A grade (or a
+  note, a message, a forecast change...) added while Home Assistant was off
+  or restarting fired its `librus_synergia_*` event during the start, before
+  any automation was listening: its notification never came, and the item
+  was recorded as seen, so it was never announced later either. The first
+  refresh runs while Home Assistant is still starting - its events are now
+  held until Home Assistant has started (automations armed, event entities
+  in place) and then fired, in the order they came. They are saved together
+  with what has been seen, so reloading the integration (or changing its
+  options) while Home Assistant starts, a failed setup or another restart
+  before the start has finished doesn't lose them either: the next start
+  fires them.
+
 ## 0.12.34
 
 ### Added

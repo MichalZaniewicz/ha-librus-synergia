@@ -388,7 +388,8 @@ LUCKY_NUMBER_PUBLISH_HOUR = 15
 
 # New-item bus events. What has been announced is saved in the entry's
 # state Store (see coordinator.async_restore_state), so items that arrive
-# while Home Assistant is off still fire after a restart.
+# while Home Assistant is off still fire after a restart - once it has
+# started (coordinator.async_fire_event).
 EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
