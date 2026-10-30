@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.31-beta.1
+## 0.12.32
 
 ### Added
 - **Language of the weekly AI summary.** Configure -> Weekly AI summary has a
