@@ -90,6 +90,14 @@ DEFAULT_HIDE_EMPTY_SUBJECTS = False
 CONF_MERGE_PARALLEL_LESSONS = "merge_parallel_lessons"
 DEFAULT_MERGE_PARALLEL_LESSONS = True
 
+# Activities outside the regular timetable shown in the timetable calendar
+# (issue #23): extra activities ("zajęcia dodatkowe"), the individualised
+# learning path (ZŚK) and one-to-one teaching (NI) - the three extra lists of
+# Synergia's timetable page. Each can be switched off; all on by default.
+CONF_EXTRA_ACTIVITIES = "extra_activities"
+EXTRA_ACTIVITY_KINDS = ("other", "individual_path", "one_to_one")
+DEFAULT_EXTRA_ACTIVITIES = list(EXTRA_ACTIVITY_KINDS)
+
 # An emoji in front of timetable and Agenda calendar titles ("📐 Matematyka",
 # "📝 [Sprawdzian] ...") - see subject_emoji.py. Off by default: it changes
 # what every calendar consumer sees (the companion cards strip it).
@@ -351,6 +359,10 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     # School library lendings and the school year's plan changes.
     "EbiblioLendings",
     "Calendars/Substitutions",
+    # Activities outside the regular timetable (issue #23).
+    "Timetables/OtherActivitiesRegister",
+    "Timetables/IndividualLearningPath",
+    "Timetables/OneToOneLearningPlan",
     # Descriptive grades' comments and skill names - only fetched when the
     # student has descriptive grades.
     "DescriptiveGrades/Comments",

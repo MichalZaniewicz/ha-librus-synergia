@@ -76,6 +76,7 @@ from .const import (
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
+    CONF_EXTRA_ACTIVITIES,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_COUNT,
@@ -100,8 +101,10 @@ from .const import (
     DEFAULT_CALENDAR_EMOJI,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
+    DEFAULT_EXTRA_ACTIVITIES,
     DEFAULT_HIDE_EMPTY_SUBJECTS,
     DEFAULT_MERGE_PARALLEL_LESSONS,
+    EXTRA_ACTIVITY_KINDS,
     DEFAULT_MESSAGES_COUNT,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_MESSAGE_SENDING_ENABLED,
@@ -475,6 +478,17 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         CONF_MERGE_PARALLEL_LESSONS, DEFAULT_MERGE_PARALLEL_LESSONS
                     ),
                 ): BooleanSelector(),
+                vol.Required(
+                    CONF_EXTRA_ACTIVITIES,
+                    default=options.get(CONF_EXTRA_ACTIVITIES, DEFAULT_EXTRA_ACTIVITIES),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(EXTRA_ACTIVITY_KINDS),
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_EXTRA_ACTIVITIES,
+                    )
+                ),
                 vol.Required(
                     CONF_CALENDAR_EMOJI,
                     default=options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI),

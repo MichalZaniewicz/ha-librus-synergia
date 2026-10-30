@@ -19,6 +19,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, time, timedelta
+from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
@@ -39,7 +40,7 @@ from librus_synergia import (
     LibrusSessionData,
     LibrusSessionExpiredError,
 )
-from librus_synergia.const import MESSAGE_RECIPIENT_GROUPS
+from librus_synergia.const import EXTRA_ACTIVITY_ENDPOINTS, MESSAGE_RECIPIENT_GROUPS
 from librus_synergia.parsers import mark_class_tutor, message_recipient_groups
 from librus_synergia.changes import Changes, ChangeTracker, SeenIds
 from librus_synergia.exceptions import LibrusUnexpectedResponseError
@@ -50,6 +51,7 @@ from librus_synergia.models import (
     AttendanceTypeData,
     BehaviourGradeData,
     ClassData,
+    ExtraActivityData,
     FreeDayData,
     GradeCategoryData,
     GradeData,
@@ -107,6 +109,7 @@ from librus_synergia.parsers import (  # noqa: F401
     parse_parent_teacher_conferences,
     parse_justifications,
     parse_realizations,
+    parse_extra_activities,
     parse_library_lendings,
     parse_message_recipients,
     validate_message,
@@ -138,6 +141,7 @@ from .const import (
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
     CONF_MESSAGES_COUNT,
+    CONF_EXTRA_ACTIVITIES,
     CONF_MESSAGES_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
     CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
@@ -154,7 +158,9 @@ from .const import (
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MESSAGES_COUNT,
+    DEFAULT_EXTRA_ACTIVITIES,
     DEFAULT_MESSAGES_ENABLED,
+    EXTRA_ACTIVITY_KINDS,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
@@ -244,6 +250,7 @@ _EXTRA_LABELS = (
     "DescriptiveGrades/Skills",
     "PartialGrades",
     "Auth/Subjects",
+    *EXTRA_ACTIVITY_ENDPOINTS.values(),
 )
 # Read receipts: the newest sent messages from the last this-many days.
 _READ_RECEIPT_DAYS = 30
@@ -268,7 +275,11 @@ _SCHOOL_SETTING_LABELS = frozenset({"GradingSystem", "ClassFreeDays/Types"})
 # Optional modules a school may not have at all (no e-library, no access
 # to the year's plan changes): a refusal (401/403/404) is an empty answer,
 # asked again on the endpoint's own schedule - not a degraded endpoint.
-_OPTIONAL_MODULE_LABELS = frozenset({"EbiblioLendings", "Calendars/Substitutions"})
+# The lists of activities outside the timetable (issue #23) are optional
+# modules too.
+_OPTIONAL_MODULE_LABELS = frozenset(
+    {"EbiblioLendings", "Calendars/Substitutions", *EXTRA_ACTIVITY_ENDPOINTS.values()}
+)
 
 
 def _is_module_refusal(err: BaseException) -> bool:
@@ -1173,6 +1184,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._week_cache: dict[date, tuple[dict[date, list[LessonData]], datetime]] = {}
         self._week_fetches: dict[date, asyncio.Task[dict[date, list[LessonData]]]] = {}
         self._week_fetch_limit = asyncio.Semaphore(_WEEK_FETCH_CONCURRENCY)
+        # The same weeks' activities outside the timetable (issue #23):
+        # week Monday -> (activities, fetched at).
+        self._extra_week_cache: dict[date, tuple[list[ExtraActivityData], datetime]] = {}
+        # The Monday of the two weeks the polled activities cover - a new
+        # week asks again at once instead of after the hourly cache.
+        self._extra_activities_from: date | None = None
         # Week Monday -> when its on-demand fetch last failed (not retried
         # for _WEEK_FAILURE_BACKOFF), and when the last forced login was made.
         self._week_failed_at: dict[date, datetime] = {}
@@ -2389,6 +2406,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             )
             return cached[0] if cached is not None else {}
         merged = merge_timetables(payload)
+        if self.extra_activity_kinds:
+            async with self._week_fetch_limit:
+                extra = await self._async_fetch_extra_week(week_start)
+            if extra is not None:
+                self._extra_week_cache[week_start] = (extra, dt_util.utcnow())
         self._week_cache[week_start] = (merged, dt_util.utcnow())
         self._week_failed_at.pop(week_start, None)
         self._prune_week_cache()
@@ -2427,6 +2449,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for week_start, failed_at in list(self._week_failed_at.items()):
             if now - failed_at >= _WEEK_FAILURE_BACKOFF:
                 del self._week_failed_at[week_start]
+        for week_start in [w for w in self._extra_week_cache if w not in self._week_cache]:
+            del self._extra_week_cache[week_start]
 
     async def _async_relogin(self, seen: int) -> None:
         """Force a fresh login after Librus rejected the session - one at a
@@ -3041,6 +3065,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ),
             self._async_get_descriptive_grade_lookups(core_payloads),
             self._async_get_partial_grades(),
+            self._async_get_extra_activities(week_start),
         )
         (
             text_grades_payload,
@@ -3052,6 +3077,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             timetable_entries,
             descriptive_lookups,
             partial_grades,
+            extra_activity_payloads,
         ) = extra_results
         extras = {
             "BaseTextGrades": text_grades_payload,
@@ -3063,6 +3089,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "TimetableEntries": timetable_entries,
             **descriptive_lookups,
             **partial_grades,
+            **extra_activity_payloads,
         }
         payloads = list(core_payloads)
         payloads[_TIMETABLE_THIS_WEEK] = timetable_this_week
@@ -3255,6 +3282,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             school_files=parse_school_files((extras or {}).get("SchoolFiles") or {}),
             library_lendings=parse_library_lendings((extras or {}).get("EbiblioLendings") or {}),
             plan_changes=parse_plan_changes((extras or {}).get("Calendars/Substitutions") or {}),
+            extra_activities=self._extra_activities_from_payloads(extras or {}),
             standing_timetable=parse_timetable_entries(
                 (extras or {}).get("TimetableEntries") or {}, self._cached_lesson_subjects
             ),
@@ -4169,6 +4197,90 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "DescriptiveGrades/Skills", skill_names, every=_DAILY
             ),
         }
+
+    @property
+    def extra_activity_kinds(self) -> tuple[str, ...]:
+        """The kinds of activities outside the timetable switched on in the
+        options (`EXTRA_ACTIVITY_KINDS`; all of them by default)."""
+        if self.config_entry is None:
+            return EXTRA_ACTIVITY_KINDS
+        chosen = self.config_entry.options.get(CONF_EXTRA_ACTIVITIES, DEFAULT_EXTRA_ACTIVITIES)
+        if not isinstance(chosen, (list, tuple)):
+            return EXTRA_ACTIVITY_KINDS
+        return tuple(kind for kind in EXTRA_ACTIVITY_KINDS if kind in chosen)
+
+    async def _async_get_extra_activities(self, week_start: date) -> dict[str, dict[str, Any]]:
+        """This week's and next week's activities outside the timetable
+        (issue #23), one request per kind switched on, at most once an hour
+        - and at once when a new week starts. A kind switched off is not
+        asked for; a school without the module answers with a refusal,
+        which counts as "none"."""
+        kinds = self.extra_activity_kinds
+        same_range = self._extra_activities_from == week_start
+        payloads: dict[str, dict[str, Any]] = {}
+        for kind, label in EXTRA_ACTIVITY_ENDPOINTS.items():
+            if kind not in kinds:
+                payloads[label] = self._degrade_optional_payload(label, {})
+                continue
+            payloads[label] = await self._async_optional(
+                label,
+                partial(
+                    self._client.async_get_extra_activities,
+                    kind,
+                    week_start,
+                    week_start + timedelta(days=13),
+                ),
+                every=_HOURLY if same_range else None,
+            )
+        if not any(label in self._failed_this_cycle for label in payloads):
+            self._extra_activities_from = week_start
+        return payloads
+
+    def _extra_activities_from_payloads(self, extras: dict[str, Any]) -> list[ExtraActivityData]:
+        kinds = self.extra_activity_kinds
+        result = [
+            activity
+            for kind, label in EXTRA_ACTIVITY_ENDPOINTS.items()
+            if kind in kinds
+            for activity in parse_extra_activities(extras.get(label) or {}, kind)
+        ]
+        result.sort(key=lambda activity: (activity.date or "", activity.hour_from or ""))
+        return result
+
+    async def _async_fetch_extra_week(self, week_start: date) -> list[ExtraActivityData] | None:
+        """One on-demand week's activities outside the timetable, or None
+        when a kind couldn't be read (the last copy is kept then). A refused
+        kind (the school doesn't have it) counts as none."""
+        result: list[ExtraActivityData] = []
+        for kind in self.extra_activity_kinds:
+            try:
+                payload = await self._client.async_get_extra_activities(
+                    kind, week_start, week_start + timedelta(days=6)
+                )
+            except LibrusError as err:
+                if _is_module_refusal(err):
+                    continue
+                _LOGGER.debug(
+                    "Activities outside the timetable (%s) for the week starting %s: %s",
+                    kind,
+                    week_start,
+                    err,
+                )
+                return None
+            result.extend(parse_extra_activities(payload, kind))
+        return result
+
+    def extra_activities_between(self, start: date, end: date) -> list[ExtraActivityData]:
+        """Activities outside the timetable dated `start`..`end` (both
+        included): the polled two weeks from the data, other weeks from the
+        on-demand cache (filled with their timetable weeks)."""
+        found: dict[str, ExtraActivityData] = {}
+        polled = self.data.extra_activities if self.data is not None else []
+        cached = (activity for activities, _ in self._extra_week_cache.values() for activity in activities)
+        for activity in (*polled, *cached):
+            if activity.date and start.isoformat() <= activity.date <= end.isoformat():
+                found.setdefault(f"{activity.kind}:{activity.id}", activity)
+        return sorted(found.values(), key=lambda a: (a.date or "", a.hour_from or ""))
 
     async def _async_get_partial_grades(self) -> dict[str, dict[str, Any]]:
         """Grades from the new descriptive grading some schools use for
