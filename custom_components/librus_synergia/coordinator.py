@@ -23,10 +23,11 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -1083,6 +1084,14 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # of them it is recorded silently instead of being announced as a
         # whole batch of "new" items.
         self._unseeded_kinds: set[str] = set()
+        # Bus events fired before Home Assistant has started (the first
+        # refresh runs while it boots), in order, and the listener that fires
+        # them once it has - see async_fire_event. Saved with the tracked
+        # state, next to the ids they announce: an unload, a failed setup or
+        # a stop before the start leaves them to the next setup.
+        self._held_events: list[tuple[str, dict[str, Any]]] = []
+        self._fire_held_at_start: CALLBACK_TYPE | None = None
+        entry.async_on_unload(self._async_cancel_fire_at_start)
         # Earned badge key ("sixes_10") -> date earned (YYYY-MM-DD). None =
         # not seeded yet: the first computation records everything silently
         # (badges are dated from the whole school year, so an install or an
@@ -1249,7 +1258,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     async def async_restore_state(self) -> None:
         """Load what the previous run saved: the ids already announced (so
         a grade added while HA was off still fires its event instead of
-        being swallowed by the silent first-poll seeding), the last good
+        being swallowed by the silent first-poll seeding) and the events
+        still held for them (see async_fire_event), the last good
         responses, when Librus last answered, the newest session cookies and
         when each throttled request was last made (so a restart or an
         options change doesn't ask Librus for every daily lookup again). A
@@ -1304,6 +1314,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._restore_kindergarten(stored.get("kindergarten"))
         if saved := stored.get("last_success_at"):
             self.last_success_at = dt_util.parse_datetime(saved)
+        if isinstance(held := stored.get("held_events"), list):
+            # Held by a setup that ended before Home Assistant had started -
+            # saved with the ids they announce, fired by this one (below).
+            self._held_events = [
+                (event["event_type"], event["data"])
+                for event in held
+                if isinstance(event, dict)
+                and isinstance(event.get("event_type"), str)
+                and event["event_type"].startswith(f"{DOMAIN}_")
+                and isinstance(event.get("data"), dict)
+            ]
 
         # The responses: their own file since 0.12.5-beta.9; older versions
         # kept them in the tracked state (moved to the new file with the next
@@ -1366,6 +1387,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._payloads_saved_at = payloads_saved_at
         else:
             self._payloads_saved_at = self.last_success_at
+        if self._held_events:
+            # Already in the file: no write until they are fired.
+            self._async_fire_held_when_started(save=False)
 
     async def _async_load(self, store: Store[dict[str, Any]]) -> dict[str, Any] | None:
         try:
@@ -1668,6 +1692,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # Written promptly (not with the periodic write): a restart
             # compares it with the payloads file's `saved_at`.
             self._payloads_changed_at,
+            # Saved next to the ids they announce (see async_fire_event).
+            self._held_events,
         )
 
     def _payloads_changed(self) -> None:
@@ -1796,6 +1822,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 else None
             ),
             "average_digests": self.average_digests,
+            # Found before Home Assistant had started, not fired yet - in the
+            # same write as the ids they announce (see async_fire_event).
+            "held_events": [
+                {"event_type": event_type, "data": event_data}
+                for event_type, event_data in self._held_events
+            ],
         }
 
     def set_average_digest(self, statistic_id: str, digest: str | None) -> None:
@@ -3385,7 +3417,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 old = known.get(forecast.subject_id)
                 if old is None or old == forecast.predicted:
                     continue
-                self.hass.bus.async_fire(
+                self.async_fire_event(
                     EVENT_FORECAST_CHANGED,
                     {
                         "entry_id": entry_id,
@@ -4788,7 +4820,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 before = {r["name"] for r in known["receivers"] if r["read"]}
                 for receiver in receivers:
                     if receiver["read"] and receiver["name"] not in before:
-                        self.hass.bus.async_fire(
+                        self.async_fire_event(
                             EVENT_MESSAGE_READ,
                             {
                                 "entry_id": self.config_entry.entry_id if self.config_entry else None,
@@ -4834,6 +4866,85 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._archived_messages = parse_message_list(payload, ARCHIVE_MAILBOX)
         self._archive_fetched_at = now
 
+    @callback
+    def async_fire_event(self, event_type: str, event_data: dict[str, Any]) -> None:
+        """Fire one of this integration's bus events - all of them go
+        through here (tests/test_events_after_startup.py checks). Until Home
+        Assistant has started they are held, then fired in the order they
+        came.
+
+        The first refresh runs in async_setup_entry, while Home Assistant
+        boots: automations arm their triggers only at the end of the start
+        (startup jobs, right before EVENT_HOMEASSISTANT_STARTED) and the
+        event entities don't exist yet. So what that refresh found - a grade
+        added while HA was off or restarting - was announced to nobody, and
+        recorded as seen: never announced again. `starting` holds too
+        (`hass.is_running` is already true then, the triggers aren't armed
+        yet). Running fires at once, as before - and so does stopping, when
+        no start is coming to fire anything held.
+
+        What is held is saved with the tracked state, in the same write as
+        the ids it announces. So the entry unloading (a reload, an options
+        change), its setup failing or Home Assistant stopping before the
+        start has finished doesn't lose it: the next setup restores it and
+        fires it once Home Assistant has started."""
+        if self.hass.state not in (CoreState.not_running, CoreState.starting):
+            self.hass.bus.async_fire(event_type, event_data)
+            return
+        self._held_events.append((event_type, event_data))
+        _LOGGER.debug("Holding %s until Home Assistant has started", event_type)
+        self._async_fire_held_when_started()
+
+    @callback
+    def _async_fire_held_when_started(self, *, save: bool = True) -> None:
+        """Fire what is held once Home Assistant has started - at once if it
+        has. Meanwhile it is written with the tracked state (`save` False:
+        restored, so the file has it already); one write for a burst, as the
+        store builds the data when it writes."""
+        if self.hass.state not in (CoreState.not_running, CoreState.starting):
+            self._async_fire_held_events(self.hass)
+        elif self._fire_held_at_start is None:
+            # Not started yet, so this never calls back right away.
+            self._fire_held_at_start = async_at_started(
+                self.hass, self._async_fire_held_events
+            )
+            if save:
+                self._schedule_save()
+
+    @callback
+    def _async_fire_held_events(self, _hass: HomeAssistant) -> None:
+        """Home Assistant has started - its automations are armed by now.
+        Fire what was held, without checking the state again; the next
+        write drops the saved copy. An entry already unloading fires
+        nothing: its final write leaves them to the next setup."""
+        self._fire_held_at_start = None
+        if self._closed:
+            return
+        held, self._held_events = self._held_events, []
+        _LOGGER.debug("Home Assistant has started: firing %s held event(s)", len(held))
+        for event_type, event_data in held:
+            self.hass.bus.async_fire(event_type, event_data)
+        self._schedule_save()
+
+    @callback
+    def _async_cancel_fire_at_start(self) -> None:
+        """The entry unloads, or its setup failed: this coordinator fires
+        nothing more. What it holds is left to the next setup, which restores
+        it with the ids it announces and fires it once Home Assistant has
+        started. async_close_state has written it; after a failed setup the
+        list is kept for a write still pending (until that one lands, the
+        saved state doesn't have those items as seen, so the retry finds
+        them again). A deleted entry's saved state goes with it."""
+        if self._fire_held_at_start is not None:
+            self._fire_held_at_start()
+            self._fire_held_at_start = None
+        if self._held_events:
+            _LOGGER.debug(
+                "Leaving %s held event(s) to the next setup: unloaded before Home "
+                "Assistant has started",
+                len(self._held_events),
+            )
+
     def _fire_change_events(self, changes: Changes, data: LibrusData) -> None:
         """Fire one bus event per new item the tracker reported.
 
@@ -4850,7 +4961,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         }
 
         def fire(event: str, item_id: Any, payload: dict[str, Any]) -> None:
-            self.hass.bus.async_fire(event, {**base, "id": item_id, **payload})
+            self.async_fire_event(event, {**base, "id": item_id, **payload})
 
         def subject_name(subject_id: int | str | None) -> str | None:
             if subject_id is None:
@@ -5176,7 +5287,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             before = known.get(str(item.id))
             if before is None or before == item.status:
                 continue
-            self.hass.bus.async_fire(
+            self.async_fire_event(
                 EVENT_JUSTIFICATION_STATUS,
                 {
                     "entry_id": self.config_entry.entry_id if self.config_entry else None,
@@ -5229,7 +5340,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             for item_id in sorted(ids):
                 fields = source[item_id]
-                self.hass.bus.async_fire(
+                self.async_fire_event(
                     EVENT_LIBRARY_CHANGED,
                     {
                         **base,
@@ -5280,7 +5391,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             changed = [key for key in _AGENDA_COMPARED if before.get(key) != fields.get(key)]
             if not changed or not (upcoming(fields) or upcoming(before)):
                 continue
-            self.hass.bus.async_fire(
+            self.async_fire_event(
                 EVENT_AGENDA_CHANGED,
                 {
                     **base,
@@ -5294,7 +5405,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for item_id, before in known.items():
             if item_id in current or not upcoming(before):
                 continue
-            self.hass.bus.async_fire(
+            self.async_fire_event(
                 EVENT_AGENDA_CHANGED,
                 {**base, "id": _restore_id(item_id), "kind": "removed", **before},
             )
@@ -5413,7 +5524,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         for key in new:
             if dates[key] < cutoff:
                 continue
-            self.hass.bus.async_fire(
+            self.async_fire_event(
                 EVENT_ACHIEVEMENT_UNLOCKED,
                 {
                     "entry_id": entry_id,
@@ -5516,7 +5627,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return current_ids
         new_ids = current_ids - known
         for item_id in new_ids:
-            self.hass.bus.async_fire(
+            self.async_fire_event(
                 event, {"entry_id": entry_id, "id": item_id, "student": student, **items[item_id]}
             )
         # Union, not replace: an item that later drops out of the fetch
