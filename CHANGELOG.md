@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.33-beta.1
+## 0.12.34
 
 ### Added
 - **Activities outside the timetable in the timetable calendar.** Synergia's
