@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.35
 
 ### Fixed
 - **Events found right after a restart reach automations.** A grade (or a
