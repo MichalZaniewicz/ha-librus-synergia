@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.36-beta.1
+## 0.12.37
 
 ### Added
 - **Test within 24 hours** binary sensor: on from 24 hours before a test or
