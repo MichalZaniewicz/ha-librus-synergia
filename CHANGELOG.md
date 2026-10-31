@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+- **Test within 24 hours** binary sensor: on from 24 hours before a test or
+  a short test in the Agenda until it starts (the entry's own time, else
+  that day's first lesson of the subject, else the day's first lesson).
+  Switches exactly on time; `exams`, `tests` and `quizzes` in attributes.
+- **Tests on the lesson in the Timetable calendar.** A lesson whose subject
+  has a test in the Agenda that day gets a "Sprawdzian: ..." or
+  "Kartkówka: ..." description line; the companion cards show it as a tag.
+- **Grades that don't count towards the average.** Each entry of a subject
+  sensor's `grades` attribute carries its category's `weight` and
+  `counts_to_average` (Librus's "Licz do śr."), so cards can mark them.
+
 ### Changed
 - **Weekly AI summary: a clear hint when the AI runs out of room.** When the
   provider stops because the answer hit its output limit (Claude: "reached

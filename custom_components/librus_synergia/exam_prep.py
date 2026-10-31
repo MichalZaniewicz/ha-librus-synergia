@@ -122,6 +122,46 @@ def exam_kind(data: LibrusData, item: HomeworkEventData) -> str:
     return "quiz" if item.content and QUIZ_RE.search(item.content) else "test"
 
 
+# "Sprawdzian: ..." / "Kartkówka: ..." on a lesson in the Timetable calendar
+# (the companion cards read these two words), and how much of the
+# description goes with it.
+EXAM_LABELS = {"test": "Sprawdzian", "quiz": "Kartkówka"}
+EXAM_TEXT_LIMIT = 150
+
+
+def exam_text(data: LibrusData, item: HomeworkEventData, limit: int = EXAM_TEXT_LIMIT) -> str:
+    """The entry's description on one line (or its category name when it
+    has none), cut to `limit` characters."""
+    text = " ".join((item.content or "").split()) or (category_name(data, item) or "")
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def exams_by_day_and_subject(data: LibrusData) -> dict[tuple[str, int], list[HomeworkEventData]]:
+    """Tests in the Agenda by ("YYYY-MM-DD", subject id) - to put them on
+    that day's lesson of the subject. Entries without a subject are left
+    out: there is no lesson to put them on."""
+    out: dict[tuple[str, int], list[HomeworkEventData]] = {}
+    for item in data.homeworks:
+        day = _day(item.date)
+        subject = _as_int(item.subject_id)
+        if day is None or subject is None or not is_exam(data, item):
+            continue
+        out.setdefault((day.isoformat(), subject), []).append(item)
+    return out
+
+
+def exam_lines(data: LibrusData, items: list[HomeworkEventData]) -> list[str]:
+    """"Sprawdzian: Rozdział 2" lines for a lesson, one per test."""
+    lines = []
+    for item in items:
+        label = EXAM_LABELS[exam_kind(data, item)]
+        # Only the description: the category ("Kartkówka zapowiedziana")
+        # would mostly repeat the label.
+        text = exam_text(data, item) if (item.content or "").strip() else ""
+        lines.append(f"{label}: {text}" if text else label)
+    return list(dict.fromkeys(lines))
+
+
 def week_load(data: LibrusData, week_start: date) -> dict[str, Any]:
     """The tests in one Monday-Sunday week of the Agenda: how many full
     tests and short ones, and each with its day and subject - for a "heavy

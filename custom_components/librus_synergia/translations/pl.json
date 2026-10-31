@@ -205,6 +205,7 @@
       "school_day_today": { "name": "Dzień szkolny dziś" },
       "school_day_tomorrow": { "name": "Dzień szkolny jutro" },
       "grade_risk": { "name": "Zagrożenie oceną" },
+      "exam_soon": { "name": "Sprawdzian w ciągu 24 godzin" },
       "in_school": { "name": "Na lekcjach" }
     },
     "todo": {

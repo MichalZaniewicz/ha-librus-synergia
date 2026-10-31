@@ -715,6 +715,14 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             {
                 "value": g.value,
                 "category": categories[g.category_id].name if g.category_id in categories else None,
+                # From the grade's category: Librus's "Licz do śr." - False
+                # for a grade that doesn't count towards the average.
+                "weight": categories[g.category_id].weight if g.category_id in categories else None,
+                "counts_to_average": (
+                    categories[g.category_id].count_to_average
+                    if g.category_id in categories
+                    else None
+                ),
                 "date": g.add_date,
                 "comments": g.comments,
                 "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,

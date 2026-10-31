@@ -472,6 +472,8 @@ async def test_dynamic_subject_average_sensor_is_discovered(hass) -> None:
         {
             "value": "4+",
             "category": "sprawdzian",
+            "weight": 2,
+            "counts_to_average": True,
             "date": "2026-09-01",
             "comments": ["Świetna praca"],
             "teacher": None,

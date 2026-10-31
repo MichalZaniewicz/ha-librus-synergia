@@ -1,6 +1,13 @@
 {
   "entity": {
     "binary_sensor": {
+      "exam_soon": {
+        "default": "mdi:clipboard-text-clock-outline",
+        "state": {
+          "on": "mdi:clipboard-alert",
+          "off": "mdi:clipboard-check-outline"
+        }
+      },
       "grade_risk": {
         "default": "mdi:alert-circle-outline",
         "state": {

@@ -40,6 +40,7 @@ from .coordinator import (
     lesson_change,
     on_demand_week_starts,
 )
+from .exam_prep import exam_lines, exams_by_day_and_subject
 from .forecast import DataMemo
 from .subject_emoji import category_emoji, subject_emoji, with_emoji
 
@@ -135,6 +136,26 @@ def _lesson_topic(
         owner=owner,
     )
     return index.get((day.isoformat(), lesson.lesson_no))
+
+
+_EXAM_INDEX = DataMemo()
+
+
+def _lesson_exams(
+    day: date, lesson: LessonData, data: LibrusData, owner: Hashable | None = None
+) -> list[str]:
+    """"Sprawdzian: ..." lines for a lesson: tests in the Agenda on this day
+    in this lesson's subject (the Agenda has no lesson number, so a double
+    lesson gets the line on both)."""
+    try:
+        subject = int(lesson.subject_id) if lesson.subject_id is not None else None
+    except (TypeError, ValueError):
+        subject = None
+    if subject is None:
+        return []
+    index = _EXAM_INDEX.get(data, None, lambda: exams_by_day_and_subject(data), owner=owner)
+    items = index.get((day.isoformat(), subject))
+    return exam_lines(data, items) if items else []
 
 
 @dataclass(frozen=True)
@@ -300,6 +321,8 @@ def _lesson_parts(
         lines.append(f"Zastępstwo za: {replaced}")
     if change["room_changed"]:
         lines.append(f"Zmiana sali: {change['original_classroom'] or '?'} → {classroom_name or '?'}")
+    if change["kind"] != "canceled":
+        lines.extend(_lesson_exams(day, lesson, data, owner))
     topic = _lesson_topic(day, lesson, data, owner)
     if topic:
         lines.append(f"Temat: {topic}")

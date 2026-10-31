@@ -205,6 +205,7 @@
       "school_day_today": { "name": "School day today" },
       "school_day_tomorrow": { "name": "School day tomorrow" },
       "grade_risk": { "name": "Grade at risk" },
+      "exam_soon": { "name": "Test within 24 hours" },
       "in_school": { "name": "At school" }
     },
     "todo": {
