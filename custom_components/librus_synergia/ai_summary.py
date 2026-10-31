@@ -276,6 +276,34 @@ def _is_schema_error(err: BaseException) -> bool:
     )
 
 
+# How AI providers word "the answer hit the output limit" (Anthropic, OpenAI,
+# Google, Ollama...), lowercased.
+_TOKEN_LIMIT_MARKERS = (
+    "token limit",
+    "max_tokens",
+    "max_output_tokens",
+    "maximum tokens",
+    "max tokens",
+    "output limit",
+)
+TOKEN_LIMIT_HINT = (
+    "The AI ran out of room for its answer. In the settings of the AI Task entity"
+    " (Settings > Devices & services > your AI provider > AI Task > Configure),"
+    " untick the recommended settings and raise the maximum tokens (8000 is"
+    " plenty); turning off thinking also helps."
+)
+
+
+def explain_error(err: BaseException) -> str:
+    """The error text, with a hint when the model hit its output limit."""
+    text = str(err) or type(err).__name__
+    key = getattr(err, "translation_key", None) or ""
+    lowered = text.lower()
+    if key == "response_max_tokens" or any(m in lowered for m in _TOKEN_LIMIT_MARKERS):
+        return f"{text} {TOKEN_LIMIT_HINT}"
+    return text
+
+
 # A subject with at most this many absences left this semester is mentioned.
 _FEW_ABSENCES_LEFT = 3
 
@@ -1048,7 +1076,7 @@ class LibrusWeeklySummary:
                 if results is not None:
                     self._fire_events(manual=scheduled_for is None)
             except Exception as err:  # noqa: BLE001 - any provider error ends up here
-                self.last_error = str(err) or type(err).__name__
+                self.last_error = explain_error(err)
                 _LOGGER.warning("Weekly summary failed: %s", self.last_error)
                 raise HomeAssistantError(f"Weekly summary failed: {self.last_error}") from err
             finally:

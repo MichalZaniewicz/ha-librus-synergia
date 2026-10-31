@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Weekly AI summary: a clear hint when the AI runs out of room.** When the
+  provider stops because the answer hit its output limit (Claude: "reached
+  the output token limit"), the error on the sensor and in the toast now
+  says what to change: raise the maximum tokens in the AI Task entity's
+  settings (about 8000) or turn thinking off. Claude's default of 3000
+  tokens, with thinking counted in, is often too little for the summary.
+
 ## 0.12.35
 
 ### Fixed

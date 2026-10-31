@@ -6,12 +6,16 @@ import dataclasses
 from datetime import date, datetime, time
 from unittest.mock import patch
 
+import pytest
+
 from homeassistant.core import SupportsResponse
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.librus_synergia.ai_summary import (
+    TOKEN_LIMIT_HINT,
     build_context,
     build_instructions,
     build_structure,
@@ -424,6 +428,29 @@ async def test_provider_failure_is_reported_on_the_sensor(hass) -> None:
         pass
     sensor_id = _entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary")
     assert "quota exceeded" in hass.states.get(sensor_id).attributes["error"]
+    assert TOKEN_LIMIT_HINT not in hass.states.get(sensor_id).attributes["error"]
+
+
+async def test_output_token_limit_error_says_what_to_change(hass) -> None:
+    async def _cut_off(call):
+        raise HomeAssistantError(
+            "Claude reached the output token limit before completing the response."
+        )
+
+    hass.services.async_register(
+        "ai_task", "generate_data", _cut_off, supports_response=SupportsResponse.ONLY
+    )
+    entry = await setup_integration(hass, _client(), options=_AI_OPTIONS)
+    button_id = _entity_id(hass, "button", f"{entry.entry_id}_weekly_summary_generate")
+
+    with pytest.raises(HomeAssistantError, match="maximum tokens"):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": button_id}, blocking=True
+        )
+    sensor_id = _entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary")
+    error = hass.states.get(sensor_id).attributes["error"]
+    assert error.startswith("Claude reached the output token limit")
+    assert TOKEN_LIMIT_HINT in error
 
 
 async def test_parent_and_student_get_their_own_text(hass) -> None:
