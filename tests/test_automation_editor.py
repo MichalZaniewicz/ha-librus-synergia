@@ -35,6 +35,12 @@ def _device_id(hass, entry) -> str:
     return dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)[0].id
 
 
+def _described(name: str) -> set[str]:
+    """Keys of a triggers/conditions file, without the YAML anchor blocks
+    (".target", ...) that Home Assistant drops too."""
+    return {key for key in load_yaml_dict(str(_COMPONENT / name)) if not key.startswith(".")}
+
+
 def _strings(name: str = "strings.json") -> dict:
     return json.loads((_COMPONENT / name).read_text(encoding="utf-8"))
 
@@ -43,8 +49,8 @@ def _strings(name: str = "strings.json") -> dict:
 
 
 def test_every_trigger_and_condition_is_described_and_translated() -> None:
-    triggers = set(load_yaml_dict(str(_COMPONENT / "triggers.yaml")))
-    conditions = set(load_yaml_dict(str(_COMPONENT / "conditions.yaml")))
+    triggers = _described("triggers.yaml")
+    conditions = _described("conditions.yaml")
     assert triggers == set(librus_trigger._SPECS)
     assert conditions == set(librus_condition._SPECS)
     icons = _strings("icons.json")
