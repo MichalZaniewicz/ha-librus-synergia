@@ -333,5 +333,75 @@
     "withdraw_message": {
       "service": "mdi:email-remove-outline"
     }
+  },
+  "triggers": {
+    "new_grade": {
+      "trigger": "mdi:numeric-6-box-outline"
+    },
+    "new_note": {
+      "trigger": "mdi:note-text-outline"
+    },
+    "new_absence": {
+      "trigger": "mdi:account-cancel-outline"
+    },
+    "new_message": {
+      "trigger": "mdi:email-outline"
+    },
+    "new_announcement": {
+      "trigger": "mdi:bullhorn-outline"
+    },
+    "new_agenda_entry": {
+      "trigger": "mdi:calendar-plus"
+    },
+    "new_homework": {
+      "trigger": "mdi:notebook-edit-outline"
+    },
+    "timetable_changed": {
+      "trigger": "mdi:calendar-alert"
+    },
+    "agenda_changed": {
+      "trigger": "mdi:calendar-edit"
+    },
+    "justification_status": {
+      "trigger": "mdi:file-check-outline"
+    },
+    "forecast_changed": {
+      "trigger": "mdi:crystal-ball"
+    },
+    "new_school_trip": {
+      "trigger": "mdi:bus-school"
+    },
+    "new_school_document": {
+      "trigger": "mdi:file-document-outline"
+    },
+    "library_changed": {
+      "trigger": "mdi:bookshelf"
+    },
+    "message_read": {
+      "trigger": "mdi:email-open-outline"
+    },
+    "achievement_unlocked": {
+      "trigger": "mdi:trophy-outline"
+    },
+    "weekly_summary": {
+      "trigger": "mdi:robot-outline"
+    }
+  },
+  "conditions": {
+    "school_day": {
+      "condition": "mdi:school-outline"
+    },
+    "in_school": {
+      "condition": "mdi:bag-personal-outline"
+    },
+    "exam_soon": {
+      "condition": "mdi:file-document-edit-outline"
+    },
+    "lucky_number_yours": {
+      "condition": "mdi:clover"
+    },
+    "absences_to_justify": {
+      "condition": "mdi:account-alert-outline"
+    }
   }
 }

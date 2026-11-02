@@ -126,6 +126,84 @@
     }
   },
   "selector": {
+    "grade_kind": {
+      "options": {
+        "normal": "Zwykła ocena",
+        "proposition": "Ocena proponowana (śródroczna lub roczna)",
+        "semester_final": "Ocena śródroczna lub roczna",
+        "text": "Ocena tekstowa",
+        "descriptive": "Ocena opisowa",
+        "point": "Ocena punktowa",
+        "behaviour": "Ocena z zachowania"
+      }
+    },
+    "note_sentiment": {
+      "options": {
+        "positive": "Pozytywna",
+        "negative": "Negatywna",
+        "neutral": "Neutralna"
+      }
+    },
+    "mailbox": {
+      "options": {
+        "inbox": "Odebrane",
+        "substitutions": "Zastępstwa",
+        "alerts": "Powiadomienia",
+        "justifications": "Usprawiedliwienia"
+      }
+    },
+    "timetable_change": {
+      "options": {
+        "canceled": "Odwołana",
+        "substitution": "Zastępstwo",
+        "room_change": "Zmiana sali",
+        "moved": "Przeniesiona"
+      }
+    },
+    "agenda_change": {
+      "options": {
+        "changed": "Zmieniony",
+        "removed": "Usunięty"
+      }
+    },
+    "justification_outcome": {
+      "options": {
+        "accepted": "Przyjęte",
+        "rejected": "Odrzucone",
+        "changed": "Inny status"
+      }
+    },
+    "forecast_direction": {
+      "options": {
+        "up": "W górę",
+        "down": "W dół"
+      }
+    },
+    "library_action": {
+      "options": {
+        "lent": "Wypożyczenie",
+        "returned": "Zwrot"
+      }
+    },
+    "summary_audience": {
+      "options": {
+        "any": "Dowolna",
+        "parent": "Dla rodzica",
+        "student": "Dla ucznia"
+      }
+    },
+    "condition_behavior": {
+      "options": {
+        "any": "Którykolwiek",
+        "all": "Wszyscy"
+      }
+    },
+    "school_day": {
+      "options": {
+        "today": "Dziś",
+        "tomorrow": "Jutro"
+      }
+    },
     "extra_activities": {
       "options": {
         "other": "Zajęcia dodatkowe",
@@ -457,6 +535,240 @@
     },
     "message_maybe_sent": {
       "message": "Nie wiadomo, czy wiadomość wyszła - sprawdź Wysłane, zanim spróbujesz ponownie."
+    }
+  },
+  "triggers": {
+    "new_grade": {
+      "name": "Nowa ocena",
+      "description": "W Librusie pojawia się nowa ocena.",
+      "fields": {
+        "kind": {
+          "name": "Rodzaj",
+          "description": "Tylko te rodzaje ocen. Puste: każdy rodzaj."
+        },
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        },
+        "grade_at_most": {
+          "name": "Ocena co najwyżej",
+          "description": "Tylko ocena do tej wartości (4- to 3,75). Oceny bez liczby wtedy nie pasują."
+        },
+        "grade_at_least": {
+          "name": "Ocena co najmniej",
+          "description": "Tylko ocena od tej wartości w górę. Oceny bez liczby wtedy nie pasują."
+        }
+      }
+    },
+    "new_note": {
+      "name": "Nowa uwaga",
+      "description": "Nauczyciel dodaje uwagę.",
+      "fields": {
+        "sentiment": {
+          "name": "Rodzaj",
+          "description": "Tylko te rodzaje uwag. Puste: każda uwaga."
+        }
+      }
+    },
+    "new_absence": {
+      "name": "Nowa nieobecność",
+      "description": "Pojawia się nowa nieobecność (nie obecność ani spóźnienie).",
+      "fields": {
+        "only_unexcused": {
+          "name": "Tylko nieusprawiedliwione",
+          "description": "Pomiń nieobecności od razu usprawiedliwione."
+        }
+      }
+    },
+    "new_message": {
+      "name": "Nowa wiadomość",
+      "description": "W Wiadomościach pojawia się nowa wiadomość.",
+      "fields": {
+        "mailbox": {
+          "name": "Skrzynka",
+          "description": "Tylko te skrzynki. Puste: każda skrzynka."
+        }
+      }
+    },
+    "new_announcement": {
+      "name": "Nowe ogłoszenie",
+      "description": "Nowe ogłoszenie na tablicy."
+    },
+    "new_agenda_entry": {
+      "name": "Nowy wpis w terminarzu",
+      "description": "Nowy wpis w terminarzu: sprawdzian, wycieczka, zebranie...",
+      "fields": {
+        "category": {
+          "name": "Kategoria",
+          "description": "Tylko wpisy, których kategoria lub treść ma jedno z tych słów, po przecinku (np. sprawdzian, kartkówka). Puste: każdy wpis."
+        },
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
+    },
+    "new_homework": {
+      "name": "Nowe zadanie domowe",
+      "description": "Nauczyciel zadaje nowe zadanie domowe.",
+      "fields": {
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
+    },
+    "timetable_changed": {
+      "name": "Zmiana w planie lekcji",
+      "description": "Lekcja dziś lub później zostaje odwołana, ma zastępstwo, zmienia salę albo termin.",
+      "fields": {
+        "change": {
+          "name": "Zmiana",
+          "description": "Tylko te zmiany. Puste: każda zmiana."
+        },
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
+    },
+    "agenda_changed": {
+      "name": "Zmiana wpisu w terminarzu",
+      "description": "Nadchodzący wpis w terminarzu się zmienia albo znika.",
+      "fields": {
+        "change": {
+          "name": "Zmiana",
+          "description": "Tylko te zmiany. Puste: obie."
+        }
+      }
+    },
+    "justification_status": {
+      "name": "Decyzja o usprawiedliwieniu",
+      "description": "Szkoła decyduje o wysłanym usprawiedliwieniu.",
+      "fields": {
+        "outcome": {
+          "name": "Wynik",
+          "description": "Tylko te wyniki. Puste: każdy wynik."
+        }
+      }
+    },
+    "forecast_changed": {
+      "name": "Zmiana prognozy oceny",
+      "description": "Prognozowana ocena na świadectwie z przedmiotu idzie w górę albo w dół.",
+      "fields": {
+        "direction": {
+          "name": "Kierunek",
+          "description": "Tylko w tę stronę. Puste: obie."
+        },
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
+    },
+    "new_school_trip": {
+      "name": "Nowa wycieczka",
+      "description": "Szkoła planuje nową wycieczkę."
+    },
+    "new_school_document": {
+      "name": "Nowy dokument szkoły",
+      "description": "Szkoła udostępnia rodzicom nowy dokument."
+    },
+    "library_changed": {
+      "name": "Biblioteka szkolna",
+      "description": "Biblioteka wypożycza uczniowi książkę albo ją odbiera.",
+      "fields": {
+        "action": {
+          "name": "Co się stało",
+          "description": "Tylko to. Puste: oba."
+        }
+      }
+    },
+    "message_read": {
+      "name": "Wysłana wiadomość przeczytana",
+      "description": "Adresat czyta wiadomość, którą wysłałeś."
+    },
+    "achievement_unlocked": {
+      "name": "Zdobyta odznaka",
+      "description": "Uczeń zdobywa odznakę."
+    },
+    "weekly_summary": {
+      "name": "Gotowe podsumowanie tygodnia",
+      "description": "Podsumowanie tygodnia od AI jest gotowe.",
+      "fields": {
+        "audience": {
+          "name": "Wersja",
+          "description": "Gdy są dwie wersje, wybierz jedną albo dowolną."
+        }
+      }
+    }
+  },
+  "conditions": {
+    "school_day": {
+      "name": "Dzień szkolny",
+      "description": "Dziś albo jutro są lekcje (nie dzień wolny, ferie ani dzień w całości odwołany).",
+      "fields": {
+        "day": {
+          "name": "Dzień",
+          "description": "Który dzień sprawdzić."
+        },
+        "behavior": {
+          "name": "Uczniowie",
+          "description": "Przy kilku uczniach: wystarczy jeden czy muszą wszyscy?"
+        }
+      }
+    },
+    "in_school": {
+      "name": "Na lekcjach",
+      "description": "Według planu trwają teraz lekcje.",
+      "fields": {
+        "behavior": {
+          "name": "Uczniowie",
+          "description": "Przy kilku uczniach: wystarczy jeden czy muszą wszyscy?"
+        }
+      }
+    },
+    "exam_soon": {
+      "name": "Sprawdzian w ciągu 24 godzin",
+      "description": "W ciągu 24 godzin zaczyna się sprawdzian albo kartkówka.",
+      "fields": {
+        "behavior": {
+          "name": "Uczniowie",
+          "description": "Przy kilku uczniach: wystarczy jeden czy muszą wszyscy?"
+        }
+      }
+    },
+    "lucky_number_yours": {
+      "name": "Szczęśliwy numerek ucznia",
+      "description": "Dzisiejszy szczęśliwy numerek to numer ucznia w dzienniku.",
+      "fields": {
+        "behavior": {
+          "name": "Uczniowie",
+          "description": "Przy kilku uczniach: wystarczy jeden czy muszą wszyscy?"
+        }
+      }
+    },
+    "absences_to_justify": {
+      "name": "Nieobecności do usprawiedliwienia",
+      "description": "Uczeń ma nieusprawiedliwione nieobecności.",
+      "fields": {
+        "behavior": {
+          "name": "Uczniowie",
+          "description": "Przy kilku uczniach: wystarczy jeden czy muszą wszyscy?"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "students": "Uczniowie (działający / skonfigurowani)",
+      "connection": "Stan połączenia",
+      "last_update": "Najstarsza udana aktualizacja",
+      "degraded_endpoints": "Niedziałające części Librusa",
+      "library_version": "Biblioteka librus-synergia",
+      "can_reach_synergia": "Połączenie z Synergią",
+      "can_reach_login": "Połączenie z logowaniem Librusa",
+      "can_reach_messages": "Połączenie z Wiadomościami"
     }
   }
 }

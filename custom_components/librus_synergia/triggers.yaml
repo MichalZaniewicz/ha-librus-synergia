@@ -1,0 +1,194 @@
+.target: &target
+  device:
+    integration: librus_synergia
+
+.subject: &subject
+  required: false
+  selector:
+    text:
+
+new_grade:
+  target: *target
+  fields:
+    kind:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: grade_kind
+          options:
+            - normal
+            - proposition
+            - semester_final
+            - text
+            - descriptive
+            - point
+            - behaviour
+    subject: *subject
+    grade_at_most:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 6
+          step: 0.25
+          mode: box
+    grade_at_least:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 6
+          step: 0.25
+          mode: box
+
+new_note:
+  target: *target
+  fields:
+    sentiment:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: note_sentiment
+          options:
+            - positive
+            - negative
+            - neutral
+
+new_absence:
+  target: *target
+  fields:
+    only_unexcused:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+new_message:
+  target: *target
+  fields:
+    mailbox:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: mailbox
+          options:
+            - inbox
+            - substitutions
+            - alerts
+            - justifications
+
+new_announcement:
+  target: *target
+
+new_agenda_entry:
+  target: *target
+  fields:
+    category:
+      required: false
+      selector:
+        text:
+    subject: *subject
+
+new_homework:
+  target: *target
+  fields:
+    subject: *subject
+
+timetable_changed:
+  target: *target
+  fields:
+    change:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: timetable_change
+          options:
+            - canceled
+            - substitution
+            - room_change
+            - moved
+    subject: *subject
+
+agenda_changed:
+  target: *target
+  fields:
+    change:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: agenda_change
+          options:
+            - changed
+            - removed
+
+justification_status:
+  target: *target
+  fields:
+    outcome:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: justification_outcome
+          options:
+            - accepted
+            - rejected
+            - changed
+
+forecast_changed:
+  target: *target
+  fields:
+    direction:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: forecast_direction
+          options:
+            - up
+            - down
+    subject: *subject
+
+new_school_trip:
+  target: *target
+
+new_school_document:
+  target: *target
+
+library_changed:
+  target: *target
+  fields:
+    action:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: library_action
+          options:
+            - lent
+            - returned
+
+message_read:
+  target: *target
+
+achievement_unlocked:
+  target: *target
+
+weekly_summary:
+  target: *target
+  fields:
+    audience:
+      required: false
+      default: any
+      selector:
+        select:
+          translation_key: summary_audience
+          options:
+            - any
+            - parent
+            - student

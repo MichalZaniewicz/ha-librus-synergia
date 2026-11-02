@@ -143,7 +143,7 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
 )
 
 # Not useful as event attributes: the routing key and the raw item id.
-_DROP = frozenset({"entry_id"})
+_DROP = frozenset({"entry_id", "device_id"})
 
 
 class LibrusEventEntity(EventEntity):

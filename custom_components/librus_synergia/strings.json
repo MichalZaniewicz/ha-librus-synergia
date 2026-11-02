@@ -126,6 +126,84 @@
     }
   },
   "selector": {
+    "grade_kind": {
+      "options": {
+        "normal": "Ordinary grade",
+        "proposition": "Proposed semester or final grade",
+        "semester_final": "Semester or final grade",
+        "text": "Text grade",
+        "descriptive": "Descriptive grade",
+        "point": "Point grade",
+        "behaviour": "Behaviour grade"
+      }
+    },
+    "note_sentiment": {
+      "options": {
+        "positive": "Positive",
+        "negative": "Negative",
+        "neutral": "Neutral"
+      }
+    },
+    "mailbox": {
+      "options": {
+        "inbox": "Inbox",
+        "substitutions": "Substitutions",
+        "alerts": "Alerts",
+        "justifications": "Justifications"
+      }
+    },
+    "timetable_change": {
+      "options": {
+        "canceled": "Cancelled",
+        "substitution": "Substitution",
+        "room_change": "Room change",
+        "moved": "Moved"
+      }
+    },
+    "agenda_change": {
+      "options": {
+        "changed": "Changed",
+        "removed": "Removed"
+      }
+    },
+    "justification_outcome": {
+      "options": {
+        "accepted": "Accepted",
+        "rejected": "Rejected",
+        "changed": "Other status"
+      }
+    },
+    "forecast_direction": {
+      "options": {
+        "up": "Up",
+        "down": "Down"
+      }
+    },
+    "library_action": {
+      "options": {
+        "lent": "Book lent",
+        "returned": "Book returned"
+      }
+    },
+    "summary_audience": {
+      "options": {
+        "any": "Either",
+        "parent": "For the parent",
+        "student": "For the student"
+      }
+    },
+    "condition_behavior": {
+      "options": {
+        "any": "Any of them",
+        "all": "All of them"
+      }
+    },
+    "school_day": {
+      "options": {
+        "today": "Today",
+        "tomorrow": "Tomorrow"
+      }
+    },
     "extra_activities": {
       "options": {
         "other": "Extra activities",
@@ -457,6 +535,240 @@
     },
     "message_maybe_sent": {
       "message": "Not sure the message went out - check Sent before trying again."
+    }
+  },
+  "triggers": {
+    "new_grade": {
+      "name": "New grade",
+      "description": "A new grade arrives in Librus.",
+      "fields": {
+        "kind": {
+          "name": "Kind",
+          "description": "Only these kinds of grade. Empty: every kind."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        },
+        "grade_at_most": {
+          "name": "Grade at most",
+          "description": "Only a grade up to this value (4- counts as 3.75). Grades without a number never match."
+        },
+        "grade_at_least": {
+          "name": "Grade at least",
+          "description": "Only a grade from this value up. Grades without a number never match."
+        }
+      }
+    },
+    "new_note": {
+      "name": "New behaviour note",
+      "description": "A teacher adds a behaviour note.",
+      "fields": {
+        "sentiment": {
+          "name": "Kind",
+          "description": "Only these kinds of note. Empty: every note."
+        }
+      }
+    },
+    "new_absence": {
+      "name": "New absence",
+      "description": "A new absence is marked (not present or late).",
+      "fields": {
+        "only_unexcused": {
+          "name": "Only unexcused",
+          "description": "Skip absences marked excused right away."
+        }
+      }
+    },
+    "new_message": {
+      "name": "New message",
+      "description": "A new message arrives in Wiadomości.",
+      "fields": {
+        "mailbox": {
+          "name": "Mailbox",
+          "description": "Only these mailboxes. Empty: every mailbox."
+        }
+      }
+    },
+    "new_announcement": {
+      "name": "New announcement",
+      "description": "A new notice-board announcement."
+    },
+    "new_agenda_entry": {
+      "name": "New Agenda entry",
+      "description": "A new Agenda entry: a test, a trip, a meeting...",
+      "fields": {
+        "category": {
+          "name": "Category",
+          "description": "Only entries whose category or text has one of these words, comma-separated (e.g. sprawdzian, kartkówka). Empty: every entry."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
+    },
+    "new_homework": {
+      "name": "New homework",
+      "description": "A teacher sets new homework.",
+      "fields": {
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
+    },
+    "timetable_changed": {
+      "name": "Timetable change",
+      "description": "A lesson today or later is cancelled, substituted, moved or changes room.",
+      "fields": {
+        "change": {
+          "name": "Change",
+          "description": "Only these changes. Empty: every change."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
+    },
+    "agenda_changed": {
+      "name": "Agenda entry changed",
+      "description": "An upcoming Agenda entry changes or disappears.",
+      "fields": {
+        "change": {
+          "name": "Change",
+          "description": "Only these changes. Empty: both."
+        }
+      }
+    },
+    "justification_status": {
+      "name": "Justification decided",
+      "description": "The school decides on an absence justification you sent.",
+      "fields": {
+        "outcome": {
+          "name": "Outcome",
+          "description": "Only these outcomes. Empty: every outcome."
+        }
+      }
+    },
+    "forecast_changed": {
+      "name": "Forecast grade changed",
+      "description": "A subject's forecast report-card grade moves up or down.",
+      "fields": {
+        "direction": {
+          "name": "Direction",
+          "description": "Only this direction. Empty: both."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
+    },
+    "new_school_trip": {
+      "name": "New school trip",
+      "description": "A new school trip is planned."
+    },
+    "new_school_document": {
+      "name": "New school document",
+      "description": "The school shares a new document with parents."
+    },
+    "library_changed": {
+      "name": "School library",
+      "description": "The school library lends the student a book or gets one back.",
+      "fields": {
+        "action": {
+          "name": "What happened",
+          "description": "Only this. Empty: both."
+        }
+      }
+    },
+    "message_read": {
+      "name": "Sent message read",
+      "description": "A recipient reads a message you sent."
+    },
+    "achievement_unlocked": {
+      "name": "Badge earned",
+      "description": "The student earns a badge."
+    },
+    "weekly_summary": {
+      "name": "Weekly AI summary ready",
+      "description": "The weekly AI summary has been written.",
+      "fields": {
+        "audience": {
+          "name": "Version",
+          "description": "With both versions on, pick one or take either."
+        }
+      }
+    }
+  },
+  "conditions": {
+    "school_day": {
+      "name": "School day",
+      "description": "Today or tomorrow has lessons (not a day off, a holiday or a fully cancelled day).",
+      "fields": {
+        "day": {
+          "name": "Day",
+          "description": "Which day to check."
+        },
+        "behavior": {
+          "name": "Students",
+          "description": "With several students: does any of them have to match, or all?"
+        }
+      }
+    },
+    "in_school": {
+      "name": "At school",
+      "description": "Lessons are on right now, by the timetable.",
+      "fields": {
+        "behavior": {
+          "name": "Students",
+          "description": "With several students: does any of them have to match, or all?"
+        }
+      }
+    },
+    "exam_soon": {
+      "name": "Test within 24 hours",
+      "description": "A test or a short test starts within the next 24 hours.",
+      "fields": {
+        "behavior": {
+          "name": "Students",
+          "description": "With several students: does any of them have to match, or all?"
+        }
+      }
+    },
+    "lucky_number_yours": {
+      "name": "Lucky number is yours",
+      "description": "Today's lucky number is the student's register number.",
+      "fields": {
+        "behavior": {
+          "name": "Students",
+          "description": "With several students: does any of them have to match, or all?"
+        }
+      }
+    },
+    "absences_to_justify": {
+      "name": "Absences to justify",
+      "description": "The student has unexcused absences.",
+      "fields": {
+        "behavior": {
+          "name": "Students",
+          "description": "With several students: does any of them have to match, or all?"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "students": "Students (loaded / configured)",
+      "connection": "Connection status",
+      "last_update": "Oldest last successful update",
+      "degraded_endpoints": "Failing parts of Librus",
+      "library_version": "librus-synergia library",
+      "can_reach_synergia": "Reach Synergia",
+      "can_reach_login": "Reach the Librus login",
+      "can_reach_messages": "Reach Wiadomości"
     }
   }
 }

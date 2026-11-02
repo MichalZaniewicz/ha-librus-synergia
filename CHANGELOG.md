@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Librus triggers and conditions in the automation editor** (Home
+  Assistant 2025.12 or newer; tested on 2026.10). Pick *New grade*, *Timetable change*, *New
+  absence*, *New message* and the rest of the integration's events straight
+  from the editor's list, with filters: grade kind, subject, "grade at most
+  2", only unexcused absences, which mailbox, which kind of timetable
+  change, and more. Conditions: *School day* (today / tomorrow), *At
+  school*, *Test within 24 hours*, *Lucky number is yours*, *Absences to
+  justify*. The target picks the student (none: every student). The trigger
+  variables carry the event's data (`trigger.subject`, `trigger.value`...);
+  the Librus item id is `trigger.item_id`.
+- **Readable logbook entries.** Every Librus event shows in the logbook and
+  on the student's device page as a sentence ("Ola: nowa ocena 5 -
+  Matematyka (Sprawdzian)"), in Polish or English after Home Assistant's
+  language.
+- **System information.** Settings > System > Repairs > System information
+  shows whether Home Assistant reaches Synergia, the Librus login and
+  Wiadomości, each student's connection status, the oldest last successful
+  update, the failing parts of Librus and the library version - no names.
+- **School Alarm on an Android Phone** blueprint. Every evening before a
+  school day it sets an alarm in the phone's clock app for a set time
+  before the first lesson (later when the day starts with lesson 2, none on
+  days off). Android with the Home Assistant app only.
+- Every `librus_synergia_*` event carries `device_id` (the student's
+  device).
+
 ## 0.12.37
 
 ### Added

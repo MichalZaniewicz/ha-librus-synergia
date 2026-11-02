@@ -1,0 +1,100 @@
+blueprint:
+  name: "Librus: School Alarm on an Android Phone"
+  description: >
+    Every evening before a school day, sets an alarm in the phone's own
+    clock app for a set number of minutes before the first lesson. A day
+    starting with lesson 2 gets a later alarm; days off, holidays and fully
+    cancelled days get none, because the School start sensor only points at
+    real school days.
+
+
+    Android with the Home Assistant app only (it uses the app's
+    `command_activity` notification command). The first time, the app asks
+    for the "Display over other apps" permission - allow it once on the
+    phone. The clock app keeps the alarm as an ordinary one: it is set for
+    the next day only and stays in the list afterwards (most clock apps
+    reuse an alarm with the same time instead of adding another).
+
+
+    The alarm is set at the time you choose. A change Librus publishes later
+    that evening (a cancelled first lesson) doesn't move an alarm already
+    set - pick a late enough time.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/school_phone_alarm.yaml
+  input:
+    school_start_entity:
+      name: School start sensor
+      description: The Librus "School start" sensor for this student.
+      selector:
+        entity:
+          integration: librus_synergia
+          domain: sensor
+          device_class: timestamp
+    phone:
+      name: Phone
+      description: The Android phone with the Home Assistant app to set the alarm on.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    minutes_before:
+      name: Minutes before the first lesson
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 180
+          step: 5
+          unit_of_measurement: min
+    set_at:
+      name: Set the alarm at
+      description: When to set tomorrow's alarm, the evening before.
+      default: "21:00:00"
+      selector:
+        time: {}
+    alarm_label:
+      name: Alarm label
+      description: Shown in the clock app. Commas and colons are left out.
+      default: Szkoła
+      selector:
+        text: {}
+
+variables:
+  start_entity: !input school_start_entity
+  before: !input minutes_before
+  label: !input alarm_label
+
+triggers:
+  - trigger: time
+    at: !input set_at
+
+conditions:
+  # The next school day is tomorrow (on a Friday evening it is Monday:
+  # the clock app can't take a date, so the alarm would ring on Saturday).
+  - condition: template
+    value_template: >-
+      {%- set t = states(start_entity) | as_datetime(None) -%}
+      {{ t is not none and (t | as_local).date() == (now() + timedelta(days=1)).date() }}
+
+actions:
+  - variables:
+      alarm_at: >-
+        {{ ((states(start_entity) | as_datetime | as_local)
+            - timedelta(minutes=before | int(60))).strftime('%H:%M') }}
+      alarm_hour: "{{ alarm_at.split(':')[0] | int }}"
+      alarm_minute: "{{ alarm_at.split(':')[1] | int }}"
+      # The device is named "E-dziennik <student>" by the integration.
+      student_name: >-
+        {{ (device_attr(start_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      alarm_message: >-
+        {{ ((label ~ ' ' ~ student_name) | trim) | replace(',', ' ') | replace(':', ' ') }}
+  - device_id: !input phone
+    domain: mobile_app
+    type: notify
+    message: command_activity
+    data:
+      intent_action: android.intent.action.SET_ALARM
+      intent_extras: >-
+        android.intent.extra.alarm.HOUR:{{ alarm_hour }}:int,android.intent.extra.alarm.MINUTES:{{ alarm_minute }}:int,android.intent.extra.alarm.SKIP_UI:true:boolean,android.intent.extra.alarm.MESSAGE:{{ alarm_message }}
+
+mode: single

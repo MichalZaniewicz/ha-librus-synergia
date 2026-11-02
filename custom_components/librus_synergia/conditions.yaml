@@ -1,0 +1,47 @@
+.target: &target
+  device:
+    integration: librus_synergia
+
+.behavior: &behavior
+  required: false
+  default: any
+  selector:
+    select:
+      translation_key: condition_behavior
+      options:
+        - any
+        - all
+
+school_day:
+  target: *target
+  fields:
+    day:
+      required: false
+      default: today
+      selector:
+        select:
+          translation_key: school_day
+          options:
+            - today
+            - tomorrow
+    behavior: *behavior
+
+in_school:
+  target: *target
+  fields:
+    behavior: *behavior
+
+exam_soon:
+  target: *target
+  fields:
+    behavior: *behavior
+
+lucky_number_yours:
+  target: *target
+  fields:
+    behavior: *behavior
+
+absences_to_justify:
+  target: *target
+  fields:
+    behavior: *behavior

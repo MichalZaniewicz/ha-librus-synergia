@@ -26,7 +26,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
@@ -5000,6 +5000,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         change), its setup failing or Home Assistant stopping before the
         start has finished doesn't lose it: the next setup restores it and
         fires it once Home Assistant has started."""
+        event_data = self._with_device_id(event_data)
         if self.hass.state not in (CoreState.not_running, CoreState.starting):
             self.hass.bus.async_fire(event_type, event_data)
             return
@@ -5035,8 +5036,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         held, self._held_events = self._held_events, []
         _LOGGER.debug("Home Assistant has started: firing %s held event(s)", len(held))
         for event_type, event_data in held:
-            self.hass.bus.async_fire(event_type, event_data)
+            self.hass.bus.async_fire(event_type, self._with_device_id(event_data))
         self._schedule_save()
+
+    def _with_device_id(self, event_data: dict[str, Any]) -> dict[str, Any]:
+        """The student's device id in the event data - for the logbook on
+        the device page (it matches events by `device_id`), and for
+        automations. Events held by an older version get it when fired."""
+        if "device_id" in event_data or self.config_entry is None:
+            return event_data
+        devices = dr.async_entries_for_config_entry(
+            dr.async_get(self.hass), self.config_entry.entry_id
+        )
+        if not devices:
+            return event_data
+        return {**event_data, "device_id": devices[0].id}
 
     @callback
     def _async_cancel_fire_at_start(self) -> None:
