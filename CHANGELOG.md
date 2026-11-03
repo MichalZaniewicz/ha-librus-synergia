@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.40
 
 ### Added
 - **Edited and deleted grades.** A grade the teacher changes after it was
