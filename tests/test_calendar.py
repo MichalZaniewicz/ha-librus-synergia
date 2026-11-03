@@ -253,7 +253,9 @@ async def test_timetable_lesson_shows_the_test_from_the_agenda(hass) -> None:
     entry = await setup_integration(hass, client)
     entity_id = _entity_id(hass, entry, "timetable")
 
-    start = dt_util.start_of_local_day() + timedelta(days=1)
+    # The day the payload uses - _TOMORROW is computed at import, before the
+    # test time zone is set, so "tomorrow" worked out here can differ.
+    start = dt_util.start_of_local_day(date.fromisoformat(_TOMORROW))
     response = await hass.services.async_call(
         "calendar",
         "get_events",
