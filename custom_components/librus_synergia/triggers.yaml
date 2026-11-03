@@ -113,6 +113,20 @@ timetable_changed:
             - moved
     subject: *subject
 
+grade_changed:
+  target: *target
+  fields:
+    change:
+      required: false
+      selector:
+        select:
+          multiple: true
+          translation_key: grade_change
+          options:
+            - changed
+            - removed
+    subject: *subject
+
 agenda_changed:
   target: *target
   fields:

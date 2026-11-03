@@ -25,6 +25,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_GRADE_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
@@ -82,6 +83,12 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
     ),
     LibrusEventDescription(
         "agenda", EVENT_NEW_HOMEWORK, ("new_entry",), lambda d: "new_entry"
+    ),
+    LibrusEventDescription(
+        "grade_change",
+        EVENT_GRADE_CHANGED,
+        ("changed", "removed"),
+        lambda d: "removed" if d.get("change") == "removed" else "changed",
     ),
     LibrusEventDescription(
         "agenda_change",

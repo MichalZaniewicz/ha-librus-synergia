@@ -160,6 +160,12 @@
         "moved": "Moved"
       }
     },
+    "grade_change": {
+      "options": {
+        "changed": "Changed",
+        "removed": "Removed"
+      }
+    },
     "agenda_change": {
       "options": {
         "changed": "Changed",
@@ -268,6 +274,7 @@
       "timetable_change_event": { "name": "Timetable change", "state_attributes": { "event_type": { "state": { "canceled": "Lesson cancelled", "substitution": "Substitution" } } } },
       "homework_event": { "name": "New homework", "state_attributes": { "event_type": { "state": { "new_homework": "New homework" } } } },
       "agenda_event": { "name": "New agenda entry", "state_attributes": { "event_type": { "state": { "new_entry": "New entry" } } } },
+      "grade_change_event": { "name": "Grade changed", "state_attributes": { "event_type": { "state": { "changed": "Changed", "removed": "Removed" } } } },
       "agenda_change_event": { "name": "Agenda entry changed", "state_attributes": { "event_type": { "state": { "changed": "Changed", "removed": "Removed" } } } },
       "justification_event": { "name": "Absence justification decided", "state_attributes": { "event_type": { "state": { "accepted": "Accepted", "rejected": "Rejected", "changed": "Status changed" } } } },
       "school_trip_event": { "name": "New school trip", "state_attributes": { "event_type": { "state": { "new_trip": "New trip" } } } },
@@ -625,6 +632,20 @@
         "change": {
           "name": "Change",
           "description": "Only these changes. Empty: every change."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
+    },
+    "grade_changed": {
+      "name": "Grade changed or removed",
+      "description": "The teacher changes or deletes a grade that was already announced.",
+      "fields": {
+        "change": {
+          "name": "Change",
+          "description": "Only these changes. Empty: both."
         },
         "subject": {
           "name": "Subject",

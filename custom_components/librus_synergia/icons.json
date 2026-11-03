@@ -66,6 +66,9 @@
       "agenda_change_event": {
         "default": "mdi:calendar-edit"
       },
+      "grade_change_event": {
+        "default": "mdi:pencil-circle-outline"
+      },
       "agenda_event": {
         "default": "mdi:calendar-plus"
       },
@@ -361,6 +364,9 @@
     },
     "agenda_changed": {
       "trigger": "mdi:calendar-edit"
+    },
+    "grade_changed": {
+      "trigger": "mdi:pencil-circle-outline"
     },
     "justification_status": {
       "trigger": "mdi:file-check-outline"

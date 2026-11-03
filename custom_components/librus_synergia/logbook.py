@@ -25,6 +25,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_GRADE_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
     EVENT_LIBRARY_CHANGED,
     EVENT_MESSAGE_READ,
@@ -76,6 +77,26 @@ def _grade(d: Mapping[str, Any], pl: bool) -> str:
         value = f"{value}/{d.get('max_points')}"
     head = "nowa ocena" if pl else "new grade"
     return f"{head} {_join(value, d.get('subject'))}{_paren(d.get('category'))}"
+
+
+def _grade_change(d: Mapping[str, Any], pl: bool) -> str:
+    def shown(fields: Mapping[str, Any]) -> Any:
+        value = fields.get("value")
+        if d.get("kind") == "behaviour":
+            return fields.get("name") or value
+        if d.get("kind") == "point" and fields.get("max_points") is not None:
+            return f"{value}/{fields.get('max_points')}"
+        return value
+
+    what = f"{_join(d.get('subject'))}{_paren(d.get('category'))}"
+    if d.get("change") == "removed":
+        head = "usunięta ocena" if pl else "grade removed"
+        return f"{head} {_join(shown(d), what)}".rstrip()
+    previous = {**d, **(d.get("previous") or {})}
+    head = "zmieniona ocena" if pl else "grade changed"
+    if shown(previous) != shown(d):
+        return f"{head} {shown(previous)} → {_join(shown(d), what)}"
+    return f"{head} {_join(shown(d), what)}".rstrip()
 
 
 def _note(d: Mapping[str, Any], pl: bool) -> str:
@@ -223,6 +244,7 @@ DESCRIBERS: dict[str, tuple[Callable[[Mapping[str, Any], bool], str], str]] = {
     EVENT_NEW_HOMEWORK_ASSIGNMENT: (_homework, "mdi:notebook-edit-outline"),
     EVENT_TIMETABLE_CHANGED: (_timetable, "mdi:calendar-alert"),
     EVENT_AGENDA_CHANGED: (_agenda_change, "mdi:calendar-edit"),
+    EVENT_GRADE_CHANGED: (_grade_change, "mdi:pencil-circle-outline"),
     EVENT_JUSTIFICATION_STATUS: (_justification, "mdi:file-check-outline"),
     EVENT_FORECAST_CHANGED: (_forecast, "mdi:crystal-ball"),
     EVENT_NEW_SCHOOL_TRIP: (_trip, "mdi:bus-school"),
