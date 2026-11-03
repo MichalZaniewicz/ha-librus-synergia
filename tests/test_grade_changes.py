@@ -186,6 +186,55 @@ async def test_failed_or_emptied_fetch_is_not_announced(hass) -> None:
     assert [(e.data["id"], e.data["previous"]) for e in changes] == [(2, {"value": "1"})]
 
 
+async def test_new_school_year_does_not_remove_last_years_grades(hass) -> None:
+    """Few grades last year, none in September, then the first new one: the
+    old ones are gone because the year changed, not because they were deleted."""
+    changes = async_capture_events(hass, EVENT_GRADE_CHANGED)
+    client = _client(
+        _grade(1, "3"),
+        _grade(2, "4"),
+        async_get_classes={"Class": {"Number": 7, "Symbol": "a", "BeginSchoolYear": "2026-09-01"}},
+    )
+    coordinator = _coordinator(hass, client)
+    await _sync(hass, coordinator)
+
+    client.async_get_grades.return_value = {"Grades": []}
+    client.async_get_classes.return_value = {
+        "Class": {"Number": 8, "Symbol": "a", "BeginSchoolYear": "2027-09-01"}
+    }
+    coordinator._reference_data_fetched_at = None  # force the daily reference refetch
+    await _sync(hass, coordinator)
+    client.async_get_grades.return_value = _grades(_grade(3, "5"))
+    await _sync(hass, coordinator)
+    await _sync(hass, coordinator)
+
+    assert changes == []
+    # The new year's grades are the baseline now: an edit is found again.
+    client.async_get_grades.return_value = _grades(_grade(3, "6"))
+    await _sync(hass, coordinator)
+    assert [(e.data["id"], e.data["previous"]) for e in changes] == [(3, {"value": "5"})]
+
+
+async def test_category_looked_up_late_is_not_an_edit(hass) -> None:
+    """A grade in a category Librus didn't list yet has no weight; getting
+    one once the category shows up is a lookup, not the teacher editing."""
+    changes = async_capture_events(hass, EVENT_GRADE_CHANGED)
+    client = _client(_grade(1, "3"), _grade(2, "5", category=12))
+    coordinator = _coordinator(hass, client)
+    await _sync(hass, coordinator)
+
+    client.async_get_grade_categories.return_value = {
+        "Categories": [
+            *CATEGORIES["Categories"],
+            {"Id": 12, "Name": "Praca klasowa", "Weight": 2, "CountToTheAverage": True},
+        ]
+    }
+    coordinator._reference_data_fetched_at = None
+    await _sync(hass, coordinator)
+
+    assert changes == []
+
+
 async def test_many_changes_at_once_are_recorded_quietly(hass) -> None:
     """The school reweighting a whole category (or a new school year)
     touches many grades at once - that isn't a teacher correcting one."""

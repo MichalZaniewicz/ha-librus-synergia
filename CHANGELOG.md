@@ -13,8 +13,10 @@
   kind of grade (ordinary, point, text, descriptive, behaviour). Until now
   an edit only showed as a forecast change, and a deletion not at all.
   A grade counts as deleted once it is missing from two syncs in a row;
-  more than five changes at once (a category reweighted, a new school year)
-  are recorded quietly. With a *Grade changed* event entity, a *Grade
+  more than five changes at once (a category reweighted) are recorded
+  quietly, a new school year starts over without announcing last year's
+  grades as removed, and a weight that only shows up once Librus lists the
+  grade's category isn't an edit. With a *Grade changed* event entity, a *Grade
   changed or removed* trigger (filter by change and subject) and logbook
   lines ("zmieniona ocena 1 → 5 - Język niemiecki (prezentacje)").
 - **Weekly AI summary, one message per section.** The Weekly AI Summary

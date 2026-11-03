@@ -600,6 +600,9 @@ _GRADE_SOURCES = (
 # Grade fields whose change is an edit worth an event: the grade itself and
 # what decides how it counts. A renamed category or a new comment isn't.
 _GRADE_COMPARED = ("value", "points", "max_points", "weight", "counts_to_average")
+# Fields that come from the grade's category: empty before means the category
+# wasn't known yet, so getting a value is a lookup, not an edit.
+_GRADE_LOOKUP_FIELDS = ("max_points", "weight", "counts_to_average")
 # More edits and deletions than this in one kind in one sync are the school
 # changing something wholesale (a category's weight, a new school year), not
 # a teacher correcting a grade: recorded quietly.
@@ -1233,6 +1236,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_grades: dict[str, dict[str, dict[str, Any]] | None] = dict.fromkeys(
             _GRADE_SOURCES
         )
+        # The school year those grades are from (Classes BeginSchoolYear): a
+        # new one starts _known_grades over.
+        self._known_grades_year: str | None = None
         # When each throttled optional endpoint last answered (see
         # _async_optional).
         self._fetched_at: dict[str, datetime] = {}
@@ -1375,6 +1381,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for source in self._known_grades:
                 if isinstance(known := grades.get(source), dict):
                     self._known_grades[source] = known
+        if isinstance(year := stored.get("grades_year"), str):
+            self._known_grades_year = year
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(dates := stored.get("achievement_dates"), dict):
@@ -1757,6 +1765,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_library,
             self._known_items,
             self._known_grades,
+            self._known_grades_year,
             self._known_homework_assignment_ids,
             self._achievement_dates,
             self._achievement_year,
@@ -1864,6 +1873,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 for kind, ids in self._known_items.items()
             },
             "grades": self._known_grades,
+            "grades_year": self._known_grades_year,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -5482,6 +5492,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     def _fire_grade_edit_events(self, data: LibrusData) -> None:
         """EVENT_GRADE_CHANGED for the ordinary grades (/Grades), with the
         subject's average before and after, like EVENT_NEW_GRADE."""
+        year = data.school_class.begin_school_year if data.school_class else None
+        if year and self._known_grades_year and year != self._known_grades_year:
+            # A new school year: last year's grades are gone from Librus but
+            # weren't deleted - forget them and seed again, quietly.
+            self._known_grades = dict.fromkeys(_GRADE_SOURCES)
+        if year:
+            self._known_grades_year = year
         improves, _ = grade_improvements(data.grades)
         self._fire_grade_change_events(
             "grades",
@@ -5520,12 +5537,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_grades[source] = now
             return
         if known and not now:
+            # Everything gone at once is an emptied fetch: keep comparing
+            # against the grades as they were. (A new school year starts
+            # over in _fire_grade_edit_events.)
             return
         changed: list[tuple[str, dict[str, Any], dict[str, Any], list[str]]] = []
         for grade_id, fields in now.items():
             if (before := known.get(grade_id)) is None:
                 continue
-            if keys := [key for key in _GRADE_COMPARED if before.get(key) != fields.get(key)]:
+            if keys := [
+                key
+                for key in _GRADE_COMPARED
+                if before.get(key) != fields.get(key)
+                # Weight / counting looked up late (the category wasn't
+                # known yet) is not the teacher editing the grade.
+                and not (key in _GRADE_LOOKUP_FIELDS and before.get(key) is None)
+            ]:
                 changed.append((grade_id, before, fields, keys))
         removed: list[tuple[str, dict[str, Any]]] = []
         missing: dict[str, dict[str, Any]] = {}
