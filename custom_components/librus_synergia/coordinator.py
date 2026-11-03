@@ -172,6 +172,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_GRADE_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
     EVENT_LIBRARY_CHANGED,
     EVENT_NEW_SCHOOL_DOCUMENT,
@@ -587,6 +588,33 @@ _MESSAGE_TUPLE_POSITIONS: dict[str, int] = {
 _AGENDA_COMPARED = ("date", "time_from", "content", "category_id", "subject_id")
 
 
+# The grades whose edits and deletions fire EVENT_GRADE_CHANGED: "grades" are
+# the ordinary ones (/Grades), the rest the kinds in `_known_items`.
+_GRADE_SOURCES = (
+    "grades",
+    "text_grades",
+    "descriptive_grades",
+    "point_grades",
+    "behaviour_grades",
+)
+# Grade fields whose change is an edit worth an event: the grade itself and
+# what decides how it counts. A renamed category or a new comment isn't.
+_GRADE_COMPARED = ("value", "points", "max_points", "weight", "counts_to_average")
+# More edits and deletions than this in one kind in one sync are the school
+# changing something wholesale (a category's weight, a new school year), not
+# a teacher correcting a grade: recorded quietly.
+_GRADE_CHANGE_BURST = 5
+# Marks a saved grade missing from the last sync: removed once it is missing
+# from the next one too (see _fire_grade_change_events).
+_GRADE_MISSING = "missing"
+_GRADE_KIND_FLAGS = {
+    "semester": "is_semester",
+    "final": "is_final",
+    "semester_proposition": "is_semester_proposition",
+    "final_proposition": "is_final_proposition",
+}
+
+
 def _agenda_fields(item: Any, data: LibrusData) -> dict[str, Any]:
     """One Agenda entry as a JSON-able dict (saved, and the event payload)."""
     return {
@@ -898,6 +926,42 @@ def _grade_event_details(
     }
 
 
+def _grade_fields(
+    grade: GradeData, data: LibrusData, improves: dict[int, str] | None = None
+) -> dict[str, Any]:
+    """An ordinary grade as a JSON-able dict: saved, compared and carried by
+    EVENT_GRADE_CHANGED (EVENT_NEW_GRADE's fields without the averages, plus
+    `category_id` to put the grade back for the average before)."""
+    return {
+        "subject_id": grade.subject_id,
+        "subject": data.subjects.get(grade.subject_id, str(grade.subject_id))
+        if grade.subject_id is not None
+        else None,
+        "value": grade.value,
+        "teacher": _teacher_name(data, grade.teacher_id),
+        "category_id": grade.category_id,
+        **_grade_event_details(grade, data.grade_categories, improves),
+    }
+
+
+def _grade_from_fields(grade_id: Any, fields: dict[str, Any]) -> GradeData:
+    """A saved ordinary grade (_grade_fields) back as GradeData - what the
+    subject average needs, for the average before an edit or a deletion."""
+    flag = _GRADE_KIND_FLAGS.get(fields.get("kind") or "")
+    return GradeData(
+        id=grade_id,
+        value=str(fields.get("value") or ""),
+        category_id=fields.get("category_id"),
+        subject_id=fields.get("subject_id"),
+        semester=fields.get("semester"),
+        add_date=fields.get("date"),
+        is_semester_proposition=flag == "is_semester_proposition",
+        is_final_proposition=flag == "is_final_proposition",
+        is_semester=flag == "is_semester",
+        is_final=flag == "is_final",
+    )
+
+
 def calculate_average(
     grades: list[GradeData],
     categories: dict[int, GradeCategoryData],
@@ -1162,6 +1226,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "school_files": None,
             **{f"{box}_messages": None for box in _EVENT_MAILBOXES},
         }
+        # Every grade as last seen, per kind ("grades" for the ordinary ones,
+        # then the kinds above) - what an edit or a deletion is compared
+        # against (see _fire_grade_change_events). None until the first sync,
+        # which only seeds it.
+        self._known_grades: dict[str, dict[str, dict[str, Any]] | None] = dict.fromkeys(
+            _GRADE_SOURCES
+        )
         # When each throttled optional endpoint last answered (see
         # _async_optional).
         self._fetched_at: dict[str, datetime] = {}
@@ -1300,6 +1371,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             for kind in self._known_items:
                 if isinstance(ids := items.get(kind), list):
                     self._known_items[kind] = set(ids)
+        if isinstance(grades := stored.get("grades"), dict):
+            for source in self._known_grades:
+                if isinstance(known := grades.get(source), dict):
+                    self._known_grades[source] = known
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(dates := stored.get("achievement_dates"), dict):
@@ -1681,6 +1756,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_justifications,
             self._known_library,
             self._known_items,
+            self._known_grades,
             self._known_homework_assignment_ids,
             self._achievement_dates,
             self._achievement_year,
@@ -1787,6 +1863,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 kind: sorted(ids, key=str) if ids is not None else None
                 for kind, ids in self._known_items.items()
             },
+            "grades": self._known_grades,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -3151,6 +3228,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 data = previous
         self._built_signature, self._built_data = signature, data
         self._fire_change_events(self._update_change_tracker(data, today), data)
+        self._fire_grade_edit_events(data)
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
         self._fire_justification_events(data)
@@ -5397,6 +5475,132 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 items,
                 student=student,
                 available=available,
+            )
+            if kind in self._known_grades:
+                self._fire_grade_change_events(kind, items, data, available=available)
+
+    def _fire_grade_edit_events(self, data: LibrusData) -> None:
+        """EVENT_GRADE_CHANGED for the ordinary grades (/Grades), with the
+        subject's average before and after, like EVENT_NEW_GRADE."""
+        improves, _ = grade_improvements(data.grades)
+        self._fire_grade_change_events(
+            "grades",
+            {grade.id: _grade_fields(grade, data, improves) for grade in data.grades},
+            data,
+            available="Grades" not in self._failed_this_cycle
+            and "Grades" not in self.fallback_sections,
+        )
+
+    def _fire_grade_change_events(
+        self,
+        source: str,
+        current: dict[Any, dict[str, Any]],
+        data: LibrusData,
+        *,
+        available: bool = True,
+    ) -> None:
+        """EVENT_GRADE_CHANGED for a grade of one kind (`source`, see
+        _GRADE_SOURCES) whose value, points, weight or counting changed since
+        the last sync (`change: changed`), or that is gone from Librus
+        (`change: removed`). New grades fire EVENT_NEW_GRADE instead.
+
+        A grade has to be missing from two syncs in a row to count as
+        removed: one response leaving it out isn't a teacher deleting it.
+        Everything gone at once (a failed or emptied fetch, a new school
+        year) and more changes than _GRADE_CHANGE_BURST are recorded
+        quietly."""
+        if not available:
+            # The fetch failed this cycle: nothing to compare against, and
+            # seeding from an empty list would report every grade removed.
+            return
+        known = self._known_grades[source]
+        now = {str(grade_id): fields for grade_id, fields in current.items()}
+        if known is None:
+            # First sync: seed silently.
+            self._known_grades[source] = now
+            return
+        if known and not now:
+            return
+        changed: list[tuple[str, dict[str, Any], dict[str, Any], list[str]]] = []
+        for grade_id, fields in now.items():
+            if (before := known.get(grade_id)) is None:
+                continue
+            if keys := [key for key in _GRADE_COMPARED if before.get(key) != fields.get(key)]:
+                changed.append((grade_id, before, fields, keys))
+        removed: list[tuple[str, dict[str, Any]]] = []
+        missing: dict[str, dict[str, Any]] = {}
+        for grade_id, before in known.items():
+            if grade_id in now:
+                continue
+            if before.get(_GRADE_MISSING):
+                removed.append(
+                    (grade_id, {k: v for k, v in before.items() if k != _GRADE_MISSING})
+                )
+            else:
+                missing[grade_id] = {**before, _GRADE_MISSING: True}
+        self._known_grades[source] = {**now, **missing}
+        if not changed and not removed:
+            return
+        if len(changed) + len(removed) > _GRADE_CHANGE_BURST:
+            _LOGGER.debug(
+                "%s %s grade(s) changed and %s removed at once: recorded quietly",
+                len(changed),
+                source,
+                len(removed),
+            )
+            return
+
+        def averages(subject_id: Any) -> dict[str, float | None]:
+            # Ordinary grades only, like EVENT_NEW_GRADE: the subject's
+            # average with this sync's edits and deletions undone, and now.
+            if source != "grades":
+                return {}
+            if subject_id is None:
+                return {"average_before": None, "average_after": None}
+
+            def average(grades: list[GradeData]) -> float | None:
+                return calculate_average(
+                    grades,
+                    data.grade_categories,
+                    subject_id=subject_id,
+                    weighted=self.weighted_average,
+                    grading=data.grading_system,
+                )
+
+            return {"average_before": average(earlier), "average_after": average(data.grades)}
+
+        undone = {grade.id: grade for grade in data.grades}
+        if source == "grades":
+            for grade_id, before, *_ in (*changed, *removed):
+                undone[_restore_id(grade_id)] = _grade_from_fields(_restore_id(grade_id), before)
+        earlier = list(undone.values())
+        base = {
+            "entry_id": self.config_entry.entry_id if self.config_entry else None,
+            "student": data.me.display_name,
+        }
+        for grade_id, before, fields, keys in changed:
+            self.async_fire_event(
+                EVENT_GRADE_CHANGED,
+                {
+                    **base,
+                    "id": _restore_id(grade_id),
+                    "change": "changed",
+                    **fields,
+                    **averages(fields.get("subject_id")),
+                    "changed_fields": keys,
+                    "previous": {key: before.get(key) for key in keys},
+                },
+            )
+        for grade_id, before in removed:
+            self.async_fire_event(
+                EVENT_GRADE_CHANGED,
+                {
+                    **base,
+                    "id": _restore_id(grade_id),
+                    "change": "removed",
+                    **before,
+                    **averages(before.get("subject_id")),
+                },
             )
 
     def _fire_justification_events(self, data: LibrusData) -> None:

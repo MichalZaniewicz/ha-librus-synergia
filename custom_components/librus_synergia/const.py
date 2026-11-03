@@ -391,6 +391,12 @@ LUCKY_NUMBER_PUBLISH_HOUR = 15
 # while Home Assistant is off still fire after a restart - once it has
 # started (coordinator.async_fire_event).
 EVENT_NEW_GRADE = f"{DOMAIN}_new_grade"
+# Fires when a grade already announced is edited by the teacher (`change:
+# changed`, with `changed_fields` and the `previous` values - e.g. a 1
+# corrected to a 5) or deleted from Librus (`change: removed`, with the
+# grade as it was). Same fields as EVENT_NEW_GRADE (`kind` is the grade's
+# kind). Seeded silently on the first sync.
+EVENT_GRADE_CHANGED = f"{DOMAIN}_grade_changed"
 EVENT_NEW_ANNOUNCEMENT = f"{DOMAIN}_new_announcement"
 EVENT_NEW_NOTE = f"{DOMAIN}_new_note"
 EVENT_NEW_MESSAGE = f"{DOMAIN}_new_message"

@@ -37,6 +37,7 @@ from .const import (
     EVENT_ACHIEVEMENT_UNLOCKED,
     EVENT_AGENDA_CHANGED,
     EVENT_FORECAST_CHANGED,
+    EVENT_GRADE_CHANGED,
     EVENT_JUSTIFICATION_STATUS,
     EVENT_LIBRARY_CHANGED,
     EVENT_MESSAGE_READ,
@@ -169,6 +170,10 @@ def _agenda_change_filter(data: Mapping[str, Any], options: Mapping[str, Any]) -
     return _in_list(data.get("kind"), options.get("change"))
 
 
+def _grade_change_filter(data: Mapping[str, Any], options: Mapping[str, Any]) -> bool:
+    return _in_list(data.get("change"), options.get("change")) and _subject_filter(data, options)
+
+
 def _justification_filter(data: Mapping[str, Any], options: Mapping[str, Any]) -> bool:
     outcome = "accepted" if data.get("accepted") else "rejected" if data.get("rejected") else "changed"
     return _in_list(outcome, options.get("outcome"))
@@ -209,6 +214,14 @@ _SPECS: dict[
             vol.Optional("grade_at_least"): _GRADE,
         },
         _grade_filter,
+    ),
+    "grade_changed": (
+        EVENT_GRADE_CHANGED,
+        {
+            vol.Optional("change"): vol.All(cv.ensure_list, [vol.In(["changed", "removed"])]),
+            vol.Optional("subject"): cv.string,
+        },
+        _grade_change_filter,
     ),
     "new_note": (
         EVENT_NEW_NOTE,

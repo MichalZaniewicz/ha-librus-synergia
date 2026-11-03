@@ -160,6 +160,12 @@
         "moved": "Przeniesiona"
       }
     },
+    "grade_change": {
+      "options": {
+        "changed": "Zmieniona",
+        "removed": "Usunięta"
+      }
+    },
     "agenda_change": {
       "options": {
         "changed": "Zmieniony",
@@ -268,6 +274,7 @@
       "timetable_change_event": { "name": "Zmiana w planie", "state_attributes": { "event_type": { "state": { "canceled": "Lekcja odwołana", "substitution": "Zastępstwo" } } } },
       "homework_event": { "name": "Nowe zadanie domowe", "state_attributes": { "event_type": { "state": { "new_homework": "Nowe zadanie domowe" } } } },
       "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
+      "grade_change_event": { "name": "Zmiana oceny", "state_attributes": { "event_type": { "state": { "changed": "Zmieniona", "removed": "Usunięta" } } } },
       "agenda_change_event": { "name": "Zmiana w terminarzu", "state_attributes": { "event_type": { "state": { "changed": "Zmieniony", "removed": "Usunięty" } } } },
       "justification_event": { "name": "Decyzja w usprawiedliwieniu", "state_attributes": { "event_type": { "state": { "accepted": "Przyjęte", "rejected": "Odrzucone", "changed": "Zmiana statusu" } } } },
       "school_trip_event": { "name": "Nowa wycieczka", "state_attributes": { "event_type": { "state": { "new_trip": "Nowa wycieczka" } } } },
@@ -625,6 +632,20 @@
         "change": {
           "name": "Zmiana",
           "description": "Tylko te zmiany. Puste: każda zmiana."
+        },
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
+    },
+    "grade_changed": {
+      "name": "Zmiana lub usunięcie oceny",
+      "description": "Nauczyciel zmienia albo usuwa ocenę, o której już było powiadomienie.",
+      "fields": {
+        "change": {
+          "name": "Zmiana",
+          "description": "Tylko te zmiany. Puste: obie."
         },
         "subject": {
           "name": "Przedmiot",
