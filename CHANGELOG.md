@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.39
 
 ### Added
 - **Librus triggers and conditions in the automation editor** (Home
