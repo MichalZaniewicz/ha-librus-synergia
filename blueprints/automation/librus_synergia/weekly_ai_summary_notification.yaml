@@ -23,6 +23,13 @@ blueprint:
     With "Written to: Parent and student" under Configure, two summaries
     arrive each week. Make one automation per phone and pick the version
     for each in "Version".
+
+
+    Messenger cuts long messages (Telegram, WhatsApp)? Set "Send as" to "One
+    message per section": your action then runs once per section, with that
+    section's full text in `{{ message }}` and "(1/4)" in `{{ title }}`.
+    `{{ part }}` and `{{ parts }}` give the number of this message and the
+    total.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/weekly_ai_summary_notification.yaml
   input:
@@ -61,6 +68,22 @@ blueprint:
               value: short
             - label: Full (adds the text of every section)
               value: full
+    send_as:
+      name: Send as
+      description: >
+        "One message per section" runs your action once per section, each
+        time with that section's full text (the headline and warning go with
+        the first one, the to-dos with the last one). Use it when your
+        messenger shows only the start of a long message. "Report format"
+        doesn't apply then.
+      default: one
+      selector:
+        select:
+          options:
+            - label: One message
+              value: one
+            - label: One message per section
+              value: per_section
     sections:
       name: Sections
       description: >
@@ -121,6 +144,7 @@ variables:
   include_manual: !input include_manual
   wanted_audience: !input audience
   detail: !input detail
+  send_as: !input send_as
   section_order: [grades, attendance, behaviour, next_week, school_news]
 
 conditions:
@@ -182,7 +206,56 @@ actions:
         {%- endif -%}
         {{ ns.lines | join('\n') }}
       message: "{{ message_full if detail == 'full' else message_short }}"
-  - sequence: !input report_action
+      # One text per section; the headline and warning open the first one,
+      # the to-dos close the last one.
+      message_parts: >-
+        {%- set d = trigger.event.data -%}
+        {%- set dots = {'good': '🟢', 'ok': '🔵', 'caution': '🟡'} -%}
+        {%- set secs = d.sections or {} -%}
+        {%- set ns = namespace(parts=[]) -%}
+        {%- for key in section_order -%}
+          {%- if key in wanted_sections and key in secs -%}
+            {%- set s = secs[key] -%}
+            {%- set ns.parts = ns.parts + [dots.get(s.status, '⚪') ~ ' ' ~ d.labels.sections[key]
+                ~ (' (' ~ d.labels.statuses[s.status] ~ ')' if s.status else '') ~ '\n' ~ (s.text or '')] -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if not ns.parts and d.summary -%}{%- set ns.parts = [d.summary] -%}{%- endif -%}
+        {%- set head = namespace(lines=[d.headline] if d.headline else []) -%}
+        {%- if d.warning -%}{%- set head.lines = head.lines + ['⚠️ ' ~ d.warning] -%}{%- endif -%}
+        {%- if head.lines -%}
+          {%- if ns.parts -%}
+            {%- set ns.parts = [(head.lines | join('\n')) ~ '\n\n' ~ ns.parts[0]] + ns.parts[1:] -%}
+          {%- else -%}
+            {%- set ns.parts = [head.lines | join('\n')] -%}
+          {%- endif -%}
+        {%- endif -%}
+        {%- if include_advice and d.advice and ns.parts -%}
+          {%- set todo = namespace(lines=[d.labels.advice ~ ':']) -%}
+          {%- for a in d.advice -%}{%- set todo.lines = todo.lines + ['- ' ~ a] -%}{%- endfor -%}
+          {%- set ns.parts = ns.parts[:-1] + [ns.parts[-1] ~ '\n\n' ~ (todo.lines | join('\n'))] -%}
+        {%- endif -%}
+        {{ ns.parts | tojson }}
+      parts: "{{ message_parts | count if send_as == 'per_section' else 1 }}"
+      part: 1
+      # The title without "(1/4)", so each message's number replaces the last.
+      base_title: "{{ title }}"
+  - if:
+      - condition: template
+        value_template: "{{ send_as == 'per_section' and message_parts | count > 1 }}"
+    then:
+      - repeat:
+          for_each: "{{ message_parts }}"
+          sequence:
+            - variables:
+                part: "{{ repeat.index }}"
+                message: "{{ repeat.item }}"
+                title: "{{ base_title }} ({{ repeat.index }}/{{ parts }})"
+            - sequence: !input report_action
+    else:
+      - variables:
+          message: "{{ message_parts[0] if send_as == 'per_section' and message_parts else message }}"
+      - sequence: !input report_action
 
 mode: queued
 max: 5

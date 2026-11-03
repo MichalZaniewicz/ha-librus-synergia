@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Weekly AI summary, one message per section.** The Weekly AI Summary
+  Report blueprint has a new "Send as" setting: "One message per section"
+  runs your action once per section (grades, attendance, behaviour, next
+  week, from the school), each with that section's full text and "(1/4)" in
+  the title - for messengers that show only the start of a long message.
+  The headline and warning go with the first message, the to-dos with the
+  last one. `{{ part }}` / `{{ parts }}` give the message number and total.
+  Re-import the blueprint to get it.
+
 ## 0.12.39
 
 ### Added
