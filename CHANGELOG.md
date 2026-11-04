@@ -21,6 +21,13 @@
   last 30 days, with `seen` - when the integration first saw them, since
   Librus gives no date for that. Entries already there when you update
   aren't listed. The companion Recent activity card shows all of it.
+- **Other calendars with activities** (Configure). Pick calendars of yours
+  (Local Calendar, Google, ...) with activities Librus doesn't know about -
+  an after-school club, day-care, a sports class - and their timed events
+  show in the timetable calendar as activities outside the timetable, so
+  every companion timetable card shows them, as do phones and Assist's
+  calendar. All-day events are left out; School start / School end and At
+  school still follow the lessons only. (Thanks @Lucaspog for the idea)
 
 ### Fixed
 - **Tests on lessons without a teacher.** When Librus gave no teacher for a

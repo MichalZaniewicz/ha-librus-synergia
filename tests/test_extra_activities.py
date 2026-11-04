@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from custom_components.librus_synergia.const import CONF_EXTRA_ACTIVITIES, DOMAIN
+from custom_components.librus_synergia.const import CONF_EXTRA_ACTIVITIES, CONF_EXTRA_CALENDARS, DOMAIN
 from librus_synergia import LibrusSessionExpiredError
 
 from .conftest import build_mock_client, setup_integration
@@ -145,3 +146,57 @@ async def test_refused_extra_activity_list_is_not_a_degraded_endpoint(hass) -> N
         "Timetables/IndividualLearningPath",
         "Timetables/OneToOneLearningPlan",
     }
+
+
+class _FamilyCalendar(CalendarEntity):
+    """Another integration's calendar (Local Calendar, Google, ...)."""
+
+    _attr_name = "Zajęcia Oli"
+
+    def __init__(self, events: list[CalendarEvent]) -> None:
+        self._events = events
+
+    @property
+    def event(self) -> CalendarEvent | None:
+        return None
+
+    async def async_get_events(self, hass, start_date, end_date) -> list[CalendarEvent]:
+        return [e for e in self._events if e.start_datetime_local < end_date and e.end_datetime_local > start_date]
+
+
+async def test_other_calendars_show_as_activities_outside_the_timetable(hass) -> None:
+    """Cards issue #13: activities Librus doesn't know about, from another
+    calendar picked under Configure, in the timetable calendar."""
+    tomorrow = dt_util.start_of_local_day() + timedelta(days=1)
+    family = _FamilyCalendar(
+        [
+            CalendarEvent(
+                start=tomorrow.replace(hour=15),
+                end=tomorrow.replace(hour=16),
+                summary="Basen",
+                location="Pływalnia",
+                uid="abc",
+            ),
+            # All-day events are left out.
+            CalendarEvent(start=tomorrow.date(), end=tomorrow.date() + timedelta(days=1), summary="Urodziny"),
+        ]
+    )
+    entry = await setup_integration(
+        hass, build_mock_client(), options={CONF_EXTRA_CALENDARS: ["calendar.zajecia_oli"]}
+    )
+    component = hass.data["calendar"]
+    original = component.get_entity
+    component.get_entity = lambda entity_id: family if entity_id == "calendar.zajecia_oli" else original(entity_id)
+    hass.states.async_set("calendar.zajecia_oli", "off", {"friendly_name": "Zajęcia Oli"})
+
+    events = await _events_on(hass, _calendar_id(hass, entry), 1)
+    assert [(e["summary"], e["location"], e["description"]) for e in events] == [
+        ("Basen", "Pływalnia", "\nZajęcia Oli")
+    ]
+
+    # A calendar that fails is skipped; the timetable still answers.
+    async def broken(*args, **kwargs):
+        raise RuntimeError("calendar down")
+
+    family.async_get_events = broken
+    assert await _events_on(hass, _calendar_id(hass, entry), 1) == []

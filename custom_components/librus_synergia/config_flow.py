@@ -27,6 +27,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -77,6 +78,7 @@ from .const import (
     CONF_FREE_DAYS_ENABLED,
     CONF_GRADE_THRESHOLDS,
     CONF_EXTRA_ACTIVITIES,
+    CONF_EXTRA_CALENDARS,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_COUNT,
@@ -376,6 +378,14 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
             return self.async_create_entry(data={**ai_options, **user_input})
 
         options = self.config_entry.options
+        # The integration's own calendars can't feed the timetable calendar.
+        own_calendars = [
+            entity.entity_id
+            for entity in er.async_entries_for_config_entry(
+                er.async_get(self.hass), self.config_entry.entry_id
+            )
+            if entity.domain == "calendar"
+        ]
         schema = vol.Schema(
             {
                 vol.Required(
@@ -487,6 +497,14 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         multiple=True,
                         mode=SelectSelectorMode.LIST,
                         translation_key=CONF_EXTRA_ACTIVITIES,
+                    )
+                ),
+                vol.Optional(
+                    CONF_EXTRA_CALENDARS,
+                    description={"suggested_value": options.get(CONF_EXTRA_CALENDARS)},
+                ): EntitySelector(
+                    EntitySelectorConfig(
+                        domain="calendar", multiple=True, exclude_entities=own_calendars
                     )
                 ),
                 vol.Required(

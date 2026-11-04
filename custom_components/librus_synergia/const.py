@@ -99,6 +99,12 @@ DEFAULT_MERGE_PARALLEL_LESSONS = True
 # learning path (ZŚK) and one-to-one teaching (NI) - the three extra lists of
 # Synergia's timetable page. Each can be switched off; all on by default.
 CONF_EXTRA_ACTIVITIES = "extra_activities"
+
+# Other Home Assistant calendars (Local Calendar, Google, ...) whose timed
+# events go into the timetable calendar as activities outside the timetable
+# - after-school clubs, day-care, a sports class Librus doesn't know about
+# (cards issue #13). Empty by default.
+CONF_EXTRA_CALENDARS = "extra_calendars"
 EXTRA_ACTIVITY_KINDS = ("other", "individual_path", "one_to_one")
 DEFAULT_EXTRA_ACTIVITIES = list(EXTRA_ACTIVITY_KINDS)
 
