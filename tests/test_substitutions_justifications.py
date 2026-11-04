@@ -192,6 +192,7 @@ async def test_justification_status_change_fires_event(hass) -> None:
     await coordinator._async_update_data()
 
     client.async_get_justifications.return_value = _justifications("accept")
+    coordinator._fetched_at.clear()  # justifications are asked hourly
     await coordinator._async_update_data()
     await hass.async_block_till_done()
 
