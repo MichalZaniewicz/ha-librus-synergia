@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.42
 
 ### Added
 - **Edited grades are remembered.** When a teacher changes a grade after
