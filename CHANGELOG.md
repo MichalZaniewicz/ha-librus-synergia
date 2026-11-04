@@ -13,6 +13,14 @@
   the change, so only edits noticed from this version on show; a whole
   category reweighted at once doesn't count. Kept until the school year
   ends. (Thanks @jarekprzybyl-netizen for the idea)
+- **What appeared lately, for a timeline.** The Attendance sensor's new
+  `recent` lists the latest absences and late arrivals (date, lesson,
+  subject, `kind`: unexcused / excused / late). The Next exam sensor's
+  `recently_added` lists the Agenda entries (any category) and the Cancelled
+  lessons sensor's `recently_added` the plan changes that showed up in the
+  last 30 days, with `seen` - when the integration first saw them, since
+  Librus gives no date for that. Entries already there when you update
+  aren't listed. The companion Recent activity card shows all of it.
 
 ### Fixed
 - **Tests on lessons without a teacher.** When Librus gave no teacher for a

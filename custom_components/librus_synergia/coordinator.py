@@ -594,6 +594,12 @@ _MESSAGE_TUPLE_POSITIONS: dict[str, int] = {
 _AGENDA_COMPARED = ("date", "time_from", "content", "category_id", "subject_id")
 
 
+# What first_seen() tracks, and how long an item Librus no longer lists is
+# remembered.
+_FIRST_SEEN_KINDS = ("agenda", "plan_changes")
+_FIRST_SEEN_KEPT = timedelta(days=60)
+
+
 # The grades whose edits and deletions fire EVENT_GRADE_CHANGED: "grades" are
 # the ordinary ones (/Grades), the rest the kinds in `_known_items`.
 _GRADE_SOURCES = (
@@ -1263,6 +1269,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # modification date, so this is what lets the cards put an edited
         # grade ("bz" -> "5") back at the top (issue #28). See grade_edit().
         self._grade_edits: dict[str, dict[str, dict[str, Any]]] = {}
+        # When an Agenda entry and a plan change (Calendars/Substitutions)
+        # first showed up, per id - Librus gives neither an add date, and the
+        # Recent activity card lists them under the day they appeared (issue
+        # #28). None until the first sync, which records what's there with
+        # "" (appeared before we looked). See first_seen().
+        self._first_seen: dict[str, dict[str, str] | None] = dict.fromkeys(_FIRST_SEEN_KINDS)
         # When each throttled optional endpoint last answered (see
         # _async_optional).
         self._fetched_at: dict[str, datetime] = {}
@@ -1407,6 +1419,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     self._known_grades[source] = known
         if isinstance(year := stored.get("grades_year"), str):
             self._known_grades_year = year
+        if isinstance(seen := stored.get("first_seen"), dict):
+            for kind in _FIRST_SEEN_KINDS:
+                if isinstance(ids := seen.get(kind), dict):
+                    self._first_seen[kind] = {str(k): str(v) for k, v in ids.items()}
         if isinstance(edits := stored.get("grade_edits"), dict):
             self._grade_edits = {
                 str(source): dict(items) for source, items in edits.items() if isinstance(items, dict)
@@ -1818,6 +1834,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_grades,
             self._known_grades_year,
             self._grade_edits,
+            self._first_seen,
             self._known_homework_assignment_ids,
             self._achievement_dates,
             self._achievement_year,
@@ -1928,6 +1945,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "grades": self._known_grades,
             "grades_year": self._known_grades_year,
             "grade_edits": self._grade_edits,
+            "first_seen": self._first_seen,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -3304,6 +3322,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._fire_grade_edit_events(data)
         self._fire_new_homework_assignment_events(data)
         self._fire_agenda_change_events(data, today)
+        self._note_first_seen(data)
         self._fire_justification_events(data)
         self._fire_library_events(data)
         self._fire_extra_item_events(data)
@@ -5855,6 +5874,45 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                         "lent_on": fields.get("lent_on"),
                     },
                 )
+
+    def first_seen(self, kind: str, item_id: Any) -> str | None:
+        """When an item of one kind (see _FIRST_SEEN_KINDS) first showed up
+        in Librus, as an ISO time - None when it was already there the first
+        time the integration looked (or isn't known)."""
+        return (self._first_seen.get(kind) or {}).get(str(item_id)) or None
+
+    def _note_first_seen(self, data: LibrusData) -> None:
+        """Record when each Agenda entry and plan change first showed up."""
+        current = {
+            "agenda": {str(item.id) for item in data.homeworks},
+            "plan_changes": {str(item.id) for item in data.plan_changes},
+        }
+        labels = {"agenda": "HomeWorks", "plan_changes": "Calendars/Substitutions"}
+        now = dt_util.now()
+        stamp = now.isoformat(timespec="seconds")
+        cutoff = (now - _FIRST_SEEN_KEPT).isoformat(timespec="seconds")
+        for kind, ids in current.items():
+            label = labels[kind]
+            if label in self._failed_this_cycle or label in self.fallback_sections:
+                continue
+            known = self._first_seen.get(kind)
+            if known is None:
+                # First look: what's there now came before - no date.
+                self._first_seen[kind] = dict.fromkeys(ids, "")
+                continue
+            if known and not ids:
+                # Everything gone at once is a failed or emptied fetch.
+                continue
+            # Items Librus no longer lists are kept a while (an entry can drop
+            # out of a window and come back), then forgotten.
+            kept = {
+                item_id: when
+                for item_id, when in known.items()
+                if item_id in ids or (when and when >= cutoff)
+            }
+            new = {item_id: stamp for item_id in ids if item_id not in known}
+            if new or len(kept) != len(known):
+                self._first_seen[kind] = {**kept, **new}
 
     def _fire_agenda_change_events(self, data: LibrusData, today: date) -> None:
         """EVENT_AGENDA_CHANGED for an upcoming Agenda entry whose date,
