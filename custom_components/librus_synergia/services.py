@@ -309,6 +309,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 "teacher": data.teachers.get(grade.teacher_id) if grade.teacher_id is not None else None,
                 "improves": improves.get(grade.id),
                 "improved": grade.id in improved,
+                **(coordinator.grade_edit("grades", grade.id) or {}),
             }
             for grade in data.grades
             if subject_id is None or grade.subject_id == subject_id
@@ -328,6 +329,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     "date": g.date,
                     "semester": g.semester,
                     "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                    **(coordinator.grade_edit("text_grades", g.id) or {}),
                 }
                 for g in text_grades
             ]
@@ -346,6 +348,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     "date": g.date or g.add_date,
                     "semester": g.semester,
                     "teacher": data.teachers.get(g.teacher_id if g.teacher_id is not None else g.teacher_lid),
+                    **(coordinator.grade_edit("descriptive_grades", g.id) or {}),
                 }
                 for g in descriptive_grades
             ]
@@ -366,6 +369,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     "date": g.add_date,
                     "semester": g.semester,
                     "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                    **(coordinator.grade_edit("point_grades", g.id) or {}),
                 }
                 for g in sorted(point_grades, key=lambda g: g.add_date or "", reverse=True)
             ]

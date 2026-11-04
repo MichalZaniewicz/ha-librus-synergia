@@ -429,3 +429,76 @@ def test_logbook_lines() -> None:
     assert librus_logbook.describe(EVENT_GRADE_CHANGED, weight, "pl")["message"] == (
         "zmieniona ocena 5 - Język niemiecki (prezentacje)"
     )
+
+
+async def test_edited_grade_is_remembered_for_the_cards(hass, hass_storage) -> None:
+    """Issue #28: an edit keeps when it was noticed and the value before, so
+    the cards can put the grade back at the top - also after a restart."""
+    client = _client(_grade(1, "3"), _grade(2, "bz"))
+    coordinator = _coordinator(hass, client)
+    await _sync(hass, coordinator)
+    assert coordinator.grade_edit("grades", 2) is None
+
+    client.async_get_grades.return_value = _grades(_grade(1, "3"), _grade(2, "4"))
+    await _sync(hass, coordinator)
+    edit = coordinator.grade_edit("grades", 2)
+    assert edit["previous"] == {"value": "bz"}
+    assert edit["changed_at"]
+    assert coordinator.grade_edit("grades", 1) is None
+
+    # A second edit keeps the oldest value: "bz -> 5", not "4 -> 5".
+    client.async_get_grades.return_value = _grades(_grade(1, "3"), _grade(2, "5"))
+    await _sync(hass, coordinator)
+    assert coordinator.grade_edit("grades", 2)["previous"] == {"value": "bz"}
+
+    saved = saved_state(coordinator)
+    entry = make_config_entry()
+    hass_storage[state_store_key(entry.entry_id)] = {
+        "version": STATE_STORE_VERSION,
+        "minor_version": 1,
+        "key": state_store_key(entry.entry_id),
+        "data": saved,
+    }
+    second = _coordinator(hass, _client(_grade(1, "3"), _grade(2, "5")), entry)
+    await second.async_restore_state()
+    assert second.grade_edit("grades", 2)["previous"] == {"value": "bz"}
+
+    # Edited back to what it was: no longer a change.
+    second.client.async_get_grades.return_value = _grades(_grade(1, "3"), _grade(2, "bz"))
+    await _sync(hass, second)
+    assert second.grade_edit("grades", 2) is None
+
+
+async def test_reweighting_many_grades_is_not_an_edit_to_show(hass) -> None:
+    client = _client(*(_grade(i, "4") for i in range(1, 8)))
+    coordinator = _coordinator(hass, client)
+    await _sync(hass, coordinator)
+    client.async_get_grade_categories.return_value = {
+        "Categories": [
+            *CATEGORIES["Categories"],
+            {"Id": 12, "Name": "Sprawdzian", "Weight": 3, "CountToTheAverage": True},
+        ]
+    }
+    client.async_get_grades.return_value = _grades(*(_grade(i, "4", category=12) for i in range(1, 8)))
+    await _sync(hass, coordinator)
+    assert all(coordinator.grade_edit("grades", i) is None for i in range(1, 8))
+
+
+async def test_subject_grades_attribute_shows_the_edit(hass) -> None:
+    client = _client(_grade(1, "3"), _grade(2, "bz"))
+    entry = await setup_integration(hass, client)
+    coordinator = entry.runtime_data
+    client.async_get_grades.return_value = _grades(_grade(1, "3"), _grade(2, "5"))
+    coordinator._fetched_at.clear()
+    await coordinator.async_force_refresh()
+    await hass.async_block_till_done()
+
+    state = next(
+        s
+        for s in hass.states.async_all("sensor")
+        if s.attributes.get("subject_id") == 100 and "grades" in s.attributes
+    )
+    by_value = {g["value"]: g for g in state.attributes["grades"]}
+    assert by_value["5"]["previous"] == {"value": "bz"}
+    assert by_value["5"]["changed_at"]
+    assert "changed_at" not in by_value["3"]

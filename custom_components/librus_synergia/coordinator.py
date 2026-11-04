@@ -1257,6 +1257,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # The school year those grades are from (Classes BeginSchoolYear): a
         # new one starts _known_grades over.
         self._known_grades_year: str | None = None
+        # The edits seen this school year, per kind and grade id: when the
+        # change was noticed and what the changed fields were before
+        # ({"at": ISO time, "previous": {field: old value}}). Librus keeps no
+        # modification date, so this is what lets the cards put an edited
+        # grade ("bz" -> "5") back at the top (issue #28). See grade_edit().
+        self._grade_edits: dict[str, dict[str, dict[str, Any]]] = {}
         # When each throttled optional endpoint last answered (see
         # _async_optional).
         self._fetched_at: dict[str, datetime] = {}
@@ -1401,6 +1407,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     self._known_grades[source] = known
         if isinstance(year := stored.get("grades_year"), str):
             self._known_grades_year = year
+        if isinstance(edits := stored.get("grade_edits"), dict):
+            self._grade_edits = {
+                str(source): dict(items) for source, items in edits.items() if isinstance(items, dict)
+            }
         if isinstance(ids := stored.get("homework_assignment_ids"), list):
             self._known_homework_assignment_ids = set(ids)
         if isinstance(dates := stored.get("achievement_dates"), dict):
@@ -1807,6 +1817,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._known_items,
             self._known_grades,
             self._known_grades_year,
+            self._grade_edits,
             self._known_homework_assignment_ids,
             self._achievement_dates,
             self._achievement_year,
@@ -1916,6 +1927,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             },
             "grades": self._known_grades,
             "grades_year": self._known_grades_year,
+            "grade_edits": self._grade_edits,
             "homework_assignment_ids": (
                 sorted(self._known_homework_assignment_ids, key=str)
                 if self._known_homework_assignment_ids is not None
@@ -5581,6 +5593,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             if kind in self._known_grades:
                 self._fire_grade_change_events(kind, items, data, available=available)
 
+    def grade_edit(self, source: str, grade_id: Any) -> dict[str, Any] | None:
+        """The last edit noticed this school year of a grade of one kind
+        (see _GRADE_SOURCES): {"changed_at": ISO time, "previous": {field:
+        value before the first edit}} - or None for a grade never edited."""
+        edit = self._grade_edits.get(source, {}).get(str(grade_id))
+        if not edit:
+            return None
+        return {"changed_at": edit.get("at"), "previous": edit.get("previous") or {}}
+
     def _fire_grade_edit_events(self, data: LibrusData) -> None:
         """EVENT_GRADE_CHANGED for the ordinary grades (/Grades), with the
         subject's average before and after, like EVENT_NEW_GRADE."""
@@ -5589,6 +5610,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # A new school year: last year's grades are gone from Librus but
             # weren't deleted - forget them and seed again, quietly.
             self._known_grades = dict.fromkeys(_GRADE_SOURCES)
+            self._grade_edits = {}
         if year:
             self._known_grades_year = year
         improves, _ = grade_improvements(data.grades)
@@ -5671,7 +5693,29 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._known_grades[source] = {**now, **missing}
         if not changed and not removed:
             return
-        if len(changed) + len(removed) > _GRADE_CHANGE_BURST:
+        quiet = len(changed) + len(removed) > _GRADE_CHANGE_BURST
+        edits = dict(self._grade_edits.get(source, {}))
+        for grade_id, _ in removed:
+            edits.pop(grade_id, None)
+        if not quiet:
+            # A burst (a category's weight changed for every grade in it) is
+            # not the teacher editing these grades: not moved to the top.
+            at = dt_util.now().isoformat(timespec="seconds")
+            for grade_id, before, fields, keys in changed:
+                previous = dict(edits.get(grade_id, {}).get("previous", {}))
+                # A second edit keeps the oldest value of each field; a field
+                # edited back to it is no longer a change.
+                previous.update({key: before.get(key) for key in keys if key not in previous})
+                previous = {k: v for k, v in previous.items() if v != fields.get(k)}
+                if previous:
+                    edits[grade_id] = {"at": at, "previous": previous}
+                else:
+                    edits.pop(grade_id, None)
+        if edits:
+            self._grade_edits = {**self._grade_edits, source: edits}
+        else:
+            self._grade_edits = {k: v for k, v in self._grade_edits.items() if k != source}
+        if quiet:
             _LOGGER.debug(
                 "%s %s grade(s) changed and %s removed at once: recorded quietly",
                 len(changed),

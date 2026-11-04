@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+- **Edited grades are remembered.** When a teacher changes a grade after
+  giving it (a "bz" for missing homework turned into a 5, a weight changed),
+  the grade now carries `changed_at` (when the integration noticed it) and
+  `previous` (the fields before the first edit, e.g. `{"value": "bz"}`) in
+  the subject sensors' `grades` / `text_grades` / `point_grades`, the
+  Descriptive and Point grades sensors and the `get_grades` action - the
+  companion cards put such a grade back at the top. Librus keeps no date of
+  the change, so only edits noticed from this version on show; a whole
+  category reweighted at once doesn't count. Kept until the school year
+  ends. (Thanks @jarekprzybyl-netizen for the idea)
+
 ### Fixed
 - **Tests on lessons without a teacher.** When Librus gave no teacher for a
   lesson (kindergartens, activities outside the timetable, a teacher missing

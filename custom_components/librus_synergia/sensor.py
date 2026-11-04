@@ -301,7 +301,23 @@ def _subject_teachers(data: LibrusData) -> dict[str, list[str]]:
     return {subject: sorted(names) for subject, names in sorted(seen.items())}
 
 
-def _point_grade_log(data: LibrusData, grades: list[PointGradeData]) -> list[dict[str, Any]]:
+# A grade's edit as the coordinator noticed it (grade_edit): kind, grade id
+# -> {"changed_at", "previous"} or None.
+type _EditLookup = Callable[[str, Any], dict[str, Any] | None]
+
+
+def _edit_attrs(edits: _EditLookup | None, source: str, grade_id: Any) -> dict[str, Any]:
+    """`changed_at` / `previous` for a grade edited in Librus after it was
+    given (issue #28: the cards put it back at the top) - nothing for one
+    never edited, so other grades keep their attributes as they were."""
+    if edits is None:
+        return {}
+    return edits(source, grade_id) or {}
+
+
+def _point_grade_log(
+    data: LibrusData, grades: list[PointGradeData], edits: _EditLookup | None = None
+) -> list[dict[str, Any]]:
     """Point grades newest first, for attributes."""
     return [
         {
@@ -315,6 +331,7 @@ def _point_grade_log(data: LibrusData, grades: list[PointGradeData]) -> list[dic
             "date": g.add_date,
             "subject": data.subjects.get(g.subject_id) if g.subject_id is not None else None,
             "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+            **_edit_attrs(edits, "point_grades", g.id),
         }
         for g in sorted(grades, key=lambda g: g.add_date or "", reverse=True)
     ]
@@ -328,7 +345,10 @@ def _by_subject(items: list[Any]) -> dict[Any, list[Any]]:
 
 
 def _text_grade_attrs(
-    data: LibrusData, subject_id: int, owner: Hashable | None = None
+    data: LibrusData,
+    subject_id: int,
+    owner: Hashable | None = None,
+    edits: _EditLookup | None = None,
 ) -> dict[str, Any]:
     """A subject's text grades (free text instead of a number) - only when
     it has any. Grouped by subject once per data object, not filtered out
@@ -345,6 +365,7 @@ def _text_grade_attrs(
                 "category": g.category,
                 "date": g.date,
                 "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
+                **_edit_attrs(edits, "text_grades", g.id),
             }
             for g in grades
         ]
@@ -352,7 +373,10 @@ def _text_grade_attrs(
 
 
 def _point_grade_attrs(
-    data: LibrusData, subject_id: int, owner: Hashable | None = None
+    data: LibrusData,
+    subject_id: int,
+    owner: Hashable | None = None,
+    edits: _EditLookup | None = None,
 ) -> dict[str, Any]:
     """A subject's point grades and their percentage - only when it has any,
     so 1-6 schools see no extra attributes."""
@@ -374,7 +398,7 @@ def _point_grade_attrs(
         "points_percentage_semester_2": point_grades_percentage(
             [g for g in grades if g.semester == 2]
         ),
-        "point_grades": _point_grade_log(data, grades),
+        "point_grades": _point_grade_log(data, grades, edits),
     }
 
 
@@ -730,6 +754,8 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
                 # correction, `improved` marks the earlier grade itself.
                 "improves": improves.get(g.id),
                 "improved": g.id in improved,
+                # Edited in Librus after it was given (issue #28).
+                **_edit_attrs(self.coordinator.grade_edit, "grades", g.id),
             }
             for g in sorted(subject_grades, key=lambda g: g.add_date or "", reverse=True)
         ]
@@ -754,8 +780,8 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             "final_grade": _summary_grade(grades, "is_final"),
             **self._averages(),
             **self._forecast_attrs(),
-            **_point_grade_attrs(data, self._subject_id, owner),
-            **_text_grade_attrs(data, self._subject_id, owner),
+            **_point_grade_attrs(data, self._subject_id, owner, self.coordinator.grade_edit),
+            **_text_grade_attrs(data, self._subject_id, owner, self.coordinator.grade_edit),
         }
 
     def _forecast_attrs(self) -> dict[str, Any]:
@@ -1899,6 +1925,7 @@ class LibrusDescriptiveGradesSensor(LibrusSensorBase):
                 "semester": g.semester,
                 "skill_id": g.skill_id,
                 "category_id": g.category_id,
+                **_edit_attrs(self.coordinator.grade_edit, "descriptive_grades", g.id),
             }
             for g in sorted(
                 data.descriptive_grades, key=lambda g: g.date or g.add_date or "", reverse=True
@@ -2467,7 +2494,7 @@ class LibrusPointGradesSensor(LibrusSensorBase):
         return {
             "count": len(data.point_grades),
             "subjects": dict(sorted(subjects.items())),
-            "recent": _point_grade_log(data, data.point_grades),
+            "recent": _point_grade_log(data, data.point_grades, self.coordinator.grade_edit),
         }
 
 
