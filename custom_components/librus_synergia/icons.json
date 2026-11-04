@@ -228,6 +228,9 @@
       "school_class": {
         "default": "mdi:google-classroom"
       },
+      "school_day_end": {
+        "default": "mdi:home-clock-outline"
+      },
       "school_documents": {
         "default": "mdi:file-document-multiple-outline"
       },

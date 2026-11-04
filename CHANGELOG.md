@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **School day end** sensor: when the school day really ends - the last
+  lesson, or a later activity that day (Librus's own activities outside the
+  timetable and the Other calendars with activities picked under
+  Configure). Today's until it passes, then the next school day's;
+  attributes `date`, `is_today`, `lessons_end` and `activity` (what ends
+  the day, or none when the lessons do). School end stays the lessons' own
+  end. The School Pick-Up Reminder blueprint can use either and says
+  "kończy zajęcia (Basen)" when an activity ends the day.
+- **Grade Changed Notification** blueprint: "Ola: ocena zmieniona
+  (Matematyka): bz → 5", with the average before and after; deleted grades
+  optional.
+- **Daily Digest** blueprint: one message a day with everything new in the
+  gradebook - grades (new and edited), absences and late arrivals, homework,
+  new Agenda entries, timetable changes, messages and notes. Quiet days can
+  be skipped. 39 blueprints.
+
 ## 0.12.42
 
 ### Added

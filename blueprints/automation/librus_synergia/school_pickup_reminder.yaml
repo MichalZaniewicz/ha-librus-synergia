@@ -4,7 +4,10 @@ blueprint:
     Runs your action a set number of minutes before the last lesson of the
     day ends - time to leave for school pick-up, or to warm up the house.
     Follows the timetable: a short day reminds earlier, days off stay
-    silent.
+    silent. Pick the "School day end" sensor instead of "School end" to
+    count a club, day-care or sports class after the lessons (Librus's own
+    activities outside the timetable and the Other calendars with
+    activities picked under Configure).
 
 
     `{{ pickup_summary }}` is a ready-made message ("Ola kończy lekcje o
@@ -14,7 +17,10 @@ blueprint:
   input:
     school_end_entity:
       name: School end sensor
-      description: The Librus "School end" sensor for this student.
+      description: >
+        The Librus "School end" sensor for this student (the last lesson),
+        or "School day end" (the last lesson or a later activity that day,
+        integration 0.12.43 or newer).
       selector:
         entity:
           integration: librus_synergia
@@ -59,8 +65,9 @@ actions:
       minutes_left: "{{ ((as_timestamp(states(end_entity)) - as_timestamp(now())) / 60) | round(0) | int }}"
       student_name: >-
         {{ (device_attr(end_entity, 'name') or '') | replace('E-dziennik ', '') }}
+      activity: "{{ state_attr(end_entity, 'activity') or '' }}"
       pickup_summary: >-
-        {{ student_name or 'Dziecko' }} kończy lekcje o {{ end_time }} (za {{ minutes_left }} min).
+        {{ student_name or 'Dziecko' }} kończy {{ ('zajęcia (' ~ activity ~ ')') if activity else 'lekcje' }} o {{ end_time }} (za {{ minutes_left }} min).
   - sequence: !input pickup_action
 
 mode: single

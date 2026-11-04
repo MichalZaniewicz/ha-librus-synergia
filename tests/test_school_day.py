@@ -16,7 +16,8 @@ from custom_components.librus_synergia.average_history import (
     daily_averages,
     daily_point_percentages,
 )
-from custom_components.librus_synergia.const import DOMAIN
+from custom_components.librus_synergia.const import CONF_EXTRA_CALENDARS, DOMAIN
+from custom_components.librus_synergia.other_calendars import OtherActivity
 from custom_components.librus_synergia.school_day import school_days
 from custom_components.librus_synergia.sensor import _sorted_lessons
 from librus_synergia.models import GradingSystemData, LibrusData, MeData
@@ -371,3 +372,77 @@ async def test_average_history_writes_point_percentage_series(hass) -> None:
     assert meta["unit_of_measurement"] == "%"
     assert "punkty Fizyka" in meta["name"]
     assert rows[0]["mean"] == 85.0
+
+
+
+def _day_end_client():
+    today = dt_util.now().date()
+    club = {
+        "status": "ACTUAL",
+        "identifier": "LID-OAR-SCHEDULEEVENT-1",
+        "date": today.isoformat(),
+        "startTime": _hhmm(170),
+        "endTime": _hhmm(240),
+        "teacherName": "Anna Nowak",
+        "title": "Koło szachowe",
+    }
+    client = build_mock_client(
+        async_get_timetable=_timetable(),
+        async_get_subjects={"Subjects": [{"Id": 100, "Name": "Matematyka"}]},
+    )
+    client.async_get_extra_activities.side_effect = (
+        lambda kind, date_from, date_to: {"data": [club] if kind == "other" else []}
+    )
+    return client
+
+
+async def test_school_day_end_counts_librus_activities(hass, freezer) -> None:
+    """School day end: a Librus activity after the lessons ends the day;
+    School end stays the lessons' own end."""
+    freezer.move_to(_FROZEN)
+    entry = await setup_integration(hass, _day_end_client())
+    state = hass.states.get(_entity_id(hass, entry, "sensor", "school_day_end"))
+    assert _local_hhmm(state.state) == _hhmm(240)
+    assert state.attributes["activity"] == "Koło szachowe"
+    assert state.attributes["is_today"] is True
+    assert _local_hhmm(state.attributes["lessons_end"]) == _hhmm(160)
+    end = hass.states.get(_entity_id(hass, entry, "sensor", "school_end"))
+    assert _local_hhmm(end.state) == _hhmm(160)
+
+
+async def test_school_day_end_counts_other_calendars(hass, freezer) -> None:
+    """...and so does an event of another calendar picked under Configure;
+    once it's over, the next school day."""
+    freezer.move_to(_FROZEN)
+    today = dt_util.now().date()
+    swim_start = dt_util.now().replace(second=0, microsecond=0) + timedelta(minutes=250)
+    swim = OtherActivity(
+        entity_id="calendar.zajecia_oli",
+        source="Zajęcia Oli",
+        start=swim_start,
+        end=swim_start + timedelta(minutes=50),
+        summary="Basen",
+        location=None,
+        uid="1",
+    )
+
+    async def others(hass, entity_ids, start, end):
+        return [swim] if "calendar.zajecia_oli" in entity_ids else []
+
+    with patch("custom_components.librus_synergia.sensor.async_other_activities", others):
+        entry = await setup_integration(
+            hass, _day_end_client(), options={CONF_EXTRA_CALENDARS: ["calendar.zajecia_oli"]}
+        )
+        await hass.async_block_till_done()
+        day_end = _entity_id(hass, entry, "sensor", "school_day_end")
+        state = hass.states.get(day_end)
+        assert _local_hhmm(state.state) == _hhmm(300)
+        assert state.attributes["activity"] == "Basen"
+
+        freezer.tick(timedelta(minutes=301))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        state = hass.states.get(day_end)
+        assert state.attributes["date"] == (today + timedelta(days=1)).isoformat()
+        assert _local_hhmm(state.state) == "09:40"
+        assert state.attributes["activity"] is None

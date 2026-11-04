@@ -320,6 +320,7 @@
       "current_lesson": { "name": "Bieżąca lekcja" },
       "school_start": { "name": "Początek lekcji" },
       "school_end": { "name": "Koniec lekcji" },
+      "school_day_end": { "name": "Koniec dnia w szkole" },
       "next_exam": { "name": "Najbliższy sprawdzian" },
       "lucky_number": { "name": "Szczęśliwy numerek" },
       "unread_announcements": { "name": "Nieprzeczytane ogłoszenia" },

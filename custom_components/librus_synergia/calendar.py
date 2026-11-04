@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from bisect import bisect_left
 from collections.abc import Hashable
@@ -34,7 +33,6 @@ from .const import (
     DEFAULT_CALENDAR_EMOJI,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
-    DOMAIN,
 )
 from .coordinator import (
     LibrusDataUpdateCoordinator,
@@ -45,6 +43,7 @@ from .coordinator import (
 )
 from .exam_prep import exam_lines, exams_by_day_and_subject
 from .forecast import DataMemo
+from .other_calendars import async_other_activities
 from .subject_emoji import category_emoji, subject_emoji, with_emoji
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,8 +67,6 @@ _EXTRA_ACTIVITY_LABELS = {
     "one_to_one": "Nauczanie indywidualne",
 }
 EXTRA_ACTIVITY_UID_PREFIX = "librus-extra-"
-# How long one of the other calendars (Configure) may take to answer.
-_OTHER_CALENDAR_TIMEOUT = 15
 
 
 async def async_setup_entry(
@@ -753,51 +750,27 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         """Timed events of the calendars picked under Configure (Other
         calendars with activities), as activities outside the timetable: the
         same uid prefix as Librus's own, so the companion cards show them
-        the same way. All-day events are left out, and so is any calendar of
-        this integration (no loops). A calendar that fails or is gone is
-        skipped - the lessons still show."""
-        component = hass.data.get("calendar")
-        if not self._other_calendars or component is None:
+        the same way (see other_calendars.py for what's left out)."""
+        if not self._other_calendars:
             return []
-        events: list[CalendarEvent] = []
-        for entity_id in self._other_calendars:
-            entity = component.get_entity(entity_id)
-            platform = getattr(entity, "platform", None)
-            if not isinstance(entity, CalendarEntity) or (
-                platform is not None and platform.platform_name == DOMAIN
-            ):
-                continue
-            try:
-                async with asyncio.timeout(_OTHER_CALENDAR_TIMEOUT):
-                    found = await entity.async_get_events(hass, start_date, end_date)
-            except Exception as err:  # noqa: BLE001 - another integration's calendar
-                _LOGGER.debug("Skipping %s in the timetable calendar: %r", entity_id, err)
-                continue
-            state = hass.states.get(entity_id)
-            source = state.name if state is not None else entity_id
-            for event in found:
-                if not isinstance(event.start, datetime) or not isinstance(event.end, datetime):
-                    continue
-                start = dt_util.as_local(event.start)
-                end = dt_util.as_local(event.end)
-                if not (start < end_date and end > start_date) or end <= start:
-                    continue
-                events.append(
-                    CalendarEvent(
-                        start=start,
-                        end=end,
-                        summary=event.summary,
-                        location=event.location,
-                        # No teacher (the cards read line one as the
-                        # teacher); the calendar it came from below.
-                        description=_teacher_description(None, [source]),
-                        uid=(
-                            f"{EXTRA_ACTIVITY_UID_PREFIX}calendar-{entity_id}-"
-                            f"{event.uid or start.isoformat()}"
-                        ),
-                    )
-                )
-        return events
+        return [
+            CalendarEvent(
+                start=activity.start,
+                end=activity.end,
+                summary=activity.summary,
+                location=activity.location,
+                # No teacher (the cards read line one as the teacher); the
+                # calendar it came from below.
+                description=_teacher_description(None, [activity.source]),
+                uid=(
+                    f"{EXTRA_ACTIVITY_UID_PREFIX}calendar-{activity.entity_id}-"
+                    f"{activity.uid or activity.start.isoformat()}"
+                ),
+            )
+            for activity in await async_other_activities(
+                hass, self._other_calendars, start_date, end_date
+            )
+        ]
 
 
 class LibrusAgendaCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):

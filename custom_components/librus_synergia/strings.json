@@ -320,6 +320,7 @@
       "current_lesson": { "name": "Current lesson" },
       "school_start": { "name": "School start" },
       "school_end": { "name": "School end" },
+      "school_day_end": { "name": "School day end" },
       "next_exam": { "name": "Next exam" },
       "lucky_number": { "name": "Lucky number" },
       "unread_announcements": { "name": "Unread announcements" },

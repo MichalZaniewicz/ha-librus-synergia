@@ -1,0 +1,149 @@
+blueprint:
+  name: "Librus: Daily Digest"
+  description: >
+    Once a day at a set time, one message with everything that appeared in
+    the gradebook that day - instead of a notification for each thing: new
+    and edited grades, absences and late arrivals, homework given, new
+    Agenda entries (tests, trips, meetings), timetable changes, messages and
+    notes. No AI needed.
+
+
+    Use `{{ digest_text }}` in your action (`{{ digest_count }}` is how many
+    things it lists). Pick the student's device - the sensors are found on
+    it. New Agenda entries, timetable changes and edited grades need
+    integration 0.12.42 or newer.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/daily_digest_notification.yaml
+  input:
+    student:
+      name: Student
+      description: The student's device (E-dziennik ...).
+      selector:
+        device:
+          integration: librus_synergia
+    digest_time:
+      name: Time
+      default: "18:00:00"
+      selector:
+        time: {}
+    weekdays:
+      name: Days
+      description: Which days to send it on.
+      default: ["1", "2", "3", "4", "5", "6", "7"]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Monday
+              value: "1"
+            - label: Tuesday
+              value: "2"
+            - label: Wednesday
+              value: "3"
+            - label: Thursday
+              value: "4"
+            - label: Friday
+              value: "5"
+            - label: Saturday
+              value: "6"
+            - label: Sunday
+              value: "7"
+    include_messages:
+      name: Messages and notes
+      description: List messages received and notes given that day too.
+      default: true
+      selector:
+        boolean: {}
+    skip_empty:
+      name: Skip quiet days
+      description: Don't send anything on a day nothing new appeared.
+      default: true
+      selector:
+        boolean: {}
+    notify_action:
+      name: Action
+      description: What to do with the digest (e.g. send a notification).
+      selector:
+        action: {}
+
+variables:
+  student: !input student
+  weekdays: !input weekdays
+  include_messages: !input include_messages
+  skip_empty: !input skip_empty
+
+triggers:
+  - trigger: time
+    at: !input digest_time
+
+conditions:
+  - condition: template
+    value_template: "{{ (now().isoweekday() | string) in weekdays }}"
+
+actions:
+  - variables:
+      digest_text: |-
+        {%- set today = now().date() | string -%}
+        {%- macro dm(d) -%}{{ d[8:10] | int }}.{{ d[5:7] }}{%- endmacro -%}
+        {%- set ns = namespace(grades=[], att=[], hw=[], agenda=[], plan=[], msgs=[], notes=[]) -%}
+        {%- set kinds = {'unexcused': 'Nieobecność', 'excused': 'Nieobecność usprawiedliwiona', 'late': 'Spóźnienie'} -%}
+        {%- set changes = {'cancelled': 'Odwołana lekcja', 'substitution': 'Zastępstwo', 'shifted': 'Przeniesiona lekcja'} -%}
+        {%- set sentiments = {'positive': 'Uwaga pozytywna', 'negative': 'Uwaga negatywna'} -%}
+        {%- for e in device_entities(student) if e.startswith('sensor.') -%}
+          {%- set recent = state_attr(e, 'recent') -%}
+          {%- if state_attr(e, 'subject_id') is not none -%}
+            {%- set subject = state_attr(e, 'subject') or '' -%}
+            {%- for g in state_attr(e, 'grades') or [] -%}
+              {%- if (g.date or '')[:10] == today -%}
+                {%- set ns.grades = ns.grades + ['- ' ~ subject ~ ': ' ~ g.value ~ ((' (' ~ g.category ~ ')') if g.category else '')] -%}
+              {%- elif (g.get('changed_at') or '')[:10] == today and g.previous and g.previous.value is defined -%}
+                {%- set ns.grades = ns.grades + ['- ' ~ subject ~ ': zmieniona ' ~ g.previous.value ~ ' → ' ~ g.value] -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- for g in state_attr(e, 'point_grades') or [] -%}
+              {%- if (g.date or '')[:10] == today -%}
+                {%- set ns.grades = ns.grades + ['- ' ~ subject ~ ': ' ~ g.value ~ ' pkt'] -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- elif state_attr(e, 'presence_by_type') is not none -%}
+            {%- for m in recent or [] if m.date == today -%}
+              {%- set ns.att = ns.att + ['- ' ~ kinds.get(m.kind, 'Nieobecność') ~ ': ' ~ (m.subject or 'lekcja') ~ ((' (lekcja ' ~ m.lesson_no ~ ')') if m.lesson_no else '')] -%}
+            {%- endfor -%}
+          {%- elif state_attr(e, 'this_week') is not none -%}
+            {%- for a in state_attr(e, 'recently_added') or [] if (a.seen or '')[:10] == today -%}
+              {%- set ns.agenda = ns.agenda + ['- ' ~ (a.category or 'Wpis') ~ ': ' ~ ([a.subject, (dm(a.date) if a.date else none), a.content] | select | join(', '))] -%}
+            {%- endfor -%}
+          {%- elif state_attr(e, 'by_month') is not none -%}
+            {%- for c in state_attr(e, 'recently_added') or [] if (c.seen or '')[:10] == today -%}
+              {%- set ns.plan = ns.plan + ['- ' ~ changes.get(c.kind, 'Zmiana') ~ ': ' ~ ([c.subject, ((dm(c.date) ~ ((' lekcja ' ~ c.lesson_no) if c.lesson_no else '')) if c.date else none)] | select | join(', '))] -%}
+            {%- endfor -%}
+          {%- elif state_attr(e, 'mailbox_breakdown') is not none -%}
+            {%- for m in recent or [] if (m.date or '')[:10] == today -%}
+              {%- set ns.msgs = ns.msgs + ['- Od ' ~ (m.sender or '?') ~ ': ' ~ (m.topic or '')] -%}
+            {%- endfor -%}
+          {%- elif recent and recent is list and recent[0] is mapping and 'due_date' in recent[0] -%}
+            {%- for h in recent if (h.date or '')[:10] == today -%}
+              {%- set ns.hw = ns.hw + ['- ' ~ ([h.subject, h.topic] | select | join(': ')) ~ ((' (termin ' ~ dm(h.due_date) ~ ')') if h.due_date else '')] -%}
+            {%- endfor -%}
+          {%- elif recent and recent is list and recent[0] is mapping and 'sentiment' in recent[0] -%}
+            {%- for n in recent if (n.date or '')[:10] == today -%}
+              {%- set ns.notes = ns.notes + ['- ' ~ sentiments.get(n.sentiment, 'Uwaga') ~ ': ' ~ ([n.category, n.text] | select | join(' – '))] -%}
+            {%- endfor -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set sections = [
+          ('Oceny', ns.grades), ('Frekwencja', ns.att), ('Zadania domowe', ns.hw),
+          ('Terminarz', ns.agenda), ('Zmiany w planie', ns.plan),
+        ] + ([('Wiadomości', ns.msgs), ('Uwagi', ns.notes)] if include_messages else []) -%}
+        {%- set name = (device_attr(student, 'name_by_user') or device_attr(student, 'name') or '') | replace('E-dziennik ', '') -%}
+        {%- set ns2 = namespace(parts=[]) -%}
+        {%- for title, lines in sections if lines -%}
+          {%- set ns2.parts = ns2.parts + [title ~ ':\n' ~ (lines | join('\n'))] -%}
+        {%- endfor -%}
+        {{ ((name ~ ' – dziś w dzienniku') if name else 'Dziś w dzienniku') ~ ':\n\n' ~ (ns2.parts | join('\n\n') if ns2.parts else 'Nic nowego.') }}
+      digest_count: "{{ digest_text.split('\n') | select('match', '- ') | list | count }}"
+  - condition: template
+    value_template: "{{ not skip_empty or digest_count | int(0) > 0 }}"
+  - sequence: !input notify_action
+
+mode: single
