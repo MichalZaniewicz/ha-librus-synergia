@@ -1030,8 +1030,9 @@ class LibrusWeeklySummary:
     @callback
     def _maybe_run(self) -> None:
         """Start the scheduled run unless it is done, paused or out of tries."""
-        due = self._due().isoformat()
-        if not self.enabled or self.running or self._done_due == due:
+        due_at = self._due()
+        due = due_at.isoformat()
+        if not self.enabled or self.running or self._done_this_week(due_at):
             return
         if self._coordinator.data is None:
             return
@@ -1043,6 +1044,18 @@ class LibrusWeeklySummary:
         self._entry.async_create_background_task(
             self.hass, self._async_scheduled(due), f"{DOMAIN} weekly summary"
         )
+
+    def _done_this_week(self, due: datetime) -> bool:
+        """The scheduled run for `due` - or one less than six days before it:
+        the weekday or time was changed under Configure after this week's
+        summary went out, which mustn't send a second one (six, not seven:
+        a daylight-saving change makes a week an hour shorter)."""
+        if self._done_due is None:
+            return False
+        done = dt_util.parse_datetime(self._done_due)
+        if done is None:
+            return False
+        return due - done < timedelta(days=6)
 
     async def _async_scheduled(self, due: str) -> None:
         if not self.enabled:

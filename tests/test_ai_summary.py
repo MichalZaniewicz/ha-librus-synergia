@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.librus_synergia.ai_summary import (
     TOKEN_LIMIT_HINT,
+    LibrusWeeklySummary,
     build_context,
     build_instructions,
     build_structure,
@@ -382,6 +383,39 @@ async def test_scheduled_run_fires_once_at_the_chosen_time(hass, freezer) -> Non
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(calls) == 1
+
+
+async def test_moving_the_time_after_this_weeks_run_sends_no_second_one(hass, freezer) -> None:
+    # Sunday 18:00 local: this week's summary goes out.
+    freezer.move_to("2026-10-05T00:59:00+00:00")
+    calls = _register_ai_task(hass)
+    entry = await setup_integration(hass, _client(), options=_AI_OPTIONS)
+    freezer.move_to("2026-10-05T01:00:00+00:00")
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1
+
+    # Moved to 17:00 under Configure: that moment has passed, within the
+    # catch-up window - but this week's summary is done already.
+    summary = entry.runtime_data.weekly_summary
+    summary.at = time(17, 0)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1
+
+
+def test_a_run_done_last_week_does_not_count_for_this_week() -> None:
+    summary = LibrusWeeklySummary.__new__(LibrusWeeklySummary)
+    summary._done_due = "2026-09-27T18:00:00-07:00"
+    due = datetime.fromisoformat("2026-10-04T18:00:00-07:00")
+    assert not summary._done_this_week(due)
+    # A daylight-saving week is an hour shorter - still the next week.
+    assert not summary._done_this_week(datetime.fromisoformat("2026-10-04T17:00:00-07:00"))
+    summary._done_due = "2026-10-04T18:00:00-07:00"
+    assert summary._done_this_week(datetime.fromisoformat("2026-10-04T17:00:00-07:00"))
+    assert summary._done_this_week(due)
+    summary._done_due = None
+    assert not summary._done_this_week(due)
 
 
 async def test_switch_off_pauses_the_scheduled_run(hass, freezer) -> None:

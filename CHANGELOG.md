@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Tests on lessons without a teacher.** When Librus gave no teacher for a
+  lesson (kindergartens, activities outside the timetable, a teacher missing
+  from the school's list), the first line under it moved up into the
+  teacher's place: the companion cards then showed "Sprawdzian: ..." as the
+  teacher and lost the test tag and the room change. The teacher line now
+  stays (empty).
+- **No flood of "new message" after raising Messages to fetch per mailbox.**
+  The older messages the larger lists bring in were announced as new, one
+  notification each; the first lists after the change are now recorded
+  quietly.
+- **No forecast-changed events after changing the settings.** Editing the
+  grade thresholds, the average mode or the point scales under Configure
+  fired `librus_synergia_forecast_changed` for every subject whose forecast
+  moved, though no grade had changed. The forecast now starts over quietly.
+- **Test within 24 hours with a midnight time.** An Agenda test with the
+  time 00:00 (Librus's "no time") turned the sensor on at midnight the day
+  before and off at midnight - off during the school day of the test. Such
+  a test now starts with the subject's first lesson, like one with no time.
+- **Events found at startup on older Home Assistant versions.** They now go
+  out a few seconds after Home Assistant has started: before 2026.7,
+  automations arm their triggers only after the start, so they could still
+  miss them.
+- **No second weekly AI summary after changing its time.** Moving the day
+  or time under Configure after this week's summary had gone out sent
+  another one at once.
+- **A grade edit isn't lost when the category list fails.** A grade's weight
+  or counting that Librus couldn't give in one refresh was reported as
+  "weight 3 → nothing", and the real change to 2 on the next refresh was
+  then missed. The last known value now stays until Librus gives one.
+
+### Changed
+- **Fewer requests to Librus** - roughly 140 a day fewer per student with the
+  default 20 minutes: the school library and the year's plan changes are
+  checked every 6 hours (plan changes also at once when the timetable
+  changes), activities outside the timetable every 6 hours while the school
+  has none (still at once when a new week starts), and absence
+  justifications once an hour instead of on every refresh. Weeks browsed in
+  a timetable card no longer ask for activity kinds the school doesn't
+  have, and ask for the others at the same time.
+- The Test within 24 hours sensor works out the tests once per refresh
+  instead of three times, and no longer writes its state when nothing
+  changed.
+
 ## 0.12.40
 
 ### Added

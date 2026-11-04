@@ -33,6 +33,7 @@ from custom_components.librus_synergia.const import (
     DOMAIN,
     EVENT_FORECAST_CHANGED,
     EVENT_NEW_GRADE,
+    HELD_EVENTS_DELAY,
     STATE_SAVE_DELAY,
 )
 from custom_components.librus_synergia.coordinator import state_store_key
@@ -152,10 +153,17 @@ async def _restart(
     await _set_up_again(hass, entry, client)
 
 
-def _started(hass: HomeAssistant) -> None:
-    """The end of HomeAssistant.async_start: running, then STARTED."""
+def _started(hass: HomeAssistant, freezer) -> None:
+    """The end of HomeAssistant.async_start: running, then STARTED - and
+    the few seconds after it the held events wait for (HELD_EVENTS_DELAY)."""
     hass.set_state(CoreState.running)
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    _after_start_delay(hass, freezer)
+
+
+def _after_start_delay(hass: HomeAssistant, freezer) -> None:
+    freezer.tick(timedelta(seconds=HELD_EVENTS_DELAY + 1))
+    async_fire_time_changed(hass)
 
 
 def _saved_held(hass_storage: dict, entry: MockConfigEntry) -> list[str]:
@@ -184,7 +192,13 @@ async def test_events_found_while_starting_fire_once_started(hass, freezer, stat
     await _restart(hass, entry, client, state)
     assert fired == []
 
-    _started(hass)
+    # Not in the STARTED dispatch itself: automations of older Home
+    # Assistant versions arm their triggers in tasks started by it.
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert fired == []
+    _after_start_delay(hass, freezer)
     await hass.async_block_till_done()
     assert fired == _ANNOUNCED
 
@@ -237,14 +251,14 @@ async def test_unloaded_before_the_start_announced_by_the_next_setup(
     assert _started_listeners(hass) == listeners
     assert _saved_held(hass_storage, entry) == _HELD_TYPES
     if again is CoreState.running:
-        _started(hass)
+        _started(hass, freezer)
         await hass.async_block_till_done()
         assert fired == []
 
     await _set_up_again(hass, entry, client)
     if again is CoreState.not_running:
         assert fired == []
-        _started(hass)
+        _started(hass, freezer)
         await hass.async_block_till_done()
     assert fired == _ANNOUNCED
 
@@ -254,7 +268,7 @@ async def test_unloaded_before_the_start_announced_by_the_next_setup(
     assert _saved_held(hass_storage, entry) == []
     await entry.runtime_data.async_refresh()
     await _restart(hass, entry, client)
-    _started(hass)
+    _started(hass, freezer)
     await hass.async_block_till_done()
     assert fired == _ANNOUNCED
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
@@ -277,7 +291,7 @@ async def test_started_while_unloading_leaves_them_to_the_next_setup(
 
     async def close_state_then_started() -> None:
         await close_state()
-        _started(hass)
+        _started(hass, freezer)
 
     with patch.object(coordinator, "async_close_state", close_state_then_started):
         assert await hass.config_entries.async_unload(entry.entry_id)
@@ -305,7 +319,7 @@ async def test_removed_before_the_start_announces_nothing(hass, freezer, hass_st
     assert _started_listeners(hass) == listeners
     assert state_store_key(entry.entry_id) not in hass_storage
 
-    _started(hass)
+    _started(hass, freezer)
     await hass.async_block_till_done()
     assert fired == []
 
@@ -339,7 +353,7 @@ async def test_stopped_before_the_start_announced_after_the_next_start(
     hass_storage[state_store_key(entry.entry_id)] = stopped
     await _set_up_again(hass, entry, client)
     assert fired == []
-    _started(hass)
+    _started(hass, freezer)
     await hass.async_block_till_done()
     assert fired == _ANNOUNCED
 
@@ -380,7 +394,7 @@ async def test_failed_setup_leaves_them_to_the_retry(
             await _write_delayed(hass, freezer)
             assert _saved_held(hass_storage, entry) == _HELD_TYPES
 
-        _started(hass)
+        _started(hass, freezer)
         await hass.async_block_till_done(wait_background_tasks=True)
 
     assert entry.state is ConfigEntryState.LOADED
@@ -433,6 +447,8 @@ async def test_grade_found_at_boot_reaches_an_automation_armed_later(hass, freez
     assert hass.states.get(grade_event).attributes.get("event_type") is None
 
     await hass.async_start()  # START, startup jobs (arming), running, STARTED
+    await hass.async_block_till_done()
+    _after_start_delay(hass, freezer)
     await hass.async_block_till_done()
 
     assert [(call.data["event"], call.data["subject"]) for call in calls] == [

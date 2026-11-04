@@ -60,6 +60,10 @@ SMART_POLLING_NIGHT_END = 6
 # good response of every endpoint, the fallback while Librus is down.
 STATE_STORE_VERSION = 1
 STATE_SAVE_DELAY = 300  # seconds
+# Events found while Home Assistant starts go out this long after STARTED,
+# once automations of older Home Assistant versions have armed their
+# triggers (coordinator._async_started).
+HELD_EVENTS_DELAY = 5  # seconds
 # The state is only written when something in it changed (a new response, a
 # newly seen item, ...) - but at least this often, so `last_success_at` (how
 # old the saved data is after a restart) doesn't drift far behind.

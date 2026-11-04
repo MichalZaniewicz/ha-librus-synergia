@@ -7,12 +7,19 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import async_capture_events
 
-from custom_components.librus_synergia.const import EVENT_NEW_GRADE, EVENT_NEW_MESSAGE
-from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from custom_components.librus_synergia.const import (
+    EVENT_NEW_GRADE,
+    EVENT_NEW_MESSAGE,
+    STATE_STORE_VERSION,
+)
+from custom_components.librus_synergia.coordinator import (
+    LibrusDataUpdateCoordinator,
+    state_store_key,
+)
 from librus_synergia import LibrusConnectionError
 from librus_synergia.exceptions import LibrusUnexpectedResponseError
 
-from .conftest import build_mock_client, make_config_entry, messages_by_mailbox
+from .conftest import build_mock_client, make_config_entry, messages_by_mailbox, saved_state
 
 BEHAVIOUR_OLD = {
     "Id": 1, "BehaviourGrade": {"Id": 2}, "Category": {"Id": 5}, "AddedBy": {"Id": 7},
@@ -26,8 +33,10 @@ BEHAVIOUR_NEW = {
 BEHAVIOUR_EMPTY = {"Id": 3, "Category": {"Id": 5}, "Semester": 1, "AddDate": "2026-11-04 10:00:00"}
 
 
-def _coordinator(hass, client, *, options: dict | None = None) -> LibrusDataUpdateCoordinator:
-    entry = make_config_entry(options=options)
+def _coordinator(
+    hass, client, *, options: dict | None = None, entry=None
+) -> LibrusDataUpdateCoordinator:
+    entry = entry or make_config_entry(options=options)
     entry.add_to_hass(hass)
     entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
     return LibrusDataUpdateCoordinator(hass, entry, client, timedelta(minutes=20))
@@ -121,3 +130,55 @@ async def test_missing_mailbox_is_not_seeded(hass) -> None:
 
     assert coordinator._known_items["alerts_messages"] is None
     assert coordinator._known_items["substitutions_messages"] == set()
+
+
+async def test_raising_messages_to_fetch_announces_no_old_messages(hass, hass_storage) -> None:
+    """A larger "Messages to fetch per mailbox" brings older messages into
+    the lists for the first time - they aren't new."""
+    messages = async_capture_events(hass, EVENT_NEW_MESSAGE)
+
+    def client_with(inbox: list[dict], substitutions: list[dict]):
+        client = build_mock_client()
+        client.async_bootstrap_messages.return_value = True
+        client.async_get_unread_messages_count.return_value = {
+            "data": {"inbox": 0, "substitutions": 0}
+        }
+        client.async_get_messages.side_effect = messages_by_mailbox(
+            {"inbox": {"data": inbox}, "substitutions": {"data": substitutions}}
+        )
+        return client
+
+    newest = [_message("i3", "Nowa"), _message("i2", "Starsza")]
+    older = [_message("i1", "Najstarsza")]
+    first = _coordinator(hass, client_with(newest, [_message("s2", "Z2")]))
+    await first._async_update_data()  # seeds
+    await first._async_update_data()
+    await hass.async_block_till_done()
+    assert messages == []
+
+    entry = make_config_entry(options={"messages_count": 30})
+    hass_storage[state_store_key(entry.entry_id)] = {
+        "version": STATE_STORE_VERSION,
+        "minor_version": 1,
+        "key": state_store_key(entry.entry_id),
+        "data": saved_state(first),
+    }
+    client = client_with([*newest, *older], [_message("s2", "Z2"), _message("s1", "Z1")])
+    second = _coordinator(hass, client, entry=entry)
+    await second.async_restore_state()
+    await second._async_update_data()
+    await hass.async_block_till_done()
+    assert messages == []
+
+    # A message that really is new afterwards is announced.
+    client.async_get_unread_messages_count.return_value = {"data": {"inbox": 1, "substitutions": 0}}
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {
+            "inbox": {"data": [_message("i4", "Najnowsza"), *newest, *older]},
+            "substitutions": {"data": [_message("s2", "Z2"), _message("s1", "Z1")]},
+        }
+    )
+    second._fetched_at.clear()
+    await second._async_update_data()
+    await hass.async_block_till_done()
+    assert [(e.data["id"], e.data["mailbox"]) for e in messages] == [("i4", "inbox")]

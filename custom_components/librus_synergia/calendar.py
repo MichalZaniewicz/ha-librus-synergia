@@ -158,6 +158,16 @@ def _lesson_exams(
     return exam_lines(data, items) if items else []
 
 
+def _teacher_description(teacher: str | None, details: list[str]) -> str | None:
+    """Teacher on the first line, details below. The first line stays (empty)
+    when the teacher is unknown - the companion cards read line one as the
+    teacher, so a test or room-change line must never move up into it."""
+    details = [line for line in details if line]
+    if not teacher and not details:
+        return None
+    return "\n".join([teacher or "", *details])
+
+
 @dataclass(frozen=True)
 class _LessonParts:
     """One lesson ready for the calendar; `teacher` and `details` become
@@ -176,7 +186,7 @@ class _LessonParts:
     cancelled: bool = False
 
     def to_event(self, emoji: bool = False) -> CalendarEvent:
-        description = "\n".join([self.teacher or "", *self.details]).strip() or None
+        description = _teacher_description(self.teacher, self.details)
         return CalendarEvent(
             start=self.start,
             end=self.end,
@@ -362,7 +372,7 @@ def _extra_activity_event(activity: ExtraActivityData, emoji: bool = False) -> C
     title = activity.title or label
     summary = f"{title} ({_CHANGE_LABELS['canceled']})" if activity.cancelled else title
     details = [] if title.casefold().startswith(label.casefold()) else [label]
-    description = "\n".join([activity.teacher or "", *details]).strip() or None
+    description = _teacher_description(activity.teacher, details)
     start = dt_util.as_local(datetime.combine(day, start_time))
     end = dt_util.as_local(datetime.combine(day, end_time))
     if end <= start:

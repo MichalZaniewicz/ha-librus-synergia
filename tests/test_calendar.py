@@ -272,6 +272,50 @@ async def test_timetable_lesson_shows_the_test_from_the_agenda(hass) -> None:
     assert "Sprawdzian" not in events["Fizyka"]["description"]
 
 
+async def test_lesson_without_a_teacher_keeps_the_teacher_line(hass) -> None:
+    """The companion cards read the first description line as the teacher:
+    with no known teacher it stays empty, so the test line can't move up."""
+    lesson = {
+        "LessonNo": "1",
+        "HourFrom": "08:00",
+        "HourTo": "08:45",
+        "Subject": {"Id": "42005"},
+        "Teacher": {"Id": "9999"},  # not in the school's list
+        "Classroom": {"Id": "2000"},
+        "IsCanceled": False,
+        "IsSubstitutionClass": False,
+    }
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
+        async_get_teachers={"Users": []},
+        async_get_timetable={"Timetable": {_TOMORROW: [[lesson]]}},
+        async_get_homework_categories={"Categories": [{"Id": 1, "Name": "Sprawdzian"}]},
+        async_get_homeworks={
+            "HomeWorks": [
+                {
+                    "Id": 1,
+                    "Content": "Dział 5",
+                    "Date": _TOMORROW,
+                    "Category": {"Id": 1},
+                    "Subject": {"Id": 42005},
+                }
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    entity_id = _entity_id(hass, entry, "timetable")
+    start = dt_util.start_of_local_day(date.fromisoformat(_TOMORROW))
+    response = await hass.services.async_call(
+        "calendar",
+        "get_events",
+        {"entity_id": entity_id, "start_date_time": start, "end_date_time": start + timedelta(days=1)},
+        blocking=True,
+        return_response=True,
+    )
+    (event,) = response[entity_id]["events"]
+    assert event["description"].split("\n") == ["", "Sprawdzian: Dział 5"]
+
+
 async def test_timetable_calendar_today_query_excludes_tomorrow(hass) -> None:
     """BUG FIX (2026-09-06, found live): a "today" query - [today 00:00,
     tomorrow 00:00), the exact window every card in this repo's own

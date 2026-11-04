@@ -27,7 +27,7 @@ from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_call_later, async_track_time_change
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -197,6 +197,7 @@ from .const import (
     SMART_POLLING_NIGHT,
     SMART_POLLING_NIGHT_END,
     SMART_POLLING_NIGHT_START,
+    HELD_EVENTS_DELAY,
     STATE_SAVE_DELAY,
     STATE_SAVE_MAX_INTERVAL,
     STATE_STORE_VERSION,
@@ -297,6 +298,11 @@ _ACHIEVEMENT_NEWS_DAYS = timedelta(days=7)
 _HOURLY = timedelta(hours=1)
 # The standing weekly plan changes a few times a year.
 _DAILY = timedelta(days=1)
+# Modules that change a few times a month at most: school-library loans,
+# the whole year's plan changes (refetched at once when a polled timetable
+# week changes - the fresh changes are in those weeks anyway), and the
+# activities outside the timetable while the last answer had none.
+_SLOW_REFRESH = timedelta(hours=6)
 # A mailbox Librus answered 404 for (the account doesn't have it) is asked
 # again after this long, not every cycle.
 _MISSING_MAILBOX_RECHECK = timedelta(hours=24)
@@ -1162,12 +1168,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # of them it is recorded silently instead of being announced as a
         # whole batch of "new" items.
         self._unseeded_kinds: set[str] = set()
+        self._message_window_grew = False
+        # Optional modules the school refused (403/404) at their last poll -
+        # on-demand fetches skip them (see _async_fetch_extra_week).
+        self._refused_modules: set[str] = set()
+        # A polled timetable week changed this cycle (see
+        # _remember_timetable_week).
+        self._timetable_changed_this_cycle = False
         # Bus events fired before Home Assistant has started (the first
         # refresh runs while it boots), in order, and the listener that fires
         # them once it has - see async_fire_event. Saved with the tracked
         # state, next to the ids they announce: an unload, a failed setup or
         # a stop before the start leaves them to the next setup.
         self._held_events: list[tuple[str, dict[str, Any]]] = []
+        # Waiting for STARTED, then for HELD_EVENTS_DELAY after it.
         self._fire_held_at_start: CALLBACK_TYPE | None = None
         entry.async_on_unload(self._async_cancel_fire_at_start)
         # Earned badge key ("sixes_10") -> date earned (YYYY-MM-DD). None =
@@ -1199,6 +1213,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # seeded yet), and the basis it was computed on.
         self._known_forecast: dict[int, int] | None = None
         self._known_forecast_basis: str | None = None
+        # The settings the known forecast was worked out with (thresholds,
+        # average mode, point scales) - a change of them is not a change of
+        # the child's grades, so it re-seeds quietly.
+        self._known_forecast_settings: str | None = None
         # Real homework assignments - the library's ChangeTracker doesn't
         # cover HomeWorkAssignments, so same seed-then-union set as above.
         self._known_homework_assignment_ids: set[Any] | None = None
@@ -1406,6 +1424,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 _restore_id(k): v for k, v in forecast["values"].items() if isinstance(v, int)
             }
             self._known_forecast_basis = forecast.get("basis")
+            settings = forecast.get("settings")
+            self._known_forecast_settings = settings if isinstance(settings, str) else None
         if isinstance(number := stored.get("student_number"), int):
             self.student_number_from_librus = number
         if isinstance(digests := stored.get("average_digests"), dict):
@@ -1476,6 +1496,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._kindergarten_source, self._last_good.get("Me")
         )
         self._restore_throttles(stored.get("throttles"), trust_until)
+        if self._message_window_grew:
+            self._reseed_messages_quietly()
 
         # What was just read is what the files hold: nothing to write until
         # it changes (or STATE_SAVE_MAX_INTERVAL passes).
@@ -1490,6 +1512,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         if self._held_events:
             # Already in the file: no write until they are fired.
             self._async_fire_held_when_started(save=False)
+
+    def _reseed_messages_quietly(self) -> None:
+        """"Messages to fetch per mailbox" was raised: the next lists reach
+        further back, and the older messages in them were seen ids never
+        held - announcing them would send one "new message" per message.
+        The first lists after the change are recorded silently instead, as
+        on install (a message that really arrives during that one refresh
+        is recorded with them)."""
+        self._message_window_grew = False
+        if self._change_tracker.is_seeded:
+            self._unseeded_kinds.add("messages")
+        for box in _EVENT_MAILBOXES:
+            self._known_items[f"{box}_messages"] = None
 
     async def _async_load(self, store: Store[dict[str, Any]]) -> dict[str, Any] | None:
         try:
@@ -1619,7 +1654,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # Lists saved with another "Messages to fetch per mailbox" (state from
         # before the option: always 10) are dropped, so a changed option shows
         # on the first refresh instead of up to a day later.
-        same_limit = saved.get("mailbox_limit", DEFAULT_MESSAGES_COUNT) == self.messages_limit
+        saved_limit = saved.get("mailbox_limit", DEFAULT_MESSAGES_COUNT)
+        same_limit = saved_limit == self.messages_limit
+        # A larger window brings older messages into the lists for the first
+        # time: they are not new (see _reseed_messages_quietly).
+        self._message_window_grew = (
+            isinstance(saved_limit, int) and self.messages_limit > saved_limit
+        )
         if same_limit and isinstance(archive := saved.get("archive"), list):
             self._archived_messages = _messages_from_saved(archive)
             self._archive_fetched_at = when(saved.get("archive_fetched_at"))
@@ -1775,6 +1816,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self.homework_done_ever,
             self._known_forecast,
             self._known_forecast_basis,
+            self._known_forecast_settings,
             self.student_number_from_librus,
             self._session_state,
             (
@@ -1889,6 +1931,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "forecast": (
                 {
                     "basis": self._known_forecast_basis,
+                    "settings": self._known_forecast_settings,
                     "values": {str(k): v for k, v in self._known_forecast.items()},
                 }
                 if self._known_forecast is not None
@@ -2154,6 +2197,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         key = week_start.isoformat()
         if self._timetable_cache.get(key) != payload:
             self._payloads_changed()
+            if key in self._timetable_cache:
+                # Something moved in a polled week: the year's plan changes
+                # (Calendars/Substitutions) are asked again this cycle.
+                self._timetable_changed_this_cycle = True
         self._timetable_cache[key] = payload
         for old in [k for k in self._timetable_cache if k < this_week.isoformat()]:
             # A past week dropped: written with the next save, not dated - a
@@ -2958,6 +3005,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return self.data
         self.fallback_sections = set()
         self._failed_this_cycle = set()
+        self._timetable_changed_this_cycle = False
         try:
             # Nothing changed (most polls): the old object comes back (see
             # `_async_fetch_live`). The entities see the same data object
@@ -3172,12 +3220,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "SchoolFiles", self._client.async_get_school_files, every=_HOURLY
             ),
             self._async_optional(
-                "EbiblioLendings", self._client.async_get_library_lendings, every=_HOURLY
+                "EbiblioLendings", self._client.async_get_library_lendings, every=_SLOW_REFRESH
             ),
             # The whole year's cancelled lessons and substitutions - the two
-            # timetable weeks fetched every cycle carry the fresh ones.
+            # timetable weeks fetched every cycle carry the fresh ones, so
+            # this is asked again when one of them changed, else 4x a day.
             self._async_optional(
-                "Calendars/Substitutions", self._client.async_get_plan_changes, every=_HOURLY
+                "Calendars/Substitutions",
+                self._client.async_get_plan_changes,
+                every=None if self._timetable_changed_this_cycle else _SLOW_REFRESH,
             ),
             self._async_optional(
                 "TimetableEntries", self._client.async_get_timetable_entries, every=_DAILY
@@ -3507,8 +3558,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
         """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.
-        Silent on the first poll and when the basis changes (the second
-        semester starts), so neither looks like a jump. Skipped for the data
+        Silent on the first poll, when the basis changes (the second
+        semester starts) and when the thresholds, average mode or point
+        scales under Configure change, so none of them looks like a jump. Skipped for the data
         object and day it was last worked out for (an unchanged poll keeps
         the data object - nothing can have moved)."""
         checked = (data, today)
@@ -3517,17 +3569,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         ):
             return
         basis, _semester = forecast_basis(data, today)
+        thresholds = self.grade_thresholds
+        weighted = self.weighted_average
+        point_thresholds = self.point_grade_thresholds_for(data)
+        settings = repr((thresholds, weighted, point_thresholds))
         forecasts = subject_forecasts(
             data,
             today,
-            self.grade_thresholds,
-            weighted=self.weighted_average,
+            thresholds,
+            weighted=weighted,
             owner=self.memo_owner,
-            point_thresholds=self.point_grade_thresholds_for(data),
+            point_thresholds=point_thresholds,
         )
         current = {f.subject_id: f.predicted for f in forecasts}
         known = self._known_forecast
-        if known is not None and basis == self._known_forecast_basis:
+        if (
+            known is not None
+            and basis == self._known_forecast_basis
+            and settings == self._known_forecast_settings
+        ):
             entry_id = self.config_entry.entry_id if self.config_entry else None
             for forecast in forecasts:
                 old = known.get(forecast.subject_id)
@@ -3553,6 +3613,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 )
         self._known_forecast = current
         self._known_forecast_basis = basis
+        self._known_forecast_settings = settings
         self._forecast_checked = checked
 
     def _feature_enabled(self, key: str, default: bool) -> bool:
@@ -3831,6 +3892,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         isn't a failure worth flagging)."""
         if isinstance(result, BaseException):
             if label in _OPTIONAL_MODULE_LABELS and _is_module_refusal(result):
+                self._refused_modules.add(label)
                 self._note_optional_endpoint_recovery(label)
                 self._remember_payload(label, {})
                 self._fetched_at[label] = dt_util.utcnow()
@@ -3845,6 +3907,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._note_optional_endpoint_failure(label)
                 return self._fallback(label)
             raise result
+        self._refused_modules.discard(label)
         self._note_optional_endpoint_recovery(label)
         self._remember_payload(label, result)
         return result
@@ -4342,6 +4405,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             if kind not in kinds:
                 payloads[label] = self._degrade_optional_payload(label, {})
                 continue
+            # Hourly while the school has some; every few hours while it has
+            # none (most schools never do) or refuses the module.
+            empty = not parse_extra_activities(self._last_good.get(label) or {}, kind)
             payloads[label] = await self._async_optional(
                 label,
                 partial(
@@ -4350,7 +4416,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                     week_start,
                     week_start + timedelta(days=13),
                 ),
-                every=_HOURLY if same_range else None,
+                every=(_SLOW_REFRESH if empty else _HOURLY) if same_range else None,
             )
         if not any(label in self._failed_this_cycle for label in payloads):
             self._extra_activities_from = week_start
@@ -4371,23 +4437,37 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """One on-demand week's activities outside the timetable, or None
         when a kind couldn't be read (the last copy is kept then). A refused
         kind (the school doesn't have it) counts as none."""
-        result: list[ExtraActivityData] = []
-        for kind in self.extra_activity_kinds:
-            try:
-                payload = await self._client.async_get_extra_activities(
+        # Kinds the poll found refused (the school doesn't have the module)
+        # aren't asked for every browsed week; the others in parallel.
+        kinds = [
+            kind
+            for kind in self.extra_activity_kinds
+            if EXTRA_ACTIVITY_ENDPOINTS.get(kind) not in self._refused_modules
+        ]
+        answers = await asyncio.gather(
+            *(
+                self._client.async_get_extra_activities(
                     kind, week_start, week_start + timedelta(days=6)
                 )
-            except LibrusError as err:
-                if _is_module_refusal(err):
+                for kind in kinds
+            ),
+            return_exceptions=True,
+        )
+        result: list[ExtraActivityData] = []
+        for kind, answer in zip(kinds, answers, strict=True):
+            if isinstance(answer, LibrusError):
+                if _is_module_refusal(answer):
                     continue
                 _LOGGER.debug(
                     "Activities outside the timetable (%s) for the week starting %s: %s",
                     kind,
                     week_start,
-                    err,
+                    answer,
                 )
                 return None
-            result.extend(parse_extra_activities(payload, kind))
+            if isinstance(answer, BaseException):
+                raise answer
+            result.extend(parse_extra_activities(answer, kind))
         return result
 
     def extra_activities_between(self, start: date, end: date) -> list[ExtraActivityData]:
@@ -4543,15 +4623,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             return await self._client.async_download_school_file(path)
 
     async def _async_get_justifications(self) -> list[JustificationData]:
-        """The parent's submitted absence justifications. A failure keeps
-        the last good copy, like any optional endpoint."""
-        try:
-            result: dict[str, Any] | BaseException = await self._limited(
-                self._client.async_get_justifications()
+        """The parent's submitted absence justifications, at most once an
+        hour (a status changes when a teacher gets to it, not by the
+        minute). A failure keeps the last good copy, like any optional
+        endpoint."""
+        return parse_justifications(
+            await self._async_optional(
+                "Justifications", self._client.async_get_justifications, every=_HOURLY
             )
-        except LibrusError as err:
-            result = err
-        return parse_justifications(self._degrade_optional_payload("Justifications", result))
+        )
 
     def _saved_point_grades(self) -> list[PointGradeData]:
         grades_label, categories_label = _POINT_GRADE_LABELS
@@ -5103,19 +5183,31 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         restored, so the file has it already); one write for a burst, as the
         store builds the data when it writes."""
         if self.hass.state not in (CoreState.not_running, CoreState.starting):
-            self._async_fire_held_events(self.hass)
+            self._async_fire_held_events()
         elif self._fire_held_at_start is None:
             # Not started yet, so this never calls back right away.
-            self._fire_held_at_start = async_at_started(
-                self.hass, self._async_fire_held_events
-            )
+            self._fire_held_at_start = async_at_started(self.hass, self._async_started)
             if save:
                 self._schedule_save()
 
     @callback
-    def _async_fire_held_events(self, _hass: HomeAssistant) -> None:
-        """Home Assistant has started - its automations are armed by now.
-        Fire what was held, without checking the state again; the next
+    def _async_started(self, _hass: HomeAssistant) -> None:
+        """Home Assistant has started: fire what is held a few seconds later.
+        Since Home Assistant 2026.7 automations arm their triggers before
+        STARTED; older versions arm them in tasks started BY that event,
+        which wouldn't be listening yet if the held events went out in the
+        same dispatch. The delay costs nothing on newer versions."""
+        self._fire_held_at_start = async_call_later(
+            self.hass, HELD_EVENTS_DELAY, self._async_fire_held_events_later
+        )
+
+    @callback
+    def _async_fire_held_events_later(self, _now: datetime) -> None:
+        self._async_fire_held_events()
+
+    @callback
+    def _async_fire_held_events(self) -> None:
+        """Fire what was held, without checking the state again; the next
         write drops the saved copy. An entry already unloading fires
         nothing: its final write leaves them to the next setup."""
         self._fire_held_at_start = None
@@ -5542,9 +5634,20 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # over in _fire_grade_edit_events.)
             return
         changed: list[tuple[str, dict[str, Any], dict[str, Any], list[str]]] = []
-        for grade_id, fields in now.items():
+        for grade_id, fields in list(now.items()):
             if (before := known.get(grade_id)) is None:
                 continue
+            # A weight / counting the lookup couldn't give this sync (the
+            # category list failed or is late): the last known one stays, so
+            # the next sync compares against it instead of reporting
+            # "3 -> nothing" now and missing "3 -> 2" then.
+            lost = {
+                key: before[key]
+                for key in _GRADE_LOOKUP_FIELDS
+                if fields.get(key) is None and before.get(key) is not None
+            }
+            if lost:
+                fields = now[grade_id] = {**fields, **lost}
             if keys := [
                 key
                 for key in _GRADE_COMPARED

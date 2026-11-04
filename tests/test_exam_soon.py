@@ -120,3 +120,34 @@ async def test_entry_time_wins_over_the_lesson(hass, freezer) -> None:
     assert state.state == "on"
     assert state.attributes["exams"][0]["start"] == "2026-10-06T12:30:00-07:00"
     assert state.attributes["exams"][0]["kind"] == "quiz"
+
+
+async def test_a_midnight_entry_time_counts_as_no_time(hass, freezer) -> None:
+    # Monday 13:00 local. "00:00:00" is how Librus says "no time": the test
+    # starts with the maths lesson on Tuesday at 08:00 (in the window), not
+    # at Tuesday's midnight - which would switch the sensor off before the
+    # school day of the test.
+    freezer.move_to("2026-10-05T20:00:00+00:00")
+    entry = await setup_integration(
+        hass,
+        _client(
+            [
+                {
+                    "Id": 1,
+                    "Content": "Dział 5",
+                    "Date": "2026-10-06",
+                    "Category": {"Id": 1},
+                    "Subject": {"Id": 42005},
+                    "TimeFrom": "00:00:00",
+                }
+            ]
+        ),
+    )
+    entity_id = _entity_id(hass, entry)
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["exams"][0]["start"] == "2026-10-06T08:00:00-07:00"
+
+    # Tuesday 07:00 local: still on until the lesson starts.
+    await _at(hass, freezer, "2026-10-06T14:00:00+00:00")
+    assert hass.states.get(entity_id).state == "on"

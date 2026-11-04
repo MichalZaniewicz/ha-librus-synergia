@@ -3,10 +3,16 @@ subject-average attributes and the forecast-changed event."""
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_capture_events
 
-from custom_components.librus_synergia.const import DOMAIN, EVENT_FORECAST_CHANGED
+from custom_components.librus_synergia.const import (
+    CONF_GRADE_THRESHOLDS,
+    DOMAIN,
+    EVENT_FORECAST_CHANGED,
+)
 
 from .conftest import build_mock_client, setup_integration
 
@@ -122,3 +128,30 @@ async def test_forecast_changed_event(hass, freezer) -> None:
 
     event_entity = hass.states.get(_entity_id(hass, entry, "event", "forecast_event"))
     assert event_entity.attributes["event_type"] == "down"
+
+
+async def test_changed_thresholds_are_no_forecast_change(hass, freezer) -> None:
+    """New thresholds under Configure move the forecast without any grade
+    changing: the forecast starts over quietly instead of firing an event
+    for every subject."""
+    freezer.move_to(_NOW)
+    client = _client([_grade(1, "4", 100)])
+    entry = await setup_integration(hass, client)
+    events = async_capture_events(hass, EVENT_FORECAST_CHANGED)
+
+    # A 4.0 average is a 5 with these.
+    with patch("custom_components.librus_synergia.LibrusApiClient", return_value=client):
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_GRADE_THRESHOLDS: "1.5, 2.5, 3.5, 3.9, 5.5"}
+        )
+        await hass.async_block_till_done()
+    assert entry.runtime_data._known_forecast == {100: 5}
+    assert events == []
+
+    # A real change under the new thresholds is announced again.
+    client.async_get_grades.return_value = {
+        "Grades": [_grade(1, "4", 100), _grade(2, "1", 100, day="2026-10-19")]
+    }
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert [(e.data["old"], e.data["direction"]) for e in events] == [(5, "down")]

@@ -235,6 +235,35 @@ async def test_category_looked_up_late_is_not_an_edit(hass) -> None:
     assert changes == []
 
 
+async def test_a_weight_missing_for_one_sync_keeps_the_last_one(hass) -> None:
+    """Librus not giving a grade's category for one sync isn't "weight 3 ->
+    nothing" - and the real change to 2 afterwards is still announced."""
+    changes = async_capture_events(hass, EVENT_GRADE_CHANGED)
+    heavy = {"Id": 12, "Name": "Praca klasowa", "Weight": 3, "CountToTheAverage": True}
+    client = _client(_grade(1, "3", category=12))
+    client.async_get_grade_categories.return_value = {
+        "Categories": [*CATEGORIES["Categories"], heavy]
+    }
+    coordinator = _coordinator(hass, client)
+    await _sync(hass, coordinator)
+
+    client.async_get_grade_categories.return_value = CATEGORIES  # category 12 missing
+    coordinator._reference_data_fetched_at = None
+    await _sync(hass, coordinator)
+    assert changes == []
+    assert coordinator._known_grades["grades"]["1"]["weight"] == 3
+
+    client.async_get_grade_categories.return_value = {
+        "Categories": [*CATEGORIES["Categories"], {**heavy, "Weight": 2}]
+    }
+    coordinator._reference_data_fetched_at = None
+    await _sync(hass, coordinator)
+    assert len(changes) == 1
+    assert changes[0].data["changed_fields"] == ["weight"]
+    assert changes[0].data["previous"] == {"weight": 3}
+    assert changes[0].data["weight"] == 2
+
+
 async def test_many_changes_at_once_are_recorded_quietly(hass) -> None:
     """The school reweighting a whole category (or a new school year)
     touches many grades at once - that isn't a teacher correcting one."""

@@ -27,7 +27,7 @@ from librus_synergia.models import HomeworkEventData, LibrusData
 from . import LibrusConfigEntry, librus_device_info
 from .coordinator import LibrusDataUpdateCoordinator
 from .exam_prep import category_name, exam_kind, exam_text, is_exam
-from .forecast import SubjectForecast, subject_forecasts
+from .forecast import DataMemo, SubjectForecast, subject_forecasts
 from .school_day import (
     SchoolDay,
     SchoolDayRefresh,
@@ -191,10 +191,17 @@ EXAM_SOON = timedelta(hours=24)
 
 
 def _parse_hhmm(value: str | None) -> time | None:
+    """"08:00:00" -> 08:00; None for a missing time. A midnight TimeFrom on
+    an Agenda entry is Librus's "no time" (as in the Agenda calendar)."""
+    if not value or value.startswith("00:00"):
+        return None
     try:
         return datetime.strptime((value or "")[:5], "%H:%M").time()
     except ValueError:
         return None
+
+
+_EXAM_MOMENTS = DataMemo()
 
 
 def exam_moments(
@@ -202,9 +209,15 @@ def exam_moments(
 ) -> list[tuple[datetime, HomeworkEventData]]:
     """When each test in the Agenda starts, soonest first: its own time if
     the entry has one, else that day's first lesson of its subject, else
-    the day's first lesson, else 8:00."""
+    the day's first lesson, else 8:00. Worked out once per data object -
+    the state, the attributes and the timer all read it. Callers must not
+    modify the list."""
     if data is None:
         return []
+    return _EXAM_MOMENTS.get(data, None, lambda: _exam_moments(data, owner), owner=owner)
+
+
+def _exam_moments(data: LibrusData, owner: Any) -> list[tuple[datetime, HomeworkEventData]]:
     days = school_days(data, owner)
     out: list[tuple[datetime, HomeworkEventData]] = []
     for item in data.homeworks:
@@ -240,11 +253,11 @@ class LibrusExamSoonSensor(
 ):
     """On from 24 hours before a test (or a short one) until it starts -
     for a lamp at the desk or "no games tonight". Switched exactly on time
-    by a timer at the next window edge, re-armed on every update."""
+    by a timer at the next window edge, re-armed on every update (the
+    timer writes the state itself, so an unchanged poll needn't)."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "exam_soon"
-    _always_write = True
     _unsub_timer: CALLBACK_TYPE | None = None
 
     def __init__(

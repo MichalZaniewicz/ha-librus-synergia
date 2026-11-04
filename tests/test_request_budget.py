@@ -644,3 +644,52 @@ async def test_changed_messages_count_refetches_saved_mailbox_lists(hass, hass_s
         if call.kwargs.get("mailbox", "inbox") == "inbox"
     ]
     assert inbox_calls and all(call.kwargs.get("limit") == 20 for call in inbox_calls)
+
+
+async def test_slow_modules_are_not_asked_every_cycle(hass, freezer) -> None:
+    """The library, the year's plan changes and the activities outside the
+    timetable (none at this school) every 6 hours, justifications hourly -
+    plan changes again at once when a polled timetable week changes."""
+    freezer.move_to(NOON)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    kinds = len(coordinator.extra_activity_kinds)
+
+    await coordinator._async_update_data()
+    for _ in range(3):
+        freezer.tick(CYCLE)
+        await coordinator._async_update_data()
+
+    assert client.async_get_library_lendings.call_count == 1
+    assert client.async_get_plan_changes.call_count == 1
+    assert client.async_get_extra_activities.call_count == kinds
+    assert client.async_get_justifications.call_count == 2  # now, and an hour later
+
+    week = next(iter(coordinator._timetable_cache))
+    client.async_get_timetable.return_value = {"Timetable": {week: [[]]}}
+    freezer.tick(CYCLE)
+    await coordinator._async_update_data()
+    assert client.async_get_plan_changes.call_count == 2
+    assert client.async_get_library_lendings.call_count == 1
+
+    freezer.tick(timedelta(hours=6))
+    await coordinator._async_update_data()
+    assert client.async_get_library_lendings.call_count == 2
+    assert client.async_get_extra_activities.call_count == 2 * kinds
+
+
+async def test_browsed_weeks_skip_activity_kinds_the_school_refuses(hass, freezer) -> None:
+    freezer.move_to(NOON)
+    client = build_mock_client()
+    client.async_get_extra_activities.side_effect = LibrusUnexpectedResponseError(
+        "Forbidden", status_code=403
+    )
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    polled = client.async_get_extra_activities.call_count
+
+    activities = await coordinator._async_fetch_extra_week(
+        dt_util.now().date() + timedelta(weeks=5)
+    )
+    assert activities == []
+    assert client.async_get_extra_activities.call_count == polled
