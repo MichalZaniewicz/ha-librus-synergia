@@ -105,6 +105,10 @@ CONF_EXTRA_ACTIVITIES = "extra_activities"
 # - after-school clubs, day-care, a sports class Librus doesn't know about
 # (cards issue #13). Empty by default.
 CONF_EXTRA_CALENDARS = "extra_calendars"
+
+# Subject colours for the companion cards, one "Subject: colour" a line
+# (subject_colors.py). Empty: every subject keeps its automatic colour.
+CONF_SUBJECT_COLORS = "subject_colors"
 EXTRA_ACTIVITY_KINDS = ("other", "individual_path", "one_to_one")
 DEFAULT_EXTRA_ACTIVITIES = list(EXTRA_ACTIVITY_KINDS)
 

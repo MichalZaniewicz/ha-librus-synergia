@@ -47,6 +47,7 @@ from .const import (
     CONF_EXTRA_CALENDARS,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_STUDENT_NUMBER,
+    CONF_SUBJECT_COLORS,
     DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
@@ -87,6 +88,7 @@ from .forecast import (
     subject_forecasts,
 )
 from .other_calendars import OtherActivity, async_other_activities
+from .subject_colors import palette_slots, parse_subject_colors, student_subjects
 from .school_day import (
     SchoolDay,
     SchoolDayRefresh,
@@ -2099,7 +2101,9 @@ class LibrusSchoolSensor(LibrusSensorBase):
     (refreshed on the same 24h cadence as subjects/teachers/classrooms)."""
 
     _attr_translation_key = "school"
-    _unrecorded_attributes = frozenset({"bell_schedule", "subject_teachers"})
+    _unrecorded_attributes = frozenset(
+        {"bell_schedule", "subject_teachers", "subject_palette", "subject_colors"}
+    )
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
         super().__init__(coordinator, entry, "school")
@@ -2133,6 +2137,21 @@ class LibrusSchoolSensor(LibrusSensorBase):
             # subject teachers never were, despite the data already being
             # fetched every cycle for the Next/Current lesson sensors.
             "subject_teachers": _subject_teachers(self.coordinator.data),
+            **self._subject_colors(),
+        }
+
+    def _subject_colors(self) -> dict[str, Any]:
+        """One colour per subject for the companion cards: a palette slot
+        (1-16) for each of the student's subjects, and the colours set under
+        Configure (Subject colours) - see subject_colors.py."""
+        data = self.coordinator.data
+        colors, unmatched = parse_subject_colors(
+            self._entry.options.get(CONF_SUBJECT_COLORS), data.subjects
+        )
+        return {
+            "subject_palette": palette_slots(student_subjects(data).values()),
+            "subject_colors": colors,
+            "subject_colors_unmatched": unmatched,
         }
 
 

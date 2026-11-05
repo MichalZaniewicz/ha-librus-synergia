@@ -18,6 +18,12 @@
   gradebook - grades (new and edited), absences and late arrivals, homework,
   new Agenda entries, timetable changes, messages and notes. Quiet days can
   be skipped. 39 blueprints.
+- **Subject colours.** Every subject the student has gets its own colour,
+  the same in every companion card: the School sensor's `subject_palette`
+  (a slot 1-16 of the cards' palette, stable per subject name) and
+  `subject_colors` - the ones you pick under Configure (Subject colours,
+  one "Matematyka: #2563eb" a line; `subject_colors_unmatched` lists lines
+  that didn't work).
 
 ## 0.12.42
 

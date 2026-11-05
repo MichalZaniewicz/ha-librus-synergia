@@ -79,6 +79,7 @@ from .const import (
     CONF_GRADE_THRESHOLDS,
     CONF_EXTRA_ACTIVITIES,
     CONF_EXTRA_CALENDARS,
+    CONF_SUBJECT_COLORS,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_COUNT,
@@ -507,6 +508,11 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         domain="calendar", multiple=True, exclude_entities=own_calendars
                     )
                 ),
+                # One "Subject: colour" a line; empty = automatic colours.
+                vol.Optional(
+                    CONF_SUBJECT_COLORS,
+                    description={"suggested_value": options.get(CONF_SUBJECT_COLORS)},
+                ): TextSelector(TextSelectorConfig(multiline=True)),
                 vol.Required(
                     CONF_CALENDAR_EMOJI,
                     default=options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI),
