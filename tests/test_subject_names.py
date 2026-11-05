@@ -6,11 +6,17 @@ from __future__ import annotations
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.librus_synergia.const import (
+    CONF_GRADE_CATEGORY_NAMES,
     CONF_SUBJECT_COLORS,
     CONF_SUBJECT_NAMES,
     DOMAIN,
 )
-from custom_components.librus_synergia.subject_names import parse_subject_names, rename_subjects
+from custom_components.librus_synergia.subject_names import (
+    category_key,
+    parse_category_names,
+    parse_subject_names,
+    rename_subjects,
+)
 
 from .conftest import build_mock_client, setup_integration
 
@@ -69,3 +75,42 @@ async def test_renamed_subject_shows_everywhere(hass) -> None:
     assert school["subject_names_unmatched"] == ["Biologia: Biology"]
     assert entry.runtime_data.data.subjects[42005] == "Maths"
     assert entry.runtime_data.original_subjects[42005] == "Matematyka"
+
+
+def test_parse_category_names() -> None:
+    names, unmatched = parse_category_names(
+        "KARTKOWKA: Quiz\naktywność: Activity\nSprawdzian:\nwycieczka: Trip\n",
+        ["kartkówka", "Aktywność", "sprawdzian"],
+    )
+    assert names == {category_key("kartkówka"): "Quiz", category_key("aktywność"): "Activity"}
+    assert unmatched == ["Sprawdzian:", "wycieczka: Trip"]
+
+
+async def test_renamed_grade_category_shows_in_the_grades(hass) -> None:
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 42005},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "3", "Category": {"Id": 11}, "Subject": {"Id": 42005},
+                 "Semester": 1, "AddDate": "2026-09-02"},
+            ]
+        },
+        async_get_grade_categories={
+            "Categories": [
+                {"Id": 10, "Name": "kartkówka", "CountToTheAverage": True, "Weight": 1},
+                {"Id": 11, "Name": "aktywność", "CountToTheAverage": True, "Weight": 1},
+            ]
+        },
+    )
+    entry = await setup_integration(
+        hass, client, options={CONF_GRADE_CATEGORY_NAMES: "Kartkowka: Quiz\nwycieczka: Trip"}
+    )
+
+    grades = hass.states.get(_entity_id(hass, entry, "subject_42005_average")).attributes["grades"]
+    assert {g["value"]: g["category"] for g in grades} == {"5": "Quiz", "3": "aktywność"}
+    school = hass.states.get(_entity_id(hass, entry, "school")).attributes
+    assert school["grade_category_names_unmatched"] == ["wycieczka: Trip"]
+    # Only the name changes: the weight and counting stay the school's.
+    assert entry.runtime_data.data.grade_categories[10].weight == 1

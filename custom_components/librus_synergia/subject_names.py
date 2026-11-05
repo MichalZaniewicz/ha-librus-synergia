@@ -10,7 +10,7 @@ subject themselves (colours, point scales) accept the Librus name or yours.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from .forecast import _subject_key
 
@@ -52,3 +52,34 @@ def rename_subjects(
 ) -> dict[int | str, str]:
     """`subjects` with your names in place of the Librus ones."""
     return {subject_id: names.get(subject_id, name) for subject_id, name in subjects.items()}
+
+
+def parse_category_names(
+    text: str | None, categories: Iterable[str]
+) -> tuple[dict[str, str], list[str]]:
+    """Grade category names from lines like "kartkówka: Quiz" (one category a
+    line), matched to the school's category names - case and Polish letters
+    don't matter. Returns the matched name's key (see `category_key`) ->
+    your name, and the lines that didn't work."""
+    matched: dict[str, str] = {}
+    unmatched: list[str] = []
+    if not text:
+        return matched, unmatched
+    known = {_subject_key(name) for name in categories if name}
+    for line in re.split(r"[\r\n]+", text):
+        line = line.strip()
+        if not line:
+            continue
+        original, separator, name = line.partition(":")
+        name = " ".join(name.split())[:_MAX_NAME]
+        key = _subject_key(original)
+        if not separator or key not in known or not name:
+            unmatched.append(line)
+            continue
+        matched[key] = name
+    return matched, unmatched
+
+
+def category_key(name: str) -> str:
+    """How a category name is matched (case and Polish letters don't matter)."""
+    return _subject_key(name)

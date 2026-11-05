@@ -2158,6 +2158,7 @@ class LibrusSchoolSensor(LibrusSensorBase):
             "subject_colors": colors,
             "subject_colors_unmatched": unmatched,
             "subject_names_unmatched": self.coordinator.subject_names_unmatched,
+            "grade_category_names_unmatched": self.coordinator.grade_category_names_unmatched,
         }
 
 

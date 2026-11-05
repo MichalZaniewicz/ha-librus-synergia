@@ -27,6 +27,11 @@
   scales accept the Librus name or yours, and a renamed subject keeps its
   colour; lines that didn't work are in the School sensor's
   `subject_names_unmatched`. (Thanks @dyingstr for the idea)
+- **Grade category names** (Configure). The same for grade categories -
+  "kartkówka: Quiz" - in ordinary, point and text grades, their events and
+  the cards; `grade_category_names_unmatched` on the School sensor. Agenda
+  categories keep their Polish names: tests are recognised by them.
+  (Thanks @dyingstr for the idea)
 - **School day end** sensor: when the school day really ends - the last
   lesson, or a later activity that day (Librus's own activities outside the
   timetable and the Other calendars with activities picked under

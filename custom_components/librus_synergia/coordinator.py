@@ -147,6 +147,7 @@ from .const import (
     CONF_POINT_GRADE_THRESHOLDS,
     CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
     CONF_SUBJECT_NAMES,
+    CONF_GRADE_CATEGORY_NAMES,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -208,7 +209,12 @@ from .const import (
     STATUS_STALE,
 )
 from .achievements import Badge, compute_badges, key_title
-from .subject_names import parse_subject_names, rename_subjects
+from .subject_names import (
+    category_key,
+    parse_category_names,
+    parse_subject_names,
+    rename_subjects,
+)
 from .forecast import (
     PointThresholds,
     PointThresholdsArg,
@@ -1071,6 +1077,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._subject_names_parsed: tuple[dict[int | str, str], list[str]] = ({}, [])
         self._display_subjects_for: dict[int | str, str] | None = None
         self._display_subjects_cache: dict[int | str, str] = {}
+        # Grade category names lines that didn't work (_rename_grade_categories).
+        self.grade_category_names_unmatched: list[str] = []
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
@@ -3433,7 +3441,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         attendance_types = self._cached_attendance_types
         timetable = merge_timetables(timetable_this_week, timetable_next_week)
         grade_categories = self._cached_grade_categories
-        return LibrusData(
+        data = LibrusData(
             me=me,
             grades=grades,
             grade_categories=grade_categories,
@@ -3500,6 +3508,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 parent_teacher_conferences_payload
             ),
         )
+        return self._rename_grade_categories(data)
 
     @property
     def achievements(self) -> list[dict[str, str]]:
@@ -3593,6 +3602,41 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         )
         subjects = data.subjects if data is not None else {}
         return parse_point_thresholds_by_subject(text, subjects, self._cached_subjects)
+
+    def _grade_category_names(self, data: LibrusData) -> tuple[dict[str, str], list[str]]:
+        """Grade category names under Configure, matched against this data's
+        category names (ordinary, point and text grades)."""
+        text = (
+            self.config_entry.options.get(CONF_GRADE_CATEGORY_NAMES) if self.config_entry else None
+        )
+        if not text:
+            return {}, []
+        known = [c.name for c in data.grade_categories.values()]
+        known += [g.category for g in data.point_grades if g.category]
+        known += [g.category for g in data.text_grades if g.category]
+        return parse_category_names(text, known)
+
+    def _rename_grade_categories(self, data: LibrusData) -> LibrusData:
+        """Your grade category names (Configure, issue #29) in place of the
+        school's, for ordinary, point and text grades. Matched against the
+        original names, so it's applied once to freshly built data."""
+        names, unmatched = self._grade_category_names(data)
+        self.grade_category_names_unmatched = unmatched
+        if not names:
+            return data
+
+        def new(name: str | None) -> str | None:
+            return names.get(category_key(name), name) if name else name
+
+        return dataclasses.replace(
+            data,
+            grade_categories={
+                cid: dataclasses.replace(c, name=new(c.name) or c.name)
+                for cid, c in data.grade_categories.items()
+            },
+            point_grades=[dataclasses.replace(g, category=new(g.category)) for g in data.point_grades],
+            text_grades=[dataclasses.replace(g, category=new(g.category)) for g in data.text_grades],
+        )
 
     @property
     def original_subjects(self) -> dict[int | str, str]:
