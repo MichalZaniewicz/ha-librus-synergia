@@ -27,9 +27,13 @@ blueprint:
 
     Messenger cuts long messages (Telegram, WhatsApp)? Set "Send as" to "One
     message per section": your action then runs once per section, with that
-    section's full text in `{{ message }}` and "(1/4)" in `{{ title }}`.
-    `{{ part }}` and `{{ parts }}` give the number of this message and the
-    total.
+    section's full text in `{{ message }}` (and in `{{ message_short }}` /
+    `{{ message_full }}`, so an action written for one message works too)
+    and "(1/4)" in `{{ title }}`. `{{ part }}` and `{{ parts }}` give the
+    number of this message and the total. If even one section is too long
+    for your messenger (CallMeBot for WhatsApp takes about 800 characters),
+    set "Longest message" and a long section is split into several
+    messages.
   domain: automation
   source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/weekly_ai_summary_notification.yaml
   input:
@@ -84,6 +88,20 @@ blueprint:
               value: one
             - label: One message per section
               value: per_section
+    max_length:
+      name: Longest message
+      description: >
+        With "One message per section": a section longer than this many
+        characters is split into several messages, at line and sentence
+        breaks. 0 = no limit. About 700 suits CallMeBot (WhatsApp).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4000
+          step: 50
+          unit_of_measurement: characters
+          mode: box
     sections:
       name: Sections
       description: >
@@ -145,6 +163,7 @@ variables:
   wanted_audience: !input audience
   detail: !input detail
   send_as: !input send_as
+  max_length: !input max_length
   section_order: [grades, attendance, behaviour, next_week, school_news]
 
 conditions:
@@ -235,6 +254,37 @@ actions:
           {%- for a in d.advice -%}{%- set todo.lines = todo.lines + ['- ' ~ a] -%}{%- endfor -%}
           {%- set ns.parts = ns.parts[:-1] + [ns.parts[-1] ~ '\n\n' ~ (todo.lines | join('\n'))] -%}
         {%- endif -%}
+        {#- Longest message: a longer part becomes several, cut at line breaks,
+            then sentences, then (a sentence still too long) by length. -#}
+        {%- set limit = max_length | int(0) -%}
+        {%- if send_as == 'per_section' and limit > 0 -%}
+          {%- set out = namespace(parts=[]) -%}
+          {%- for p in ns.parts -%}
+            {%- set cur = namespace(text='', units=[]) -%}
+            {%- for line in p.split('\n') -%}
+              {%- if line | length <= limit -%}
+                {%- set cur.units = cur.units + [line] -%}
+              {%- else -%}
+                {%- for sentence in line.split('. ') -%}
+                  {%- set whole = sentence ~ ('' if loop.last else '.') -%}
+                  {%- for i in range(0, whole | length, limit) -%}
+                    {%- set cur.units = cur.units + [whole[i:i + limit]] -%}
+                  {%- endfor -%}
+                {%- endfor -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- for unit in cur.units -%}
+              {%- if cur.text and (cur.text | length) + 1 + (unit | length) > limit -%}
+                {%- set out.parts = out.parts + [cur.text] -%}
+                {%- set cur.text = unit -%}
+              {%- else -%}
+                {%- set cur.text = (cur.text ~ '\n' ~ unit) if cur.text else unit -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if cur.text -%}{%- set out.parts = out.parts + [cur.text] -%}{%- endif -%}
+          {%- endfor -%}
+          {%- set ns.parts = out.parts -%}
+        {%- endif -%}
         {{ ns.parts | tojson }}
       parts: "{{ message_parts | count if send_as == 'per_section' else 1 }}"
       part: 1
@@ -250,11 +300,17 @@ actions:
             - variables:
                 part: "{{ repeat.index }}"
                 message: "{{ repeat.item }}"
+                # An action written with the fixed formats sends the part too,
+                # not the whole report once per part.
+                message_short: "{{ repeat.item }}"
+                message_full: "{{ repeat.item }}"
                 title: "{{ base_title }} ({{ repeat.index }}/{{ parts }})"
             - sequence: !input report_action
     else:
       - variables:
           message: "{{ message_parts[0] if send_as == 'per_section' and message_parts else message }}"
+          message_short: "{{ message_parts[0] if send_as == 'per_section' and message_parts else message_short }}"
+          message_full: "{{ message_parts[0] if send_as == 'per_section' and message_parts else message_full }}"
       - sequence: !input report_action
 
 mode: queued

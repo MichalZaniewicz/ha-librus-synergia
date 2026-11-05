@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+- **Weekly AI Summary Report blueprint, "One message per section".** An
+  action written with `{{ message_full }}` or `{{ message_short }}` now
+  sends the section too - it used to send the whole report once per
+  section. New "Longest message" setting splits a section that is still
+  too long for the messenger (about 700 for CallMeBot on WhatsApp) at line
+  and sentence breaks. (Thanks @tOOmki for reporting)
+
 ### Added
 - **School day end** sensor: when the school day really ends - the last
   lesson, or a later activity that day (Librus's own activities outside the
