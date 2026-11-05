@@ -19,6 +19,14 @@
   and sentence breaks. (Thanks @tOOmki for reporting)
 
 ### Added
+- **Subject names** (Configure). Your own names for subjects, one
+  "Edukacja matematyczna: Maths" a line - for families where someone doesn't
+  read Polish. The name is swapped where the integration builds its data, so
+  it shows everywhere: entity names, attributes, events, calendars, Assist,
+  the weekly AI summary and every companion card. Subject colours and point
+  scales accept the Librus name or yours, and a renamed subject keeps its
+  colour; lines that didn't work are in the School sensor's
+  `subject_names_unmatched`. (Thanks @dyingstr for the idea)
 - **School day end** sensor: when the school day really ends - the last
   lesson, or a later activity that day (Librus's own activities outside the
   timetable and the Other calendars with activities picked under

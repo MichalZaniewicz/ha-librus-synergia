@@ -2145,13 +2145,19 @@ class LibrusSchoolSensor(LibrusSensorBase):
         (1-16) for each of the student's subjects, and the colours set under
         Configure (Subject colours) - see subject_colors.py."""
         data = self.coordinator.data
+        originals = self.coordinator.original_subjects
         colors, unmatched = parse_subject_colors(
-            self._entry.options.get(CONF_SUBJECT_COLORS), data.subjects
+            self._entry.options.get(CONF_SUBJECT_COLORS), data.subjects, originals
         )
+        # The slot comes from the Librus name, so a renamed subject (Subject
+        # names under Configure) keeps its colour.
+        mine = student_subjects(data)
+        slots = palette_slots(originals.get(sid, name) for sid, name in mine.items())
         return {
-            "subject_palette": palette_slots(student_subjects(data).values()),
+            "subject_palette": {name: slots[originals.get(sid, name)] for sid, name in mine.items()},
             "subject_colors": colors,
             "subject_colors_unmatched": unmatched,
+            "subject_names_unmatched": self.coordinator.subject_names_unmatched,
         }
 
 

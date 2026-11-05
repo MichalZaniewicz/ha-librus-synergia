@@ -208,7 +208,9 @@ def _subject_key(name: str) -> str:
 
 
 def parse_point_thresholds_by_subject(
-    text: str | None, subjects: Mapping[int | str, str]
+    text: str | None,
+    subjects: Mapping[int | str, str],
+    aliases: Mapping[int | str, str] | None = None,
 ) -> tuple[dict[int | str, tuple[float, ...]], list[str]]:
     """Per-subject thresholds from lines like "fizyka: 30, 50, 70, 85, 96"
     (one subject a line - ";" may separate the values, as in the general
@@ -221,6 +223,9 @@ def parse_point_thresholds_by_subject(
     if not text:
         return matched, unmatched
     names = {_subject_key(name): subject_id for subject_id, name in subjects.items()}
+    # The Librus names too, when the subjects are renamed (subject_names.py).
+    for subject_id, name in (aliases or {}).items():
+        names.setdefault(_subject_key(name), subject_id)
     for entry in re.split(r"[\r\n]+", text):
         entry = entry.strip()
         if not entry:

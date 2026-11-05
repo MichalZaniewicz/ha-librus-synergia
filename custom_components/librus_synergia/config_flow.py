@@ -80,6 +80,7 @@ from .const import (
     CONF_EXTRA_ACTIVITIES,
     CONF_EXTRA_CALENDARS,
     CONF_SUBJECT_COLORS,
+    CONF_SUBJECT_NAMES,
     CONF_HIDE_EMPTY_SUBJECTS,
     CONF_MERGE_PARALLEL_LESSONS,
     CONF_MESSAGES_COUNT,
@@ -508,6 +509,11 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                         domain="calendar", multiple=True, exclude_entities=own_calendars
                     )
                 ),
+                # One "Librus name: your name" a line; empty = Librus's names.
+                vol.Optional(
+                    CONF_SUBJECT_NAMES,
+                    description={"suggested_value": options.get(CONF_SUBJECT_NAMES)},
+                ): TextSelector(TextSelectorConfig(multiline=True)),
                 # One "Subject: colour" a line; empty = automatic colours.
                 vol.Optional(
                     CONF_SUBJECT_COLORS,

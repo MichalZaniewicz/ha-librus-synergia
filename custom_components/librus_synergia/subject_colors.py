@@ -56,7 +56,9 @@ def palette_slots(names: Iterable[str]) -> dict[str, int]:
 
 
 def parse_subject_colors(
-    text: str | None, subjects: Mapping[int | str, str]
+    text: str | None,
+    subjects: Mapping[int | str, str],
+    aliases: Mapping[int | str, str] | None = None,
 ) -> tuple[dict[str, str], list[str]]:
     """Colours from lines like "Matematyka: #2563eb" (one subject a line),
     matched to `subjects` by name - case and Polish letters don't matter -
@@ -67,6 +69,10 @@ def parse_subject_colors(
     if not text:
         return matched, unmatched
     names = {_subject_key(name): name for name in subjects.values()}
+    # The Librus names too, when the subjects are renamed (subject_names.py).
+    for subject_id, original in (aliases or {}).items():
+        if subject_id in subjects:
+            names.setdefault(_subject_key(original), subjects[subject_id])
     for line in re.split(r"[\r\n]+", text):
         line = line.strip()
         if not line:

@@ -146,6 +146,7 @@ from .const import (
     CONF_MESSAGES_ENABLED,
     CONF_POINT_GRADE_THRESHOLDS,
     CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
+    CONF_SUBJECT_NAMES,
     CONF_QUIET_HOURS_ENABLED,
     CONF_QUIET_HOURS_END,
     CONF_QUIET_HOURS_START,
@@ -207,6 +208,7 @@ from .const import (
     STATUS_STALE,
 )
 from .achievements import Badge, compute_badges, key_title
+from .subject_names import parse_subject_names, rename_subjects
 from .forecast import (
     PointThresholds,
     PointThresholdsArg,
@@ -1064,6 +1066,11 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._last_fetch_at: datetime | None = None
         self._force_next_fetch = False
         self._cached_subjects: dict[int | str, str] = {}
+        # Subject names under Configure (see _display_subjects).
+        self._subject_names_key: tuple[int, str | None] | None = None
+        self._subject_names_parsed: tuple[dict[int | str, str], list[str]] = ({}, [])
+        self._display_subjects_for: dict[int | str, str] | None = None
+        self._display_subjects_cache: dict[int | str, str] = {}
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
@@ -3437,7 +3444,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             homeworks=homeworks,
             school_notices=school_notices,
             lucky_number=lucky_number,
-            subjects=self._cached_subjects,
+            subjects=self._display_subjects(),
             teachers=self._cached_teachers,
             classrooms=self._cached_classrooms,
             lesson_subjects=self._cached_lesson_subjects,
@@ -3585,7 +3592,38 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             else None
         )
         subjects = data.subjects if data is not None else {}
-        return parse_point_thresholds_by_subject(text, subjects)
+        return parse_point_thresholds_by_subject(text, subjects, self._cached_subjects)
+
+    @property
+    def original_subjects(self) -> dict[int | str, str]:
+        """The subjects with the names from Librus, whatever Subject names
+        under Configure renames - for options that name a subject."""
+        return self._cached_subjects
+
+    def _subject_names(self) -> tuple[dict[int | str, str], list[str]]:
+        text = self.config_entry.options.get(CONF_SUBJECT_NAMES) if self.config_entry else None
+        key = (id(self._cached_subjects), text)
+        if self._subject_names_key != key:
+            self._subject_names_key = key
+            self._subject_names_parsed = parse_subject_names(text, self._cached_subjects)
+        return self._subject_names_parsed
+
+    def _display_subjects(self) -> dict[int | str, str]:
+        """The subjects as the data shows them: your names from Subject
+        names under Configure (issue #29) in place of Librus's. The same dict
+        object while nothing changes, so an unchanged poll keeps equal data."""
+        names, _unmatched = self._subject_names()
+        if not names:
+            return self._cached_subjects
+        if self._display_subjects_for is not self._cached_subjects:
+            self._display_subjects_for = self._cached_subjects
+            self._display_subjects_cache = rename_subjects(self._cached_subjects, names)
+        return self._display_subjects_cache
+
+    @property
+    def subject_names_unmatched(self) -> list[str]:
+        """Subject names lines that didn't work, to show the user."""
+        return self._subject_names()[1]
 
     def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
         """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.

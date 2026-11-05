@@ -109,6 +109,10 @@ CONF_EXTRA_CALENDARS = "extra_calendars"
 # Subject colours for the companion cards, one "Subject: colour" a line
 # (subject_colors.py). Empty: every subject keeps its automatic colour.
 CONF_SUBJECT_COLORS = "subject_colors"
+
+# Your own subject names, one "Librus name: your name" a line
+# (subject_names.py, issue #29). Empty: the names from Librus.
+CONF_SUBJECT_NAMES = "subject_names"
 EXTRA_ACTIVITY_KINDS = ("other", "individual_path", "one_to_one")
 DEFAULT_EXTRA_ACTIVITIES = list(EXTRA_ACTIVITY_KINDS)
 
