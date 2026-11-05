@@ -488,7 +488,7 @@
     },
     "send_message": {
       "name": "Enviar mensagem",
-      "description": "Envia uma mensagem do Wiadomości a um professor ou à escola, ou responde a uma mensagem recebida na sua conversa. Requer \"Permitir o envio de mensagens (beta)\" ativado em Configurar (exceto num ensaio). Enviada uma vez, nunca repetida; no máximo 10 mensagens por hora.",
+      "description": "Envia uma mensagem do Wiadomości a um professor ou à escola, ou responde a uma mensagem recebida na sua conversa. Requer \"Permitir o envio de mensagens (beta)\" ativado em Configurar (exceto numa simulação). Enviada uma vez, nunca repetida; no máximo 10 mensagens por hora.",
       "fields": {
         "device_id": {
           "name": "Dispositivo",
@@ -511,7 +511,7 @@
           "description": "O id de uma mensagem recebida (\"id\" no atributo \"recent\" do sensor Mensagens não lidas): a mensagem vai para o seu remetente, na sua conversa. Abri-la para encontrar o remetente marca-a como lida."
         },
         "dry_run": {
-          "name": "Ensaio",
+          "name": "Simulação",
           "description": "Apenas mostrar a quem iria e o quê - nada é enviado."
         }
       }
@@ -550,7 +550,7 @@
     },
     "sync_calendar": {
       "name": "Copiar para o calendário",
-      "description": "Copia testes, visitas de estudo, reuniões e dias livres para outro calendário (p. ex. um Google Calendar da família) e mantém as cópias atualizadas: um teste mudado de data é mudado, um cancelado é removido. Só são alterados os eventos que esta ação adicionou (marcados na descrição).",
+      "description": "Copia testes, visitas de estudo, reuniões e dias livres para outro calendário (p. ex. um Google Calendar da família) e mantém as cópias atualizadas: se um teste mudar de data, a cópia também muda; se for cancelado, a cópia é removida. Só são alterados os eventos que esta ação adicionou (marcados na descrição).",
       "fields": {
         "device_id": {
           "name": "Dispositivo",
@@ -577,7 +577,7 @@
           "description": "Colocado antes de cada título, p. ex. o primeiro nome do aluno (\"Ola:\") quando vários filhos partilham um calendário."
         },
         "dry_run": {
-          "name": "Ensaio",
+          "name": "Simulação",
           "description": "Apenas listar o que mudaria, sem alterar o calendário."
         }
       }
@@ -599,10 +599,10 @@
   },
   "exceptions": {
     "message_sending_disabled": {
-      "message": "O envio de mensagens está desativado. Ative \"Permitir o envio de mensagens (beta)\" em Configurar da integração, ou use um ensaio."
+      "message": "O envio de mensagens está desativado. Ative \"Permitir o envio de mensagens (beta)\" em Configurar da integração, ou use uma simulação."
     },
     "message_no_recipient": {
-      "message": "Indique um destinatário, ou Responder a com o id de uma mensagem recebida."
+      "message": "Indique um destinatário, ou preencha Responder a com o id de uma mensagem recebida."
     },
     "message_no_topic": {
       "message": "Indique um assunto para a mensagem."
