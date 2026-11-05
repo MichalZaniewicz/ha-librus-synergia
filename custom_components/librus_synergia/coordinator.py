@@ -1079,6 +1079,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._display_subjects_cache: dict[int | str, str] = {}
         # Grade category names lines that didn't work (_rename_grade_categories).
         self.grade_category_names_unmatched: list[str] = []
+        # Grade categories the Names step offers (_rename_grade_categories).
+        self.grade_category_choices: list[str] = []
         self._cached_teachers: dict[int | str, str] = {}
         self._cached_classrooms: dict[int | str, str] = {}
         self._cached_lesson_subjects: dict[int, int] = {}
@@ -3620,6 +3622,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         """Your grade category names (Configure, issue #29) in place of the
         school's, for ordinary, point and text grades. Matched against the
         original names, so it's applied once to freshly built data."""
+        # What the Names step under Configure offers: the categories this
+        # student's grades use, with the school's names.
+        used = {g.category_id for g in data.grades}
+        self.grade_category_choices = sorted(
+            {c.name for cid, c in data.grade_categories.items() if cid in used and c.name}
+            | {g.category for g in data.point_grades if g.category}
+            | {g.category for g in data.text_grades if g.category},
+            key=category_key,
+        )
         names, unmatched = self._grade_category_names(data)
         self.grade_category_names_unmatched = unmatched
         if not names:
@@ -3663,6 +3674,23 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             self._display_subjects_for = self._cached_subjects
             self._display_subjects_cache = rename_subjects(self._cached_subjects, names)
         return self._display_subjects_cache
+
+    @property
+    def subject_choices(self) -> list[str]:
+        """The student's subjects with the names from Librus, for the Names
+        step under Configure: the ones in the timetable, the standing plan or
+        the grades - not the school's whole list."""
+        data = self.data
+        if data is None:
+            return []
+        ids: set[int | str] = {g.subject_id for g in data.grades if g.subject_id is not None}
+        for lessons in data.timetable.values():
+            ids.update(lesson.subject_id for lesson in lessons if lesson.subject_id is not None)
+        ids.update(lesson.subject_id for lesson in data.standing_timetable if lesson.subject_id is not None)
+        return sorted(
+            {self._cached_subjects[sid] for sid in ids if self._cached_subjects.get(sid)},
+            key=category_key,
+        )
 
     @property
     def subject_names_unmatched(self) -> list[str]:

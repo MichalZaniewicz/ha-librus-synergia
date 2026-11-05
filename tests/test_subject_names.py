@@ -3,7 +3,10 @@ where the data is built, so every entity, attribute and card shows them."""
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.librus_synergia.const import (
     CONF_GRADE_CATEGORY_NAMES,
@@ -114,3 +117,69 @@ async def test_renamed_grade_category_shows_in_the_grades(hass) -> None:
     assert school["grade_category_names_unmatched"] == ["wycieczka: Trip"]
     # Only the name changes: the weight and counting stay the school's.
     assert entry.runtime_data.data.grade_categories[10].weight == 1
+
+
+async def test_names_step_lists_the_accounts_subjects_and_categories(hass) -> None:
+    """Configure -> Subject and category names: every subject and grade
+    category of the account with a field for your name, saved as lines."""
+    client = build_mock_client(
+        async_get_subjects={
+            "Subjects": [
+                {"Id": 42005, "Name": "Matematyka"},
+                {"Id": 42006, "Name": "Fizyka"},
+                {"Id": 42999, "Name": "Astronomia"},  # the school's, not the student's
+            ]
+        },
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 42005},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+                {"Id": 2, "Grade": "4", "Category": {"Id": 10}, "Subject": {"Id": 42006},
+                 "Semester": 1, "AddDate": "2026-09-02"},
+            ]
+        },
+        async_get_grade_categories={
+            "Categories": [
+                {"Id": 10, "Name": "kartkówka", "CountToTheAverage": True, "Weight": 1},
+                {"Id": 11, "Name": "projekt", "CountToTheAverage": True, "Weight": 1},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client, options={CONF_SUBJECT_NAMES: "Fizyka: Physics"})
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "names"})
+    assert result["type"] == "form"
+    schema = result["data_schema"].schema
+    subjects = next(v for k, v in schema.items() if str(k) == "subjects").schema.schema
+    categories = next(v for k, v in schema.items() if str(k) == "categories").schema.schema
+    assert [str(k) for k in subjects] == ["Fizyka", "Matematyka"]
+    assert [str(k) for k in categories] == ["kartkówka"]  # only the ones in use
+    fizyka = next(k for k in subjects if str(k) == "Fizyka")
+    assert fizyka.description == {"suggested_value": "Physics"}
+
+    # Saving the form also reloads the entry: keep the mocked client.
+    with patch("custom_components.librus_synergia.LibrusApiClient", return_value=client):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {"subjects": {"Matematyka": " Maths ", "Fizyka": ""}, "categories": {"kartkówka": "Quiz"}},
+        )
+        await hass.async_block_till_done()
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_SUBJECT_NAMES] == "Matematyka: Maths"
+    assert entry.options[CONF_GRADE_CATEGORY_NAMES] == "kartkówka: Quiz"
+
+
+async def test_saving_settings_keeps_the_names(hass) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"username": "1234567u", "password": "x"},
+        options={CONF_SUBJECT_NAMES: "Matematyka: Maths", CONF_GRADE_CATEGORY_NAMES: "kartkówka: Quiz"},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"next_step_id": "settings"})
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == "create_entry"
+    assert entry.options[CONF_SUBJECT_NAMES] == "Matematyka: Maths"
+    assert entry.options[CONF_GRADE_CATEGORY_NAMES] == "kartkówka: Quiz"

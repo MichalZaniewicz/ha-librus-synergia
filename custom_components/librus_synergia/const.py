@@ -118,6 +118,8 @@ CONF_SUBJECT_NAMES = "subject_names"
 # (issue #29). Agenda categories stay as they are - tests are recognised
 # by their Polish names.
 CONF_GRADE_CATEGORY_NAMES = "grade_category_names"
+# Set on their own options step (Names); Settings keeps them when saving.
+NAME_OPTION_KEYS = (CONF_SUBJECT_NAMES, CONF_GRADE_CATEGORY_NAMES)
 EXTRA_ACTIVITY_KINDS = ("other", "individual_path", "one_to_one")
 DEFAULT_EXTRA_ACTIVITIES = list(EXTRA_ACTIVITY_KINDS)
 

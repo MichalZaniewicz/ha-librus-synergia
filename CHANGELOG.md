@@ -19,19 +19,18 @@
   and sentence breaks. (Thanks @tOOmki for reporting)
 
 ### Added
-- **Subject names** (Configure). Your own names for subjects, one
-  "Edukacja matematyczna: Maths" a line - for families where someone doesn't
-  read Polish. The name is swapped where the integration builds its data, so
-  it shows everywhere: entity names, attributes, events, calendars, Assist,
-  the weekly AI summary and every companion card. Subject colours and point
-  scales accept the Librus name or yours, and a renamed subject keeps its
-  colour; lines that didn't work are in the School sensor's
-  `subject_names_unmatched`. (Thanks @dyingstr for the idea)
-- **Grade category names** (Configure). The same for grade categories -
-  "kartkówka: Quiz" - in ordinary, point and text grades, their events and
-  the cards; `grade_category_names_unmatched` on the School sensor. Agenda
-  categories keep their Polish names: tests are recognised by them.
-  (Thanks @dyingstr for the idea)
+- **Your own names for subjects and grade categories** - for families where
+  someone doesn't read Polish. Configure has a new step, **Subject and
+  category names**: every subject of the student and every grade category in
+  use is listed with a field for your name ("Edukacja matematyczna" ->
+  "Maths", "kartkówka" -> "Quiz"); an empty field keeps the Librus name.
+  Subject names are swapped where the integration builds its data, so they
+  show everywhere: entity names, attributes, events, calendars, Assist, the
+  weekly AI summary and every companion card. Category names cover
+  ordinary, point and text grades (only the name changes, not the weight).
+  Agenda categories keep their Polish names - tests are recognised by them.
+  Subject colours and point scales accept the Librus name or yours, and a
+  renamed subject keeps its colour. (Thanks @dyingstr for the idea)
 - **School day end** sensor: when the school day really ends - the last
   lesson, or a later activity that day (Librus's own activities outside the
   timetable and the Other calendars with activities picked under
