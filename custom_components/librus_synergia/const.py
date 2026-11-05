@@ -232,7 +232,7 @@ DEFAULT_AI_INCLUDE_MESSAGES = False
 # server language (Settings > System > General), not a user's profile.
 CONF_AI_LANGUAGE = "ai_language"
 AI_LANGUAGE_AUTO = "auto"
-AI_LANGUAGES = (AI_LANGUAGE_AUTO, "pl", "en")
+AI_LANGUAGES = (AI_LANGUAGE_AUTO, "pl", "en", "uk", "pt")
 DEFAULT_AI_LANGUAGE = AI_LANGUAGE_AUTO
 AI_OPTION_KEYS = (
     CONF_AI_TASK_ENTITY,
@@ -403,6 +403,14 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
 # when it's raised/cleared.
 ISSUE_SCHOOL_YEAR_ROLLOVER = "school_year_rollover"
 ISSUE_OPTIONAL_ENDPOINT_DEGRADED = "optional_endpoint_degraded"
+# A line under Configure that matches nothing any more (the school renamed
+# a subject, a typo...): issue translation key -> the option it is about.
+UNMATCHED_SETTING_ISSUES = {
+    "unmatched_subject_names": CONF_SUBJECT_NAMES,
+    "unmatched_category_names": CONF_GRADE_CATEGORY_NAMES,
+    "unmatched_subject_colors": CONF_SUBJECT_COLORS,
+    "unmatched_point_thresholds": CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
+}
 
 # The daily lucky number ("szczęśliwy numerek") is normally published by this
 # local hour; the coordinator avoids re-polling it before then once today's

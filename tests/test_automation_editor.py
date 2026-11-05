@@ -292,6 +292,16 @@ def test_logbook_lines() -> None:
     entry = librus_logbook.describe(EVENT_TIMETABLE_CHANGED, change, "en")
     assert entry["name"] == "Librus"
     assert entry["message"] == "room change: Fizyka - 2026-11-03, lesson 2"
+    assert (
+        librus_logbook.describe(EVENT_NEW_ABSENCE, absence, "pt")["message"]
+        == "falta injustificada: 02.11, aula 3"
+    )
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "uk")["message"].startswith("нова оцінка 5")
+    # Any other language: English.
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "de")["message"].startswith("new grade")
+    # Every language has every phrase.
+    words = librus_logbook._WORDS
+    assert all(set(table) == set(words["en"]) for table in words.values())
 
 
 def test_every_event_has_a_logbook_line() -> None:

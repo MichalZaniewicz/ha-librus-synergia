@@ -21,6 +21,7 @@ from .ai_summary import LibrusWeeklySummary
 from .average_history import LibrusAverageHistory, statistic_id_prefix
 from .const import (
     LIVE_OPTIONS,
+    UNMATCHED_SETTING_ISSUES,
     CONF_AI_AUDIENCE,
     CONF_AI_CONTEXT,
     CONF_AI_INCLUDE_MESSAGES,
@@ -49,6 +50,7 @@ from .coordinator import (
     optional_endpoint_issue_id,
     payload_store_key,
     school_year_issue_id,
+    unmatched_setting_issue_id,
     state_store_key,
 )
 from .forecast import DataMemo
@@ -257,6 +259,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> N
     the coordinator is already gone by the time this runs (unload happens
     first)."""
     issue_ids = [school_year_issue_id(entry.entry_id)] + [
+        unmatched_setting_issue_id(entry.entry_id, kind) for kind in UNMATCHED_SETTING_ISSUES
+    ] + [
         optional_endpoint_issue_id(entry.entry_id, label)
         for label in (
             *OPTIONAL_ENDPOINT_LABELS,

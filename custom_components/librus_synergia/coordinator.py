@@ -190,6 +190,7 @@ from .const import (
     EVENT_TIMETABLE_CHANGED,
     ISSUE_OPTIONAL_ENDPOINT_DEGRADED,
     ISSUE_SCHOOL_YEAR_ROLLOVER,
+    CONF_SUBJECT_COLORS,
     LAST_GOOD_DATA_MAX_AGE,
     LUCKY_NUMBER_PUBLISH_HOUR,
     OPTIONAL_ENDPOINT_LABELS,
@@ -209,6 +210,7 @@ from .const import (
     STATUS_STALE,
 )
 from .achievements import Badge, compute_badges, key_title
+from .subject_colors import parse_subject_colors
 from .subject_names import (
     category_key,
     parse_category_names,
@@ -773,6 +775,13 @@ def optional_endpoint_issue_id(entry_id: str, label: str) -> str:
     return f"{ISSUE_OPTIONAL_ENDPOINT_DEGRADED}_{entry_id}_{label.lower().replace('/', '_')}"
 
 
+def unmatched_setting_issue_id(entry_id: str, kind: str) -> str:
+    """Repair-issue id for one entry's lines under Configure that match
+    nothing (`const.UNMATCHED_SETTING_ISSUES`) - public for the same reason
+    as `optional_endpoint_issue_id`."""
+    return f"{kind}_{entry_id}"
+
+
 def school_year_issue_id(entry_id: str) -> str:
     """Stable repair-issue id for one entry's school-year-rollover check -
     see `optional_endpoint_issue_id`'s docstring for why this is public."""
@@ -1079,6 +1088,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._display_subjects_cache: dict[int | str, str] = {}
         # Grade category names lines that didn't work (_rename_grade_categories).
         self.grade_category_names_unmatched: list[str] = []
+        # Lines under Configure that matched nothing, per repair issue
+        # (_check_unmatched_settings) - what the registry was last told.
+        self._unmatched_reported: dict[str, tuple[str, ...]] = {}
         # Grade categories the Names step offers (_rename_grade_categories).
         self.grade_category_choices: list[str] = []
         self._cached_teachers: dict[int | str, str] = {}
@@ -3510,7 +3522,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 parent_teacher_conferences_payload
             ),
         )
-        return self._rename_grade_categories(data)
+        data = self._rename_grade_categories(data)
+        self._check_unmatched_settings(data)
+        return data
 
     @property
     def achievements(self) -> list[dict[str, str]]:
@@ -3696,6 +3710,48 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
     def subject_names_unmatched(self) -> list[str]:
         """Subject names lines that didn't work, to show the user."""
         return self._subject_names()[1]
+
+    def _check_unmatched_settings(self, data: LibrusData) -> None:
+        """A repair issue for each setting under Configure with lines that
+        match nothing - typically the school renamed a subject - so they
+        don't go unnoticed in an attribute. Cleared once they match or are
+        gone. Judged only when Librus's subjects (and, for the category
+        names, the grade categories) are known."""
+        if self.config_entry is None or not self._cached_subjects:
+            return
+        options = self.config_entry.options
+        found: dict[str, list[str]] = {
+            "unmatched_subject_names": self._subject_names()[1],
+            "unmatched_subject_colors": parse_subject_colors(
+                options.get(CONF_SUBJECT_COLORS), data.subjects, self._cached_subjects
+            )[1],
+            "unmatched_point_thresholds": self._point_thresholds_by_subject(data)[1],
+        }
+        if data.grade_categories:
+            found["unmatched_category_names"] = self.grade_category_names_unmatched
+        entry_id = self.config_entry.entry_id
+        for kind, lines in found.items():
+            key = tuple(lines)
+            if self._unmatched_reported.get(kind, ()) == key and kind in self._unmatched_reported:
+                continue
+            self._unmatched_reported[kind] = key
+            issue_id = unmatched_setting_issue_id(entry_id, kind)
+            if not lines:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                continue
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=kind,
+                translation_placeholders={
+                    "student": self.config_entry.title,
+                    "lines": "\n".join(f"- {line}" for line in lines),
+                },
+                data={"entry_id": entry_id, "kind": kind},
+            )
 
     def _fire_forecast_events(self, data: LibrusData, today: date) -> None:
         """EVENT_FORECAST_CHANGED when a subject's forecast grade moves.

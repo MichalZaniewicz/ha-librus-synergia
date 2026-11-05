@@ -1,0 +1,874 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Librus Synergia (não oficial)",
+        "description": "Inicie sessão com o seu login do Librus (p. ex. \"1234567u\") e a palavra-passe. Esta integração usa a API web privada do Librus e pode violar os Termos de Serviço do Librus - use a sua própria conta por sua conta e risco. A integração mantém a sessão ativa através da renovação do próprio Librus, mas quando isso não é possível (p. ex. depois de o Home Assistant ter estado desligado durante algum tempo) tem de iniciar sessão novamente, por isso - ao contrário de algumas integrações - a sua palavra-passe É guardada (juntamente com a sessão) para o fazer sem lha pedir; nunca sai da sua instância do Home Assistant.",
+        "data": {
+          "username": "Login",
+          "password": "Palavra-passe"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Autenticar novamente o Librus Synergia",
+        "description": "Não foi possível renovar a sessão guardada de {login}. Introduza novamente a palavra-passe para iniciar sessão.",
+        "data": {
+          "password": "Palavra-passe"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar o Librus Synergia",
+        "description": "Corrija o login ou a palavra-passe desta entrada. O login tem de continuar a pertencer à mesma conta Librus para a qual esta entrada foi configurada.",
+        "data": {
+          "username": "Login",
+          "password": "Palavra-passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "O início de sessão foi recusado. Verifique o login e a palavra-passe.",
+      "captcha_needed": "O Librus está a pedir um captcha, que esta integração não consegue resolver automaticamente. Tente mais tarde ou inicie sessão primeiro uma vez através da aplicação ou do site oficial do Librus.",
+      "account_action_required": "A sua conta Librus precisa primeiro de uma ação no próprio site do Librus (aceitar o regulamento ou alterar a palavra-passe); depois tente novamente.",
+      "cannot_connect": "Não foi possível contactar os servidores do Librus.",
+      "unknown": "Erro inesperado."
+    },
+    "abort": {
+      "already_configured": "Esta conta Librus já está configurada.",
+      "already_in_progress": "Esta conta Librus já está a ser configurada.",
+      "reauth_successful": "A nova autenticação foi bem-sucedida.",
+      "reconfigure_successful": "A reconfiguração foi bem-sucedida.",
+      "unique_id_mismatch": "Este login pertence a uma conta Librus diferente daquela para a qual esta entrada foi configurada. Se pretendia adicionar um novo aluno, remova e volte a adicionar a integração."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opções do Librus Synergia",
+        "menu_options": {
+          "settings": "Definições",
+          "names": "Nomes das disciplinas e categorias",
+          "ai_summary": "Resumo semanal por IA"
+        }
+      },
+      "names": {
+        "title": "Nomes das disciplinas e categorias",
+        "description": "Os seus próprios nomes, mostrados em todo o lado em vez dos do Librus: nomes das entidades, atributos, eventos, calendários, Assist, o resumo semanal por IA e os cartões. Deixe um campo vazio para manter o nome do Librus. As categorias do Terminarz (agenda: Sprawdzian, Wycieczka...) ficam em polaco - é por elas que os testes são reconhecidos.",
+        "sections": {
+          "subjects": { "name": "Disciplinas" },
+          "categories": { "name": "Categorias de notas" }
+        }
+      },
+      "ai_summary": {
+        "title": "Resumo semanal por IA",
+        "description": "Uma vez por semana, um modelo de IA à sua escolha escreve um resumo da semana escolar: notas, assiduidade, comportamento e a semana seguinte. Usa o AI Task do Home Assistant - configure primeiro um fornecedor de IA (Google Gemini, OpenAI, Anthropic, um Ollama local...). Só são enviados dados que esta integração já tem, e apenas para o fornecedor que escolher.",
+        "data": {
+          "ai_task_entity": "Modelo de IA",
+          "ai_audience": "Destinatário",
+          "ai_language": "Idioma",
+          "ai_weekday": "Dia",
+          "ai_time": "Hora",
+          "ai_include_messages": "Incluir mensagens e anúncios",
+          "ai_extra_context": "As suas notas para a IA"
+        },
+        "data_description": {
+          "ai_task_entity": "A entidade AI Task a utilizar. Deixe vazio para desativar a funcionalidade.",
+          "ai_audience": "O encarregado de educação (na terceira pessoa, com o que pode fazer), o aluno (escrito diretamente para ele, de forma encorajadora) ou ambos: dois textos separados todas as semanas, para poder enviar cada um para um telemóvel diferente.",
+          "ai_language": "O idioma em que o resumo é escrito. Automático segue o idioma do servidor do Home Assistant (Definições → Sistema → Geral), não o idioma do seu perfil.",
+          "ai_weekday": "O resumo abrange os 7 dias até este dia e antecipa os 7 dias seguintes.",
+          "ai_time": "Hora local da execução automática. Uma execução falhada por o Home Assistant estar desligado é recuperada no prazo de 2 dias.",
+          "ai_include_messages": "Desativado por predefinição: as mensagens privadas e os anúncios da escola nunca são então enviados ao fornecedor de IA. Ativar acrescenta uma secção \"Da escola\".",
+          "ai_extra_context": "Opcional, p. ex. \"Este ano há o exame do 8.º ano, química é a disciplina mais fraca\"."
+        }
+      },
+      "settings": {
+        "title": "Opções do Librus Synergia",
+        "data": {
+          "scan_interval": "Intervalo de consulta (minutos)",
+          "messages_enabled": "Obter mensagens privadas (Wiadomości)",
+          "messages_count": "Mensagens a obter por caixa de correio",
+          "message_sending_enabled": "Permitir o envio de mensagens (beta)",
+          "announcements_enabled": "Obter anúncios (ogłoszenia)",
+          "behaviour_grades_enabled": "Obter a nota de comportamento (ocena zachowania)",
+          "descriptive_grades_enabled": "Obter notas descritivas",
+          "free_days_enabled": "Obter o calendário de dias livres",
+          "average_mode": "Média de notas mostrada como estado do sensor",
+          "student_number": "Número do aluno na pauta da turma",
+          "grade_thresholds": "Limiares da previsão de notas",
+          "point_grade_thresholds": "Limiares da previsão de notas por pontos (%)",
+          "point_grade_thresholds_by_subject": "Limiares de notas por pontos por disciplina",
+          "hide_empty_subjects": "Ocultar disciplinas sem notas",
+          "merge_parallel_lessons": "Juntar aulas à mesma hora",
+          "extra_activities": "Atividades fora do horário",
+          "extra_calendars": "Outros calendários com atividades",
+          "subject_colors": "Cores das disciplinas",
+          "calendar_emoji": "Emoji nos títulos do calendário",
+          "smart_polling": "Consulta inteligente",
+          "quiet_hours_enabled": "Ativar horas de silêncio (sem consultas durante a noite)",
+          "quiet_hours_start": "Início das horas de silêncio",
+          "quiet_hours_end": "Fim das horas de silêncio"
+        },
+        "data_description": {
+          "scan_interval": "Com que frequência atualizar notas, assiduidade, horário e anúncios. Mantenha um valor moderado - é uma API não oficial.",
+          "messages_enabled": "Quando desativado, o sensor Mensagens não lidas fica indisponível e não são feitos pedidos de mensagens - menos pedidos ao Librus.",
+          "messages_count": "Quantas das mensagens mais recentes cada lista de caixa de correio contém (recebidas, enviadas, arquivo e as restantes), 10-50. Mais significa listas mais longas no cartão Mensagens, um pouco mais de dados por atualização e atributos do sensor maiores.",
+          "message_sending_enabled": "Permite que os serviços send_message e withdraw_message - e os botões Responder / Escrever do cartão Mensagens - escrevam aos professores e à escola no Wiadomości. Desativado por predefinição: uma mensagem enviada chega a uma pessoa real. Não disponível para o Assist nem para o resumo por IA.",
+          "announcements_enabled": "Quando desativado, o sensor Anúncios não lidos fica indisponível e não são feitos pedidos SchoolNotices.",
+          "behaviour_grades_enabled": "Quando desativado, o sensor Nota de comportamento fica indisponível e não são feitos pedidos BehaviourGrades.",
+          "descriptive_grades_enabled": "Quando desativado, o sensor Notas descritivas fica indisponível e não são feitos pedidos DescriptiveGrades.",
+          "free_days_enabled": "Quando desativado, a entidade de calendário Dias livres não é criada e não são feitos pedidos de dias livres.",
+          "average_mode": "Ponderada usa o peso de cada categoria de notas (o que o próprio Librus mostra). Aritmética é uma média simples das mesmas notas. Ambas continuam disponíveis como atributos em qualquer caso.",
+          "student_number": "Opcional - o número é lido automaticamente do Librus. Preencha apenas para o substituir. O sensor Número da sorte usa-o para mostrar se é o seu número.",
+          "grade_thresholds": "Média mínima para um 2, 3, 4, 5 e 6, separada por vírgulas (p. ex. 1.75, 2.75, 3.75, 4.75, 5.50). Consulte o regulamento da escola (WSO) - as escolas usam valores diferentes. Usado pelo sensor Previsão de notas e pelo sensor binário Nota em risco.",
+          "point_grade_thresholds": "Apenas para escolas que avaliam algumas disciplinas em pontos. Percentagem mínima de pontos para um 2, 3, 4, 5 e 6, separada por vírgulas (p. ex. 40, 55, 75, 90, 98) - consulte o regulamento da escola ou as regras de avaliação da disciplina. Vazio: as disciplinas avaliadas em pontos ficam fora da previsão de notas.",
+          "point_grade_thresholds_by_subject": "Apenas se um professor usar uma escala diferente. Uma disciplina por linha: o nome da disciplina, dois pontos e a percentagem mínima para um 2, 3, 4, 5 e 6, p. ex. \"fizyka: 30, 50, 70, 85, 96\". Maiúsculas e letras polacas não importam. Estas disciplinas usam a sua própria escala; as outras usam a escala geral acima (ou ficam fora da previsão se estiver vazia). As entradas que não correspondem a nenhuma disciplina são listadas no atributo point_thresholds_unmatched do sensor Previsão de notas.",
+          "hide_empty_subjects": "Nenhum sensor de média para uma disciplina até receber a primeira nota (p. ex. Religia no início do ano). Os sensores existentes dessas disciplinas são removidos; voltam com a primeira nota.",
+          "calendar_emoji": "Um emoji antes das entradas dos calendários do horário e do Terminarz (agenda), p. ex. \"📐 Matematyka\" ou \"📝 [Sprawdzian] Chemia: ...\" - mais fácil de ler num telemóvel ou num relógio. Também é usado pela ação Copiar para o calendário. Os cartões complementares mostram o título sem ele.",
+          "merge_parallel_lessons": "Aulas com o mesmo início e fim (p. ex. uma disciplina mais Wspomaganie (apoio), ou grupos separados) aparecem como uma única entrada no calendário do horário, p. ex. \"Edukacja wczesnoszkolna + Wspomaganie\". Uma aula cancelada e a sua substituição ficam sempre separadas.",
+          "extra_activities": "Mostradas no calendário do horário ao lado das aulas, com as suas próprias horas, professor e sala. São as listas adicionais da página do horário do Synergia: atividades extra, o percurso de aprendizagem individualizado (ZŚK) e o ensino individual (NI). Desmarque as que não quer; uma escola sem elas simplesmente não as tem.",
+          "extra_calendars": "Calendários seus (Local Calendar, Google, ...) com atividades que o Librus não conhece: um clube depois das aulas, o ATL, uma aula de desporto. Os seus eventos com hora aparecem no calendário do horário como atividades fora do horário, por isso os cartões complementares (horário semanal, aulas de hoje, amanhã, horas na escola) também os mostram. Os eventos de dia inteiro são ignorados. Não alteram Início das aulas / Fim das aulas nem Na escola, que seguem as aulas.",
+          "subject_colors": "Os cartões complementares dão a cada disciplina a sua própria cor, a mesma em todos os cartões. Para escolher algumas, escreva uma disciplina por linha: \"Matematyka: #2563eb\" (o nome como no Librus - maiúsculas e letras polacas não importam - e qualquer cor CSS: #2563eb, teal, rgb(37 99 235)). Deixe vazio para cores automáticas.",
+          "smart_polling": "Poupa pedidos quando nada está a acontecer. Em dias de aulas, entre as 06:00 e as 22:00, os dados são atualizados com o intervalo de consulta acima. Num dia sem aulas (fim de semana, férias) no máximo uma vez por hora, e à noite (22:00-06:00) no máximo de 3 em 3 horas. A ação Atualizar (librus_synergia.refresh) obtém sempre de imediato. As horas de silêncio abaixo, se ativadas, continuam a aplicar-se.",
+          "quiet_hours_enabled": "Quando ativado, não são obtidos dados do Librus durante o período abaixo - as entidades mantêm simplesmente o último estado conhecido durante a noite.",
+          "quiet_hours_start": "Usado apenas enquanto as horas de silêncio estiverem ativadas acima.",
+          "quiet_hours_end": "Usado apenas enquanto as horas de silêncio estiverem ativadas acima. Pode ser anterior à hora de início (p. ex. 23:00 -> 06:00) para atravessar a meia-noite."
+        }
+      }
+    },
+    "abort": {
+      "no_data": "A integração ainda não carregou os dados do aluno. Tente novamente dentro de um minuto.",
+      "no_ai_task": "A integração AI Task não está disponível. Configure primeiro um fornecedor de IA (Google Gemini, OpenAI, Anthropic, Ollama...) no Home Assistant 2025.8 ou mais recente."
+    }
+  },
+  "selector": {
+    "grade_kind": {
+      "options": {
+        "normal": "Nota normal",
+        "proposition": "Nota semestral ou final proposta",
+        "semester_final": "Nota semestral ou final",
+        "text": "Nota de texto",
+        "descriptive": "Nota descritiva",
+        "point": "Nota por pontos",
+        "behaviour": "Nota de comportamento"
+      }
+    },
+    "note_sentiment": {
+      "options": {
+        "positive": "Positiva",
+        "negative": "Negativa",
+        "neutral": "Neutra"
+      }
+    },
+    "mailbox": {
+      "options": {
+        "inbox": "Recebidas",
+        "substitutions": "Substituições",
+        "alerts": "Alertas",
+        "justifications": "Justificações"
+      }
+    },
+    "timetable_change": {
+      "options": {
+        "canceled": "Cancelada",
+        "substitution": "Substituição",
+        "room_change": "Mudança de sala",
+        "moved": "Mudada de horário"
+      }
+    },
+    "grade_change": {
+      "options": {
+        "changed": "Alterada",
+        "removed": "Removida"
+      }
+    },
+    "agenda_change": {
+      "options": {
+        "changed": "Alterada",
+        "removed": "Removida"
+      }
+    },
+    "justification_outcome": {
+      "options": {
+        "accepted": "Aceite",
+        "rejected": "Rejeitada",
+        "changed": "Outro estado"
+      }
+    },
+    "forecast_direction": {
+      "options": {
+        "up": "Subiu",
+        "down": "Desceu"
+      }
+    },
+    "library_action": {
+      "options": {
+        "lent": "Livro emprestado",
+        "returned": "Livro devolvido"
+      }
+    },
+    "summary_audience": {
+      "options": {
+        "any": "Qualquer uma",
+        "parent": "Para o encarregado de educação",
+        "student": "Para o aluno"
+      }
+    },
+    "condition_behavior": {
+      "options": {
+        "any": "Qualquer um deles",
+        "all": "Todos eles"
+      }
+    },
+    "school_day": {
+      "options": {
+        "today": "Hoje",
+        "tomorrow": "Amanhã"
+      }
+    },
+    "extra_activities": {
+      "options": {
+        "other": "Atividades extra",
+        "individual_path": "Percurso de aprendizagem individualizado (ZŚK)",
+        "one_to_one": "Ensino individual (NI)"
+      }
+    },
+    "ai_language": {
+      "options": {
+        "auto": "Automático (idioma do Home Assistant)",
+        "pl": "Polaco",
+        "en": "Inglês",
+        "uk": "Ucraniano",
+        "pt": "Português"
+      }
+    },
+    "ai_audience": {
+      "options": {
+        "parent": "Encarregado de educação",
+        "student": "Aluno",
+        "both": "Encarregado de educação e aluno"
+      }
+    },
+    "ai_weekday": {
+      "options": {
+        "1": "Segunda-feira",
+        "2": "Terça-feira",
+        "3": "Quarta-feira",
+        "4": "Quinta-feira",
+        "5": "Sexta-feira",
+        "6": "Sábado",
+        "7": "Domingo"
+      }
+    },
+    "average_mode": {
+      "options": {
+        "weighted": "Ponderada",
+        "arithmetic": "Aritmética"
+      }
+    }
+  },
+  "issues": {
+    "unmatched_subject_names": {
+      "title": "Os nomes das disciplinas de {student} não correspondem a nenhuma disciplina",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Nomes das disciplinas",
+            "description": "Estas linhas em Configurar → Nomes das disciplinas e categorias já não correspondem a nenhuma disciplina no Librus. A escola pode ter mudado o nome da disciplina:\n\n{lines}\n\nIndique novamente os seus nomes abaixo. Um campo vazio mantém o nome do Librus; as linhas acima são descartadas ao guardar."
+          }
+        },
+        "abort": {
+          "no_data": "A integração ainda não carregou os dados do aluno. Tente novamente dentro de um minuto."
+        }
+      }
+    },
+    "unmatched_category_names": {
+      "title": "Os nomes das categorias de notas de {student} não correspondem a nenhuma categoria",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Nomes das categorias de notas",
+            "description": "Estas linhas em Configurar → Nomes das disciplinas e categorias já não correspondem a nenhuma categoria de notas no Librus:\n\n{lines}\n\nIndique novamente os seus nomes abaixo. Um campo vazio mantém o nome do Librus; as linhas acima são descartadas ao guardar."
+          }
+        },
+        "abort": {
+          "no_data": "A integração ainda não carregou os dados do aluno. Tente novamente dentro de um minuto."
+        }
+      }
+    },
+    "unmatched_subject_colors": {
+      "title": "As cores das disciplinas de {student} não funcionam",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Cores das disciplinas",
+            "description": "Estas linhas em Configurar → Definições → Cores das disciplinas não correspondem a nenhuma disciplina ou não têm uma cor válida:\n\n{lines}\n\nAs disciplinas do aluno: {subjects}.\n\nCorrija-as ou remova-as abaixo.",
+            "data": {
+              "subject_colors": "Cores das disciplinas"
+            }
+          }
+        },
+        "abort": {
+          "no_data": "A integração ainda não carregou os dados do aluno. Tente novamente dentro de um minuto."
+        }
+      }
+    },
+    "unmatched_point_thresholds": {
+      "title": "Os limiares de notas por pontos de {student} não funcionam",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Limiares de notas por pontos por disciplina",
+            "description": "Estas linhas em Configurar → Definições → Limiares de notas por pontos por disciplina não correspondem a nenhuma disciplina ou não têm cinco percentagens:\n\n{lines}\n\nAs disciplinas do aluno: {subjects}.\n\nCorrija-as ou remova-as abaixo.",
+            "data": {
+              "point_grade_thresholds_by_subject": "Limiares de notas por pontos por disciplina"
+            }
+          }
+        },
+        "abort": {
+          "no_data": "A integração ainda não carregou os dados do aluno. Tente novamente dentro de um minuto."
+        }
+      }
+    },
+    "school_year_rollover": {
+      "title": "A data de fim do ano letivo parece desatualizada",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Recarregar para verificar novamente o ano letivo",
+            "description": "A data de fim do ano letivo guardada ({end_date}) já passou há mais de um mês. Normalmente é atualizada automaticamente no prazo de 24 horas, quando o Librus publica o registo da turma do novo ano letivo, mas se ainda não aconteceu, recarregue agora a integração para forçar uma nova verificação imediata."
+          }
+        }
+      }
+    },
+    "optional_endpoint_degraded": {
+      "title": "\"{label}\" não responde há mais de uma semana",
+      "description": "O endpoint \"{label}\" falhou em todas as tentativas desde {since}. Muitas vezes isto é inofensivo - algumas escolas/tipos de conta não têm todos os módulos do Librus, e esta integração já trata isso como normal - mas uma semana inteira de falhas seguidas também pode significar que algo mudou (uma alteração de permissões, ou o Librus a reformular esse endpoint). Isto é apenas informativo e pode ser ignorado com segurança; voltará a aparecer se o endpoint continuar a falhar."
+    }
+  },
+  "entity": {
+    "event": {
+      "grade_event": { "name": "Nova nota", "state_attributes": { "event_type": { "state": { "new_grade": "Nova nota" } } } },
+      "note_event": { "name": "Nova observação de comportamento", "state_attributes": { "event_type": { "state": { "positive": "Positiva", "negative": "Negativa", "neutral": "Neutra" } } } },
+      "absence_event": { "name": "Nova falta", "state_attributes": { "event_type": { "state": { "unexcused": "Injustificada", "excused": "Justificada" } } } },
+      "timetable_change_event": { "name": "Alteração no horário", "state_attributes": { "event_type": { "state": { "canceled": "Aula cancelada", "substitution": "Substituição" } } } },
+      "homework_event": { "name": "Novo trabalho de casa", "state_attributes": { "event_type": { "state": { "new_homework": "Novo trabalho de casa" } } } },
+      "agenda_event": { "name": "Nova entrada na agenda", "state_attributes": { "event_type": { "state": { "new_entry": "Nova entrada" } } } },
+      "grade_change_event": { "name": "Nota alterada", "state_attributes": { "event_type": { "state": { "changed": "Alterada", "removed": "Removida" } } } },
+      "agenda_change_event": { "name": "Entrada da agenda alterada", "state_attributes": { "event_type": { "state": { "changed": "Alterada", "removed": "Removida" } } } },
+      "justification_event": { "name": "Justificação de falta decidida", "state_attributes": { "event_type": { "state": { "accepted": "Aceite", "rejected": "Rejeitada", "changed": "Estado alterado" } } } },
+      "school_trip_event": { "name": "Nova visita de estudo", "state_attributes": { "event_type": { "state": { "new_trip": "Nova visita de estudo" } } } },
+      "library_event": { "name": "Biblioteca escolar", "state_attributes": { "event_type": { "state": { "lent": "Livro emprestado", "returned": "Livro devolvido" } } } },
+      "school_document_event": { "name": "Novo documento da escola", "state_attributes": { "event_type": { "state": { "new_document": "Novo documento" } } } },
+      "announcement_event": { "name": "Novo anúncio", "state_attributes": { "event_type": { "state": { "new_announcement": "Novo anúncio" } } } },
+      "message_event": { "name": "Nova mensagem", "state_attributes": { "event_type": { "state": { "new_message": "Nova mensagem" } } } },
+      "message_read_event": { "name": "Mensagem lida", "state_attributes": { "event_type": { "state": { "read": "Lida" } } } },
+      "forecast_event": { "name": "Previsão de nota alterada", "state_attributes": { "event_type": { "state": { "up": "Subiu", "down": "Desceu" } } } },
+      "achievement_event": { "name": "Conquista desbloqueada", "state_attributes": { "event_type": { "state": { "unlocked": "Desbloqueada" } } } }
+    },
+    "binary_sensor": {
+      "school_day_today": { "name": "Dia de aulas hoje" },
+      "school_day_tomorrow": { "name": "Dia de aulas amanhã" },
+      "grade_risk": { "name": "Nota em risco" },
+      "exam_soon": { "name": "Teste nas próximas 24 horas" },
+      "in_school": { "name": "Na escola" }
+    },
+    "todo": {
+      "homework": { "name": "Trabalhos de casa" }
+    },
+    "sensor": {
+      "lesson_topics": { "name": "Sumários das aulas" },
+      "plan_changes": { "name": "Alterações ao horário habitual" },
+      "school_trips": { "name": "Próxima visita de estudo" },
+      "school_documents": { "name": "Documentos da escola" },
+      "library_books": { "name": "Livros da biblioteca" },
+      "cancelled_lessons": { "name": "Aulas canceladas este ano" },
+      "justifications": { "name": "Justificações de faltas" },
+      "point_grades": { "name": "Notas por pontos" },
+      "status": { "name": "Estado da ligação", "state": { "ok": "OK", "degraded": "Em parte a partir de dados guardados", "stale": "O Librus não responde", "error": "Erro" } },
+      "last_update": { "name": "Última atualização bem-sucedida" },
+      "weekly_summary": { "name": "Resumo semanal" },
+      "grade_forecast": { "name": "Previsão de notas" },
+      "overall_average": { "name": "Média geral das notas" },
+      "subject_average": { "name": "Média de {subject}" },
+      "attendance": { "name": "Faltas" },
+      "unexcused_absences": { "name": "Faltas injustificadas" },
+      "subject_attendance": { "name": "Assiduidade mais baixa por disciplina" },
+      "next_lesson": { "name": "Próxima aula" },
+      "current_lesson": { "name": "Aula atual" },
+      "school_start": { "name": "Início das aulas" },
+      "school_end": { "name": "Fim das aulas" },
+      "school_day_end": { "name": "Fim do dia na escola" },
+      "next_exam": { "name": "Próximo teste" },
+      "lucky_number": { "name": "Número da sorte" },
+      "unread_announcements": { "name": "Anúncios não lidos" },
+      "behaviour_notices": { "name": "Observações de comportamento" },
+      "unread_messages": { "name": "Mensagens não lidas" },
+      "school": { "name": "Escola" },
+      "school_class": { "name": "Turma" },
+      "homework_assignments": { "name": "Trabalhos de casa" },
+      "behaviour_grade": { "name": "Nota de comportamento" },
+      "descriptive_grades": { "name": "Notas descritivas" },
+      "attendance_streak": { "name": "Série de presenças" },
+      "behaviour_streak": { "name": "Série de bom comportamento" },
+      "good_grade_streak": { "name": "Série de boas notas" },
+      "rank": {
+        "name": "Escalão",
+        "state": {
+          "bronze": "Bronze",
+          "silver": "Prata",
+          "gold": "Ouro",
+          "diamond": "Diamante"
+        }
+      }
+    },
+    "button": {
+      "weekly_summary_generate": { "name": "Gerar resumo semanal" }
+    },
+    "switch": {
+      "weekly_summary_enabled": { "name": "Resumo semanal automático" }
+    },
+    "calendar": {
+      "timetable": { "name": "Horário" },
+      "agenda": { "name": "Agenda" },
+      "free_days": { "name": "Dias livres" },
+      "absences": { "name": "Faltas" }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Atualizar agora",
+      "description": "Força uma atualização imediata dos dados em vez de esperar pela próxima consulta.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O aluno a atualizar. Deixe vazio para atualizar todos os alunos configurados."
+        }
+      }
+    },
+    "get_message": {
+      "name": "Obter mensagem",
+      "description": "Obtém o conteúdo completo, não truncado, de UMA mensagem do Librus. Isto marca a mensagem como lida nos servidores do Librus, exatamente como abri-la na aplicação ou no site do Librus - use isto apenas para uma mensagem que alguém escolheu realmente abrir, nunca automaticamente nem de forma agendada.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno) de onde obter a mensagem."
+        },
+        "message_id": {
+          "name": "ID da mensagem",
+          "description": "O id da mensagem, do atributo \"recent\" do sensor Mensagens não lidas."
+        },
+        "mailbox": {
+          "name": "Caixa de correio",
+          "description": "Em que caixa de correio está a mensagem - o valor \"mailbox\" da mensagem no atributo \"recent\", \"substitutions_recent\", \"alerts_recent\", \"justifications_recent\", \"outbox_recent\" (mensagens enviadas) ou \"archive_recent\" (\"archive/inbox\", anos letivos anteriores) do sensor Mensagens não lidas. Por predefinição \"inbox\"."
+        }
+      }
+    },
+    "get_grades": {
+      "name": "Obter notas",
+      "description": "Devolve todas as notas de um aluno numa só resposta, opcionalmente filtradas para uma disciplina - em vez de ler separadamente o atributo \"grades\" de cada sensor de disciplina.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno) de que obter as notas."
+        },
+        "subject_id": {
+          "name": "ID da disciplina",
+          "description": "Limitar às notas de uma disciplina, usando o atributo \"subject_id\" do sensor de média da disciplina. Deixe vazio para todas as disciplinas."
+        }
+      }
+    },
+    "get_message_recipients": {
+      "name": "Obter destinatários de mensagens",
+      "description": "Lista a quem pode ser enviada uma mensagem no Wiadomości: o diretor de turma, os professores (com as disciplinas que lecionam ao aluno), a direção, a secretaria e outros funcionários. Apenas leitura.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno)."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Enviar mensagem",
+      "description": "Envia uma mensagem do Wiadomości a um professor ou à escola, ou responde a uma mensagem recebida na sua conversa. Requer \"Permitir o envio de mensagens (beta)\" ativado em Configurar (exceto num ensaio). Enviada uma vez, nunca repetida; no máximo 10 mensagens por hora.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno) cuja conta de encarregado de educação a envia."
+        },
+        "recipient": {
+          "name": "Destinatário",
+          "description": "Quem a recebe: \"wychowawca\" (o diretor de turma), \"sekretariat\" (a secretaria), uma disciplina (o seu professor, p. ex. \"Matematyka\"), parte de um nome, ou um id de conta de Obter destinatários de mensagens. São permitidos vários. Não é usado com Responder a."
+        },
+        "topic": {
+          "name": "Assunto",
+          "description": "A linha de assunto. Com Responder a, por predefinição é \"Re:\" e o assunto original."
+        },
+        "message": {
+          "name": "Mensagem",
+          "description": "O texto. Texto simples; as mudanças de linha são mantidas."
+        },
+        "reply_to": {
+          "name": "Responder a",
+          "description": "O id de uma mensagem recebida (\"id\" no atributo \"recent\" do sensor Mensagens não lidas): a mensagem vai para o seu remetente, na sua conversa. Abri-la para encontrar o remetente marca-a como lida."
+        },
+        "dry_run": {
+          "name": "Ensaio",
+          "description": "Apenas mostrar a quem iria e o quê - nada é enviado."
+        }
+      }
+    },
+    "mark_announcement_read": {
+      "name": "Marcar anúncio como lido",
+      "description": "Marca os anúncios da escola como lidos no Librus, tal como abri-los lá. Deixe o ID vazio para marcar todos os anúncios não lidos.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno)."
+        },
+        "announcement_id": {
+          "name": "ID do anúncio",
+          "description": "O \"id\" do anúncio no atributo \"notices\" do sensor Anúncios não lidos. Um ou mais; vazio marca todos os anúncios não lidos."
+        }
+      }
+    },
+    "mark_message_read": {
+      "name": "Marcar mensagem como lida",
+      "description": "Marca mensagens do Wiadomości como lidas abrindo-as, tal como lê-las no Librus. Deixe o ID vazio para marcar todas as mensagens não lidas da lista da caixa de correio.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno)."
+        },
+        "message_id": {
+          "name": "ID da mensagem",
+          "description": "O \"id\" da mensagem no atributo \"recent\" do sensor Mensagens não lidas (ou no atributo \"..._recent\" da própria caixa de correio). Um ou mais; vazio marca todas as mensagens não lidas da lista."
+        },
+        "mailbox": {
+          "name": "Caixa de correio",
+          "description": "Onde estão as mensagens: inbox (predefinição), substitutions, alerts, justifications ou archive/inbox."
+        }
+      }
+    },
+    "sync_calendar": {
+      "name": "Copiar para o calendário",
+      "description": "Copia testes, visitas de estudo, reuniões e dias livres para outro calendário (p. ex. um Google Calendar da família) e mantém as cópias atualizadas: um teste mudado de data é mudado, um cancelado é removido. Só são alterados os eventos que esta ação adicionou (marcados na descrição).",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno)."
+        },
+        "target_calendar": {
+          "name": "Calendário de destino",
+          "description": "Para onde vão os eventos. Tem de permitir adicionar eventos a partir do Home Assistant (Google Calendar, Local Calendar); mudar e remover também requer que o calendário permita editar e eliminar."
+        },
+        "days": {
+          "name": "Dias à frente",
+          "description": "Até quando copiar, a partir de hoje. Os eventos passados nunca são alterados."
+        },
+        "categories": {
+          "name": "Categorias da agenda",
+          "description": "Palavras separadas por vírgulas comparadas com a categoria da agenda (maiúsculas e letras polacas não importam, basta parte da palavra), p. ex. \"sprawdzian, kartkówka, wycieczka, zebranie\". Vazio copia todas as entradas."
+        },
+        "free_days": {
+          "name": "Dias livres",
+          "description": "Copiar também os dias livres que calham num dia útil."
+        },
+        "prefix": {
+          "name": "Prefixo do título",
+          "description": "Colocado antes de cada título, p. ex. o primeiro nome do aluno (\"Ola:\") quando vários filhos partilham um calendário."
+        },
+        "dry_run": {
+          "name": "Ensaio",
+          "description": "Apenas listar o que mudaria, sem alterar o calendário."
+        }
+      }
+    },
+    "withdraw_message": {
+      "name": "Retirar mensagem",
+      "description": "Retira uma mensagem que enviou, enquanto o Librus ainda o permitir. Requer \"Permitir o envio de mensagens (beta)\" ativado em Configurar.",
+      "fields": {
+        "device_id": {
+          "name": "Dispositivo",
+          "description": "O dispositivo Librus Synergia (aluno)."
+        },
+        "message_id": {
+          "name": "ID da mensagem",
+          "description": "O id da mensagem enviada - \"message_id\" de Enviar mensagem, ou \"id\" em \"outbox_recent\"."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "message_sending_disabled": {
+      "message": "O envio de mensagens está desativado. Ative \"Permitir o envio de mensagens (beta)\" em Configurar da integração, ou use um ensaio."
+    },
+    "message_no_recipient": {
+      "message": "Indique um destinatário, ou Responder a com o id de uma mensagem recebida."
+    },
+    "message_no_topic": {
+      "message": "Indique um assunto para a mensagem."
+    },
+    "message_duplicate_recipient": {
+      "message": "A mesma pessoa foi indicada mais do que uma vez."
+    },
+    "message_recipient_unknown": {
+      "message": "Nenhum destinatário corresponde a \"{recipient}\". Obter destinatários de mensagens lista a quem uma mensagem pode ser enviada."
+    },
+    "message_recipient_ambiguous": {
+      "message": "\"{recipient}\" corresponde a mais do que um destinatário: {candidates}. Seja mais específico ou use um id de conta."
+    },
+    "message_not_sent": {
+      "message": "A mensagem não foi enviada: {error}"
+    },
+    "message_maybe_sent": {
+      "message": "Não é certo que a mensagem tenha sido enviada - verifique as Enviadas antes de tentar novamente."
+    }
+  },
+  "triggers": {
+    "new_grade": {
+      "name": "Nova nota",
+      "description": "Chega uma nova nota ao Librus.",
+      "fields": {
+        "kind": {
+          "name": "Tipo",
+          "description": "Apenas estes tipos de nota. Vazio: todos os tipos."
+        },
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        },
+        "grade_at_most": {
+          "name": "Nota no máximo",
+          "description": "Apenas uma nota até este valor (4- conta como 3,75). Notas sem número nunca correspondem."
+        },
+        "grade_at_least": {
+          "name": "Nota no mínimo",
+          "description": "Apenas uma nota a partir deste valor. Notas sem número nunca correspondem."
+        }
+      }
+    },
+    "new_note": {
+      "name": "Nova observação de comportamento",
+      "description": "Um professor adiciona uma observação de comportamento.",
+      "fields": {
+        "sentiment": {
+          "name": "Tipo",
+          "description": "Apenas estes tipos de observação. Vazio: todas as observações."
+        }
+      }
+    },
+    "new_absence": {
+      "name": "Nova falta",
+      "description": "É marcada uma nova falta (ausência ou atraso).",
+      "fields": {
+        "only_unexcused": {
+          "name": "Apenas injustificadas",
+          "description": "Ignorar as faltas marcadas logo como justificadas."
+        }
+      }
+    },
+    "new_message": {
+      "name": "Nova mensagem",
+      "description": "Chega uma nova mensagem ao Wiadomości.",
+      "fields": {
+        "mailbox": {
+          "name": "Caixa de correio",
+          "description": "Apenas estas caixas de correio. Vazio: todas as caixas de correio."
+        }
+      }
+    },
+    "new_announcement": {
+      "name": "Novo anúncio",
+      "description": "Um novo anúncio no quadro de avisos."
+    },
+    "new_agenda_entry": {
+      "name": "Nova entrada na agenda",
+      "description": "Uma nova entrada na agenda: um teste, uma visita de estudo, uma reunião...",
+      "fields": {
+        "category": {
+          "name": "Categoria",
+          "description": "Apenas entradas cuja categoria ou texto contenha uma destas palavras, separadas por vírgulas (p. ex. sprawdzian, kartkówka). Vazio: todas as entradas."
+        },
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
+    },
+    "new_homework": {
+      "name": "Novo trabalho de casa",
+      "description": "Um professor marca um novo trabalho de casa.",
+      "fields": {
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
+    },
+    "timetable_changed": {
+      "name": "Alteração no horário",
+      "description": "Uma aula de hoje ou mais tarde é cancelada, substituída, mudada de horário ou muda de sala.",
+      "fields": {
+        "change": {
+          "name": "Alteração",
+          "description": "Apenas estas alterações. Vazio: todas as alterações."
+        },
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
+    },
+    "grade_changed": {
+      "name": "Nota alterada ou removida",
+      "description": "O professor altera ou elimina uma nota que já tinha sido comunicada.",
+      "fields": {
+        "change": {
+          "name": "Alteração",
+          "description": "Apenas estas alterações. Vazio: ambas."
+        },
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
+    },
+    "agenda_changed": {
+      "name": "Entrada da agenda alterada",
+      "description": "Uma entrada futura da agenda é alterada ou desaparece.",
+      "fields": {
+        "change": {
+          "name": "Alteração",
+          "description": "Apenas estas alterações. Vazio: ambas."
+        }
+      }
+    },
+    "justification_status": {
+      "name": "Justificação decidida",
+      "description": "A escola decide sobre uma justificação de falta que enviou.",
+      "fields": {
+        "outcome": {
+          "name": "Resultado",
+          "description": "Apenas estes resultados. Vazio: todos os resultados."
+        }
+      }
+    },
+    "forecast_changed": {
+      "name": "Previsão de nota alterada",
+      "description": "A nota prevista na pauta de uma disciplina sobe ou desce.",
+      "fields": {
+        "direction": {
+          "name": "Sentido",
+          "description": "Apenas este sentido. Vazio: ambos."
+        },
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
+    },
+    "new_school_trip": {
+      "name": "Nova visita de estudo",
+      "description": "Está planeada uma nova visita de estudo."
+    },
+    "new_school_document": {
+      "name": "Novo documento da escola",
+      "description": "A escola partilha um novo documento com os encarregados de educação."
+    },
+    "library_changed": {
+      "name": "Biblioteca escolar",
+      "description": "A biblioteca escolar empresta um livro ao aluno ou recebe um de volta.",
+      "fields": {
+        "action": {
+          "name": "O que aconteceu",
+          "description": "Apenas isto. Vazio: ambos."
+        }
+      }
+    },
+    "message_read": {
+      "name": "Mensagem enviada lida",
+      "description": "Um destinatário lê uma mensagem que enviou."
+    },
+    "achievement_unlocked": {
+      "name": "Distintivo conquistado",
+      "description": "O aluno conquista um distintivo."
+    },
+    "weekly_summary": {
+      "name": "Resumo semanal por IA pronto",
+      "description": "O resumo semanal por IA foi escrito.",
+      "fields": {
+        "audience": {
+          "name": "Versão",
+          "description": "Com as duas versões ativas, escolha uma ou aceite qualquer uma."
+        }
+      }
+    }
+  },
+  "conditions": {
+    "school_day": {
+      "name": "Dia de aulas",
+      "description": "Hoje ou amanhã há aulas (não é um dia livre, férias nem um dia totalmente cancelado).",
+      "fields": {
+        "day": {
+          "name": "Dia",
+          "description": "Que dia verificar."
+        },
+        "behavior": {
+          "name": "Alunos",
+          "description": "Com vários alunos: basta um deles corresponder, ou têm de ser todos?"
+        }
+      }
+    },
+    "in_school": {
+      "name": "Na escola",
+      "description": "Há aulas neste momento, segundo o horário.",
+      "fields": {
+        "behavior": {
+          "name": "Alunos",
+          "description": "Com vários alunos: basta um deles corresponder, ou têm de ser todos?"
+        }
+      }
+    },
+    "exam_soon": {
+      "name": "Teste nas próximas 24 horas",
+      "description": "Um teste ou um mini-teste (kartkówka) começa nas próximas 24 horas.",
+      "fields": {
+        "behavior": {
+          "name": "Alunos",
+          "description": "Com vários alunos: basta um deles corresponder, ou têm de ser todos?"
+        }
+      }
+    },
+    "lucky_number_yours": {
+      "name": "O número da sorte é o seu",
+      "description": "O número da sorte de hoje é o número do aluno na pauta.",
+      "fields": {
+        "behavior": {
+          "name": "Alunos",
+          "description": "Com vários alunos: basta um deles corresponder, ou têm de ser todos?"
+        }
+      }
+    },
+    "absences_to_justify": {
+      "name": "Faltas a justificar",
+      "description": "O aluno tem faltas injustificadas.",
+      "fields": {
+        "behavior": {
+          "name": "Alunos",
+          "description": "Com vários alunos: basta um deles corresponder, ou têm de ser todos?"
+        }
+      }
+    }
+  },
+  "system_health": {
+    "info": {
+      "students": "Alunos (carregados / configurados)",
+      "connection": "Estado da ligação",
+      "last_update": "Última atualização bem-sucedida mais antiga",
+      "degraded_endpoints": "Partes do Librus com falhas",
+      "library_version": "Biblioteca librus-synergia",
+      "can_reach_synergia": "Acesso ao Synergia",
+      "can_reach_login": "Acesso ao início de sessão do Librus",
+      "can_reach_messages": "Acesso ao Wiadomości"
+    }
+  }
+}

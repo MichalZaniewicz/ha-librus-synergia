@@ -235,7 +235,9 @@
       "options": {
         "auto": "Automatic (Home Assistant language)",
         "pl": "Polish",
-        "en": "English"
+        "en": "English",
+        "uk": "Ukrainian",
+        "pt": "Portuguese"
       }
     },
     "ai_audience": {
@@ -264,6 +266,68 @@
     }
   },
   "issues": {
+    "unmatched_subject_names": {
+      "title": "Subject names for {student} don't match a subject",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Subject names",
+            "description": "These lines under Configure → Subject and category names don't match a subject in Librus any more. The school may have renamed the subject:\n\n{lines}\n\nGive your names again below. An empty field keeps the Librus name; the lines above are dropped when you save."
+          }
+        },
+        "abort": {
+          "no_data": "The integration hasn't loaded the student's data yet. Try again in a minute."
+        }
+      }
+    },
+    "unmatched_category_names": {
+      "title": "Grade category names for {student} don't match a category",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Grade category names",
+            "description": "These lines under Configure → Subject and category names don't match a grade category in Librus any more:\n\n{lines}\n\nGive your names again below. An empty field keeps the Librus name; the lines above are dropped when you save."
+          }
+        },
+        "abort": {
+          "no_data": "The integration hasn't loaded the student's data yet. Try again in a minute."
+        }
+      }
+    },
+    "unmatched_subject_colors": {
+      "title": "Subject colours for {student} don't work",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Subject colours",
+            "description": "These lines under Configure → Settings → Subject colours match no subject or have no usable colour:\n\n{lines}\n\nThe student's subjects: {subjects}.\n\nFix or remove them below.",
+            "data": {
+              "subject_colors": "Subject colours"
+            }
+          }
+        },
+        "abort": {
+          "no_data": "The integration hasn't loaded the student's data yet. Try again in a minute."
+        }
+      }
+    },
+    "unmatched_point_thresholds": {
+      "title": "Point grade thresholds for {student} don't work",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Point grade thresholds per subject",
+            "description": "These lines under Configure → Settings → Point grade thresholds per subject match no subject or don't have five percentages:\n\n{lines}\n\nThe student's subjects: {subjects}.\n\nFix or remove them below.",
+            "data": {
+              "point_grade_thresholds_by_subject": "Point grade thresholds per subject"
+            }
+          }
+        },
+        "abort": {
+          "no_data": "The integration hasn't loaded the student's data yet. Try again in a minute."
+        }
+      }
+    },
     "school_year_rollover": {
       "title": "School year end date looks out of date",
       "fix_flow": {

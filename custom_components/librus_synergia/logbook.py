@@ -2,9 +2,9 @@
 
 "Ola: new grade 5 - Matematyka (Sprawdzian)" in the logbook and on the
 student's device page (the logbook matches events to a device by the
-`device_id` in their data), instead of nothing. Polish when Home
-Assistant's language is Polish, English otherwise - the logbook has no
-translation step for these lines.
+`device_id` in their data), instead of nothing. In Home Assistant's
+language (English, Polish, Ukrainian, Portuguese; English for any other) -
+the logbook has no translation step for these lines.
 """
 
 from __future__ import annotations
@@ -50,13 +50,120 @@ def _short(value: Any) -> str:
     return text if len(text) <= _MAX_TEXT else text[: _MAX_TEXT - 1].rstrip() + "…"
 
 
-def _day(value: Any, pl: bool) -> str:
-    """'02.11' in Polish, '2026-11-02' otherwise; anything else as it came."""
-    try:
-        parsed = date.fromisoformat(str(value)[:10])
-    except ValueError:
-        return str(value or "")
-    return parsed.strftime("%d.%m") if pl else parsed.isoformat()
+# Words of the logbook lines, per language (Home Assistant's language; any
+# other falls back to English). Librus data (subjects, categories, texts)
+# stays as the school wrote it.
+_WORDS: dict[str, dict[str, str]] = {
+    "en": {
+        "behaviour": "behaviour grade", "new_grade": "new grade",
+        "grade_removed": "grade removed", "grade_changed": "grade changed",
+        "note_positive": "positive note", "note_negative": "negative note", "note": "note",
+        "absence_excused": "excused absence", "absence_unexcused": "unexcused absence",
+        "lesson": "lesson",
+        "message_from": "new message from {who}", "message": "new message",
+        "announcement": "new announcement", "agenda": "new Agenda entry",
+        "homework": "new homework", "due": "due",
+        "canceled": "lesson cancelled", "substitution": "substitution",
+        "room_change": "room change", "moved": "lesson moved",
+        "agenda_removed": "Agenda entry removed", "agenda_changed": "Agenda entry changed",
+        "justification_accepted": "justification accepted",
+        "justification_rejected": "justification rejected",
+        "justification_status": "justification status changed",
+        "forecast": "forecast", "trip": "new school trip", "document": "new school document",
+        "library_returned": "returned to the library", "library_lent": "borrowed from the library",
+        "read_by": "{who} read your message", "read": "your message was read",
+        "badge": "badge earned", "summary": "weekly summary ready",
+        "for_parent": " (for the parent)", "for_student": " (for the student)",
+    },
+    "pl": {
+        "behaviour": "ocena z zachowania", "new_grade": "nowa ocena",
+        "grade_removed": "usunięta ocena", "grade_changed": "zmieniona ocena",
+        "note_positive": "uwaga pozytywna", "note_negative": "uwaga negatywna", "note": "uwaga",
+        "absence_excused": "nieobecność usprawiedliwiona",
+        "absence_unexcused": "nieobecność nieusprawiedliwiona",
+        "lesson": "lekcja",
+        "message_from": "nowa wiadomość od {who}", "message": "nowa wiadomość",
+        "announcement": "nowe ogłoszenie", "agenda": "nowy wpis w terminarzu",
+        "homework": "nowe zadanie domowe", "due": "na",
+        "canceled": "odwołana lekcja", "substitution": "zastępstwo",
+        "room_change": "zmiana sali", "moved": "przeniesiona lekcja",
+        "agenda_removed": "usunięty wpis w terminarzu", "agenda_changed": "zmieniony wpis w terminarzu",
+        "justification_accepted": "usprawiedliwienie przyjęte",
+        "justification_rejected": "usprawiedliwienie odrzucone",
+        "justification_status": "usprawiedliwienie: nowy status",
+        "forecast": "prognoza", "trip": "nowa wycieczka", "document": "nowy dokument szkoły",
+        "library_returned": "oddana do biblioteki", "library_lent": "wypożyczona z biblioteki",
+        "read_by": "wiadomość przeczytana przez {who}", "read": "wiadomość przeczytana",
+        "badge": "zdobyta odznaka", "summary": "podsumowanie tygodnia gotowe",
+        "for_parent": " (dla rodzica)", "for_student": " (dla ucznia)",
+    },
+    "uk": {
+        "behaviour": "оцінка за поведінку", "new_grade": "нова оцінка",
+        "grade_removed": "оцінку видалено", "grade_changed": "оцінку змінено",
+        "note_positive": "позитивне зауваження", "note_negative": "негативне зауваження",
+        "note": "зауваження",
+        "absence_excused": "пропуск з поважної причини", "absence_unexcused": "пропуск без поважної причини",
+        "lesson": "урок",
+        "message_from": "нове повідомлення від {who}", "message": "нове повідомлення",
+        "announcement": "нове оголошення", "agenda": "новий запис у розкладі подій",
+        "homework": "нове домашнє завдання", "due": "до",
+        "canceled": "урок скасовано", "substitution": "заміна",
+        "room_change": "зміна кабінету", "moved": "урок перенесено",
+        "agenda_removed": "запис у розкладі подій видалено",
+        "agenda_changed": "запис у розкладі подій змінено",
+        "justification_accepted": "пояснення прийнято",
+        "justification_rejected": "пояснення відхилено",
+        "justification_status": "пояснення: новий статус",
+        "forecast": "прогноз", "trip": "нова екскурсія", "document": "новий документ школи",
+        "library_returned": "повернено до бібліотеки", "library_lent": "взято в бібліотеці",
+        "read_by": "{who} прочитав(-ла) ваше повідомлення", "read": "ваше повідомлення прочитано",
+        "badge": "отримано значок", "summary": "підсумок тижня готовий",
+        "for_parent": " (для батьків)", "for_student": " (для учня)",
+    },
+    "pt": {
+        "behaviour": "nota de comportamento", "new_grade": "nova nota",
+        "grade_removed": "nota removida", "grade_changed": "nota alterada",
+        "note_positive": "observação positiva", "note_negative": "observação negativa",
+        "note": "observação",
+        "absence_excused": "falta justificada", "absence_unexcused": "falta injustificada",
+        "lesson": "aula",
+        "message_from": "nova mensagem de {who}", "message": "nova mensagem",
+        "announcement": "novo anúncio", "agenda": "nova entrada na agenda",
+        "homework": "novo trabalho de casa", "due": "para",
+        "canceled": "aula cancelada", "substitution": "substituição",
+        "room_change": "mudança de sala", "moved": "aula mudada",
+        "agenda_removed": "entrada da agenda removida", "agenda_changed": "entrada da agenda alterada",
+        "justification_accepted": "justificação aceite",
+        "justification_rejected": "justificação recusada",
+        "justification_status": "justificação: novo estado",
+        "forecast": "previsão", "trip": "nova visita de estudo", "document": "novo documento da escola",
+        "library_returned": "devolvido à biblioteca", "library_lent": "requisitado na biblioteca",
+        "read_by": "{who} leu a sua mensagem", "read": "a sua mensagem foi lida",
+        "badge": "medalha conquistada", "summary": "resumo da semana pronto",
+        "for_parent": " (para o encarregado de educação)", "for_student": " (para o aluno)",
+    },
+}
+
+
+class _Words:
+    """The words of one language, and how it writes a day."""
+
+    def __init__(self, language: str | None) -> None:
+        code = (language or "en").split("-")[0].lower()
+        self.code = code if code in _WORDS else "en"
+        self._words = _WORDS[self.code]
+
+    def __getitem__(self, key: str) -> str:
+        return self._words.get(key) or _WORDS["en"][key]
+
+    def day(self, value: Any) -> str:
+        """'02.11' (day.month) outside English, '2026-11-02' in English;
+        anything else as it came."""
+        try:
+            parsed = date.fromisoformat(str(value)[:10])
+        except ValueError:
+            return str(value or "")
+        return parsed.isoformat() if self.code == "en" else parsed.strftime("%d.%m")
 
 
 def _join(*parts: Any) -> str:
@@ -67,19 +174,17 @@ def _paren(value: Any) -> str:
     return f" ({value})" if value not in (None, "") else ""
 
 
-def _grade(d: Mapping[str, Any], pl: bool) -> str:
+def _grade(d: Mapping[str, Any], w: _Words) -> str:
     kind = d.get("kind")
     if kind == "behaviour":
-        grade = d.get("name") or d.get("value")
-        return f"ocena z zachowania: {grade}" if pl else f"behaviour grade: {grade}"
+        return f"{w['behaviour']}: {d.get('name') or d.get('value')}"
     value = d.get("value")
     if kind == "point" and d.get("max_points") is not None:
         value = f"{value}/{d.get('max_points')}"
-    head = "nowa ocena" if pl else "new grade"
-    return f"{head} {_join(value, d.get('subject'))}{_paren(d.get('category'))}"
+    return f"{w['new_grade']} {_join(value, d.get('subject'))}{_paren(d.get('category'))}"
 
 
-def _grade_change(d: Mapping[str, Any], pl: bool) -> str:
+def _grade_change(d: Mapping[str, Any], w: _Words) -> str:
     def shown(fields: Mapping[str, Any]) -> Any:
         value = fields.get("value")
         if d.get("kind") == "behaviour":
@@ -90,151 +195,113 @@ def _grade_change(d: Mapping[str, Any], pl: bool) -> str:
 
     what = f"{_join(d.get('subject'))}{_paren(d.get('category'))}"
     if d.get("change") == "removed":
-        head = "usunięta ocena" if pl else "grade removed"
-        return f"{head} {_join(shown(d), what)}".rstrip()
+        return f"{w['grade_removed']} {_join(shown(d), what)}".rstrip()
     previous = {**d, **(d.get("previous") or {})}
-    head = "zmieniona ocena" if pl else "grade changed"
+    head = w["grade_changed"]
     if shown(previous) != shown(d):
         return f"{head} {shown(previous)} → {_join(shown(d), what)}"
     return f"{head} {_join(shown(d), what)}".rstrip()
 
 
-def _note(d: Mapping[str, Any], pl: bool) -> str:
-    sentiment = d.get("sentiment") if d.get("sentiment") in ("positive", "negative") else "neutral"
-    label = {
-        "positive": ("uwaga pozytywna", "positive note"),
-        "negative": ("uwaga negatywna", "negative note"),
-        "neutral": ("uwaga", "note"),
-    }[sentiment][0 if pl else 1]
-    return f"{label}: {_short(d.get('text'))}"
+def _note(d: Mapping[str, Any], w: _Words) -> str:
+    key = {"positive": "note_positive", "negative": "note_negative"}.get(d.get("sentiment"), "note")
+    return f"{w[key]}: {_short(d.get('text'))}"
 
 
-def _absence(d: Mapping[str, Any], pl: bool) -> str:
-    if pl:
-        label = "nieobecność usprawiedliwiona" if d.get("excused") else "nieobecność nieusprawiedliwiona"
-        lesson = f", lekcja {d['lesson_no']}" if d.get("lesson_no") else ""
-    else:
-        label = "excused absence" if d.get("excused") else "unexcused absence"
-        lesson = f", lesson {d['lesson_no']}" if d.get("lesson_no") else ""
-    return f"{label}: {_day(d.get('date'), pl)}{lesson}"
+def _absence(d: Mapping[str, Any], w: _Words) -> str:
+    label = w["absence_excused"] if d.get("excused") else w["absence_unexcused"]
+    lesson = f", {w['lesson']} {d['lesson_no']}" if d.get("lesson_no") else ""
+    return f"{label}: {w.day(d.get('date'))}{lesson}"
 
 
-def _message(d: Mapping[str, Any], pl: bool) -> str:
+def _message(d: Mapping[str, Any], w: _Words) -> str:
     sender = d.get("sender")
-    if pl:
-        head = f"nowa wiadomość od {sender}" if sender else "nowa wiadomość"
-    else:
-        head = f"new message from {sender}" if sender else "new message"
+    head = w["message_from"].replace("{who}", str(sender)) if sender else w["message"]
     return f"{head}: {_short(d.get('topic'))}"
 
 
-def _announcement(d: Mapping[str, Any], pl: bool) -> str:
-    return f"{'nowe ogłoszenie' if pl else 'new announcement'}: {_short(d.get('subject'))}"
+def _announcement(d: Mapping[str, Any], w: _Words) -> str:
+    return f"{w['announcement']}: {_short(d.get('subject'))}"
 
 
-def _agenda(d: Mapping[str, Any], pl: bool) -> str:
-    head = "nowy wpis w terminarzu" if pl else "new Agenda entry"
+def _agenda(d: Mapping[str, Any], w: _Words) -> str:
     what = _join(d.get("category"), d.get("subject")) or _short(d.get("content"))
-    return f"{head}: {what}, {_day(d.get('date'), pl)}"
+    return f"{w['agenda']}: {what}, {w.day(d.get('date'))}"
 
 
-def _homework(d: Mapping[str, Any], pl: bool) -> str:
-    head = "nowe zadanie domowe" if pl else "new homework"
+def _homework(d: Mapping[str, Any], w: _Words) -> str:
     due = d.get("due_date")
-    due_text = f" ({'na' if pl else 'due'} {_day(due, pl)})" if due else ""
-    return f"{head}: {_join(d.get('subject'), _short(d.get('topic') or d.get('text')))}{due_text}"
+    due_text = f" ({w['due']} {w.day(due)})" if due else ""
+    return f"{w['homework']}: {_join(d.get('subject'), _short(d.get('topic') or d.get('text')))}{due_text}"
 
 
-_CHANGES = {
-    "canceled": ("odwołana lekcja", "lesson cancelled"),
-    "substitution": ("zastępstwo", "substitution"),
-    "room_change": ("zmiana sali", "room change"),
-    "moved": ("przeniesiona lekcja", "lesson moved"),
-}
+_CHANGES = ("canceled", "substitution", "room_change", "moved")
 
 
-def _timetable(d: Mapping[str, Any], pl: bool) -> str:
+def _timetable(d: Mapping[str, Any], w: _Words) -> str:
     change = d.get("change") or d.get("kind") or "substitution"
-    label = _CHANGES.get(change, _CHANGES["substitution"])[0 if pl else 1]
+    label = w[change if change in _CHANGES else "substitution"]
     lesson = d.get("lesson_no")
-    when = _day(d.get("date"), pl)
+    when = w.day(d.get("date"))
     if lesson:
-        when += f", {'lekcja' if pl else 'lesson'} {lesson}"
+        when += f", {w['lesson']} {lesson}"
     return f"{label}: {_join(d.get('subject'), when)}"
 
 
-def _agenda_change(d: Mapping[str, Any], pl: bool) -> str:
-    removed = d.get("kind") == "removed"
-    if pl:
-        head = "usunięty wpis w terminarzu" if removed else "zmieniony wpis w terminarzu"
-    else:
-        head = "Agenda entry removed" if removed else "Agenda entry changed"
+def _agenda_change(d: Mapping[str, Any], w: _Words) -> str:
+    head = w["agenda_removed"] if d.get("kind") == "removed" else w["agenda_changed"]
     what = _join(d.get("category"), d.get("subject")) or _short(d.get("content"))
-    return f"{head}: {what}, {_day(d.get('date'), pl)}"
+    return f"{head}: {what}, {w.day(d.get('date'))}"
 
 
-def _justification(d: Mapping[str, Any], pl: bool) -> str:
+def _justification(d: Mapping[str, Any], w: _Words) -> str:
     if d.get("accepted"):
-        label = ("usprawiedliwienie przyjęte", "justification accepted")
+        label = w["justification_accepted"]
     elif d.get("rejected"):
-        label = ("usprawiedliwienie odrzucone", "justification rejected")
+        label = w["justification_rejected"]
     else:
-        label = ("usprawiedliwienie: nowy status", "justification status changed")
-    start, end = _day(d.get("date_from"), pl), _day(d.get("date_to"), pl)
+        label = w["justification_status"]
+    start, end = w.day(d.get("date_from")), w.day(d.get("date_to"))
     span = start if not end or end == start else f"{start}–{end}"
-    return f"{label[0 if pl else 1]}: {span}"
+    return f"{label}: {span}"
 
 
-def _forecast(d: Mapping[str, Any], pl: bool) -> str:
-    head = "prognoza" if pl else "forecast"
+def _forecast(d: Mapping[str, Any], w: _Words) -> str:
     move = f"{d.get('old')} → {d.get('new')}"
-    return f"{head}: {_join(d.get('subject'), move)}"
+    return f"{w['forecast']}: {_join(d.get('subject'), move)}"
 
 
-def _trip(d: Mapping[str, Any], pl: bool) -> str:
-    head = "nowa wycieczka" if pl else "new school trip"
-    return f"{head}: {_short(d.get('destination'))}, {_day(d.get('date_from'), pl)}"
+def _trip(d: Mapping[str, Any], w: _Words) -> str:
+    return f"{w['trip']}: {_short(d.get('destination'))}, {w.day(d.get('date_from'))}"
 
 
-def _document(d: Mapping[str, Any], pl: bool) -> str:
-    return f"{'nowy dokument szkoły' if pl else 'new school document'}: {_short(d.get('name'))}"
+def _document(d: Mapping[str, Any], w: _Words) -> str:
+    return f"{w['document']}: {_short(d.get('name'))}"
 
 
-def _library(d: Mapping[str, Any], pl: bool) -> str:
-    returned = d.get("action") == "returned"
-    if pl:
-        head = "oddana do biblioteki" if returned else "wypożyczona z biblioteki"
-    else:
-        head = "returned to the library" if returned else "borrowed from the library"
+def _library(d: Mapping[str, Any], w: _Words) -> str:
+    head = w["library_returned"] if d.get("action") == "returned" else w["library_lent"]
     return f"{head}: {_short(d.get('title'))}"
 
 
-def _read(d: Mapping[str, Any], pl: bool) -> str:
+def _read(d: Mapping[str, Any], w: _Words) -> str:
     who = d.get("receiver")
-    if pl:
-        head = f"wiadomość przeczytana przez {who}" if who else "wiadomość przeczytana"
-    else:
-        head = f"{who} read your message" if who else "your message was read"
+    head = w["read_by"].replace("{who}", str(who)) if who else w["read"]
     return f"{head}: {_short(d.get('topic'))}"
 
 
-def _achievement(d: Mapping[str, Any], pl: bool) -> str:
-    return f"{'zdobyta odznaka' if pl else 'badge earned'}: {d.get('title') or d.get('id')}"
+def _achievement(d: Mapping[str, Any], w: _Words) -> str:
+    return f"{w['badge']}: {d.get('title') or d.get('id')}"
 
 
-def _summary(d: Mapping[str, Any], pl: bool) -> str:
-    audience = d.get("audience")
-    if pl:
-        who = {"parent": " (dla rodzica)", "student": " (dla ucznia)"}.get(audience, "")
-        head = f"podsumowanie tygodnia gotowe{who}"
-    else:
-        who = {"parent": " (for the parent)", "student": " (for the student)"}.get(audience, "")
-        head = f"weekly summary ready{who}"
+def _summary(d: Mapping[str, Any], w: _Words) -> str:
+    who = {"parent": w["for_parent"], "student": w["for_student"]}.get(d.get("audience"), "")
+    head = f"{w['summary']}{who}"
     return f"{head}: {_short(d.get('headline'))}" if d.get("headline") else head
 
 
 # event -> (message builder, icon)
-DESCRIBERS: dict[str, tuple[Callable[[Mapping[str, Any], bool], str], str]] = {
+DESCRIBERS: dict[str, tuple[Callable[[Mapping[str, Any], _Words], str], str]] = {
     EVENT_NEW_GRADE: (_grade, "mdi:numeric-6-box-outline"),
     EVENT_NEW_NOTE: (_note, "mdi:note-text-outline"),
     EVENT_NEW_ABSENCE: (_absence, "mdi:account-cancel-outline"),
@@ -259,10 +326,9 @@ DESCRIBERS: dict[str, tuple[Callable[[Mapping[str, Any], bool], str], str]] = {
 def describe(event_type: str, data: Mapping[str, Any], language: str | None) -> dict[str, str]:
     """The logbook entry for one of the integration's events."""
     build, icon = DESCRIBERS[event_type]
-    pl = (language or "en").lower().startswith("pl")
     return {
         LOGBOOK_ENTRY_NAME: str(data.get("student") or "Librus"),
-        LOGBOOK_ENTRY_MESSAGE: build(data, pl),
+        LOGBOOK_ENTRY_MESSAGE: build(data, _Words(language)),
         LOGBOOK_ENTRY_ICON: icon,
     }
 

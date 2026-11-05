@@ -257,6 +257,20 @@ _LABELS: dict[str, dict[str, Any]] = {
                      "behaviour": "Zachowanie", "next_week": "Następny tydzień",
                      "school_news": "Szkoła pisze"},
     },
+    "uk": {
+        "title": "Підсумок тижня", "advice": "На цей тиждень", "warning": "Увага",
+        "statuses": {"good": "Добре", "ok": "Нормально", "caution": "Потребує уваги"},
+        "sections": {"grades": "Оцінки", "attendance": "Відвідуваність",
+                     "behaviour": "Поведінка", "next_week": "Наступний тиждень",
+                     "school_news": "Новини школи"},
+    },
+    "pt": {
+        "title": "Resumo da semana", "advice": "Para esta semana", "warning": "Atenção",
+        "statuses": {"good": "Bem", "ok": "OK", "caution": "Requer atenção"},
+        "sections": {"grades": "Notas", "attendance": "Assiduidade",
+                     "behaviour": "Comportamento", "next_week": "Próxima semana",
+                     "school_news": "Da escola"},
+    },
 }
 
 

@@ -19,6 +19,17 @@
   and sentence breaks. (Thanks @tOOmki for reporting)
 
 ### Added
+- **Ukrainian and Portuguese.** The integration's own texts (entity names,
+  Configure, services, triggers and conditions, repairs) are translated, and
+  so are the logbook lines and the labels of the weekly AI summary report.
+  The companion cards follow (0.16.35). Librus data stays as the school
+  writes it - use Subject and category names to translate those.
+- **A repair when a setting stops matching.** When a line under Configure
+  matches nothing any more - the school renamed a subject, or a typo - in
+  Subject and category names, Subject colours or Point grade thresholds per
+  subject, a repair appears under Settings → Repairs naming the lines. Its
+  Fix lists the subjects again with a field for your name (colours and
+  scales are edited as text); it goes away once everything matches.
 - **Your own names for subjects and grade categories** - for families where
   someone doesn't read Polish. Configure has a new step, **Subject and
   category names**: every subject of the student and every grade category in

@@ -28,8 +28,15 @@ import voluptuous as vol
 from homeassistant.components.repairs import RepairsFlow
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.selector import TextSelector, TextSelectorConfig
 
-from .const import DOMAIN
+from .const import (
+    CONF_GRADE_CATEGORY_NAMES,
+    CONF_SUBJECT_NAMES,
+    DOMAIN,
+    UNMATCHED_SETTING_ISSUES,
+)
+from .subject_names import parse_category_names
 
 
 class LibrusSchoolYearRolloverRepairFlow(RepairsFlow):
@@ -61,9 +68,71 @@ class LibrusSchoolYearRolloverRepairFlow(RepairsFlow):
         )
 
 
+class LibrusUnmatchedSettingRepairFlow(RepairsFlow):
+    """Lines under Configure that match nothing (a renamed subject, a typo):
+    names are given again field by field like on the Names step, colours and
+    point scales are edited as text. Saving updates the entry's options
+    (which reloads it); the issue goes away once nothing is unmatched."""
+
+    def __init__(self, entry_id: str, kind: str) -> None:
+        self._entry_id = entry_id
+        self._kind = kind
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
+        # Imported here: config_flow imports the client library, repairs
+        # loads with the integration.
+        from .config_flow import names_schema, names_text
+
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        coordinator = getattr(entry, "runtime_data", None) if entry else None
+        option = UNMATCHED_SETTING_ISSUES.get(self._kind)
+        if entry is None or option is None or coordinator is None or coordinator.data is None:
+            return self.async_abort(reason="no_data")
+        options = entry.options
+        names: list[str] | None = None
+        if option == CONF_SUBJECT_NAMES:
+            names = coordinator.subject_choices
+        elif option == CONF_GRADE_CATEGORY_NAMES:
+            names = coordinator.grade_category_choices
+
+        if user_input is not None:
+            text = names_text(user_input) if names else str(user_input.get(option) or "").strip()
+            new = {**options, option: text}
+            if not text:
+                new.pop(option)
+            ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
+            self.hass.config_entries.async_update_entry(entry, options=new)
+            return self.async_create_entry(data={})
+
+        placeholders = dict(self._issue_placeholders())
+        placeholders["subjects"] = ", ".join(coordinator.subject_choices) or "-"
+        if names:
+            current, _ = parse_category_names(options.get(option), names)
+            schema = names_schema(names, current)
+        else:
+            schema = vol.Schema(
+                {
+                    vol.Optional(
+                        option, description={"suggested_value": options.get(option)}
+                    ): TextSelector(TextSelectorConfig(multiline=True))
+                }
+            )
+        return self.async_show_form(
+            step_id="init", data_schema=schema, description_placeholders=placeholders
+        )
+
+    def _issue_placeholders(self) -> dict[str, str]:
+        issue = ir.async_get(self.hass).async_get_issue(DOMAIN, self.issue_id)
+        return dict(issue.translation_placeholders or {}) if issue else {}
+
+
 async def async_create_fix_flow(
     hass: HomeAssistant, issue_id: str, data: dict[str, Any] | None
 ) -> RepairsFlow:
-    """Only `school_year_rollover` is fixable - `optional_endpoint_degraded`
-    is raised with `is_fixable=False` and never reaches this."""
-    return LibrusSchoolYearRolloverRepairFlow((data or {}).get("entry_id", ""))
+    """`school_year_rollover` and the unmatched-setting issues are fixable -
+    `optional_endpoint_degraded` is raised with `is_fixable=False` and never
+    reaches this."""
+    data = data or {}
+    if data.get("kind") in UNMATCHED_SETTING_ISSUES:
+        return LibrusUnmatchedSettingRepairFlow(data.get("entry_id", ""), data["kind"])
+    return LibrusSchoolYearRolloverRepairFlow(data.get("entry_id", ""))

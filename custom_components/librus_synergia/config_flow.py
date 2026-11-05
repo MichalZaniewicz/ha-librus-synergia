@@ -142,6 +142,27 @@ USER_SCHEMA = vol.Schema(
 )
 
 
+def names_schema(names: list[str], current: dict[str, str]) -> vol.Schema:
+    """One text field per subject or category name, for your own name
+    (Names step, and the repair for names that match nothing)."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                name, description={"suggested_value": current.get(category_key(name))}
+            ): TextSelector(TextSelectorConfig())
+            for name in names
+        }
+    )
+
+
+def names_text(values: Mapping[str, Any]) -> str:
+    """The names fields saved the way the option stores them: one
+    "Librus name: your name" a line, empty fields left out."""
+    return "\n".join(
+        f"{name}: {str(value).strip()}" for name, value in values.items() if value and str(value).strip()
+    )
+
+
 def _login_error_code(err: LibrusError) -> str:
     """Map a `_login` failure to one of strings.json's config-flow error
     keys.
@@ -562,39 +583,21 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
         options = self.config_entry.options
 
         if user_input is not None:
-
-            def lines(values: dict[str, Any]) -> str:
-                return "\n".join(
-                    f"{name}: {str(value).strip()}"
-                    for name, value in values.items()
-                    if value and str(value).strip()
-                )
-
             data = {key: value for key, value in options.items() if key not in NAME_OPTION_KEYS}
             for key, part in ((CONF_SUBJECT_NAMES, "subjects"), (CONF_GRADE_CATEGORY_NAMES, "categories")):
-                if text := lines(user_input.get(part) or {}):
+                if text := names_text(user_input.get(part) or {}):
                     data[key] = text
             return self.async_create_entry(data=data)
 
         current_subjects, _ = parse_category_names(options.get(CONF_SUBJECT_NAMES), subjects)
         current_categories, _ = parse_category_names(options.get(CONF_GRADE_CATEGORY_NAMES), categories)
 
-        def fields(names: list[str], current: dict[str, str]) -> vol.Schema:
-            return vol.Schema(
-                {
-                    vol.Optional(
-                        name, description={"suggested_value": current.get(category_key(name))}
-                    ): TextSelector(TextSelectorConfig())
-                    for name in names
-                }
-            )
-
         schema: dict[Any, Any] = {}
         if subjects:
-            schema[vol.Required("subjects")] = section(fields(subjects, current_subjects), {"collapsed": False})
+            schema[vol.Required("subjects")] = section(names_schema(subjects, current_subjects), {"collapsed": False})
         if categories:
             schema[vol.Required("categories")] = section(
-                fields(categories, current_categories), {"collapsed": True}
+                names_schema(categories, current_categories), {"collapsed": True}
             )
         if not schema:
             return self.async_abort(reason="no_data")
