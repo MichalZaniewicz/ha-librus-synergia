@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+- **Weekly AI Summary Report blueprint, "One message per section" didn't
+  send.** The section list was stored with Jinja's `tojson`, which writes an
+  emoji (the 🟢 status dots) as an escaped pair Home Assistant then read back
+  as two broken halves, so the notify call failed with
+  `UnicodeEncodeError ... surrogates not allowed`. Home Assistant's own
+  `to_json` keeps the emoji whole. (Thanks @tOOmki for reporting)
+
 ### Changed
 - **Weekly AI Summary Report blueprint, "One message per section".** An
   action written with `{{ message_full }}` or `{{ message_short }}` now

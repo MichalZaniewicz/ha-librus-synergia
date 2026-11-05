@@ -285,7 +285,10 @@ actions:
           {%- endfor -%}
           {%- set ns.parts = out.parts -%}
         {%- endif -%}
-        {{ ns.parts | tojson }}
+        {#- to_json (Home Assistant's), not Jinja's tojson: tojson writes an emoji as a
+            "\ud83d\udfe2" pair, which Home Assistant reads back as two broken
+            halves - sending the message then fails (issue #26). -#}
+        {{ ns.parts | to_json }}
       parts: "{{ message_parts | count if send_as == 'per_section' else 1 }}"
       part: 1
       # The title without "(1/4)", so each message's number replaces the last.
