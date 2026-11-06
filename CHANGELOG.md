@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.44
 
 ### Fixed
 - **Weekly AI Summary Report blueprint, "One message per section" didn't

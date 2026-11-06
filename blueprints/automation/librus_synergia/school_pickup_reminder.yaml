@@ -20,7 +20,7 @@ blueprint:
       description: >
         The Librus "School end" sensor for this student (the last lesson),
         or "School day end" (the last lesson or a later activity that day,
-        integration 0.12.43 or newer).
+        integration 0.12.44 or newer).
       selector:
         entity:
           integration: librus_synergia
