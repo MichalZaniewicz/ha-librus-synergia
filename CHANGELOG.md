@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.46
 
 ### Added
 - **Russian, German and French.** The integration's own texts (entity names,
