@@ -99,6 +99,7 @@ _LANGUAGE_NAMES = {
     "nl": "Dutch",
     "pt": "Portuguese",
     "uk": "Ukrainian",
+    "ru": "Russian",
 }
 
 # Sections of the summary, in display order: key -> what it covers. Each
@@ -270,6 +271,13 @@ _LABELS: dict[str, dict[str, Any]] = {
         "sections": {"grades": "Notas", "attendance": "Assiduidade",
                      "behaviour": "Comportamento", "next_week": "Próxima semana",
                      "school_news": "Da escola"},
+    },
+    "ru": {
+        "title": "Итоги недели", "advice": "На эту неделю", "warning": "Внимание",
+        "statuses": {"good": "Хорошо", "ok": "Нормально", "caution": "Требует внимания"},
+        "sections": {"grades": "Оценки", "attendance": "Посещаемость",
+                     "behaviour": "Поведение", "next_week": "Следующая неделя",
+                     "school_news": "Новости школы"},
     },
 }
 

@@ -43,6 +43,7 @@ def test_translation_matches_strings(path: Path) -> None:
     assert not wrong, wrong[:10]
 
 
-def test_ukrainian_and_portuguese_exist() -> None:
+def test_ukrainian_portuguese_russian_exist() -> None:
     assert (ROOT / "translations" / "uk.json").exists()
     assert (ROOT / "translations" / "pt.json").exists()
+    assert (ROOT / "translations" / "ru.json").exists()
