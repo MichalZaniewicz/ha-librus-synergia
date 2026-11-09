@@ -238,7 +238,9 @@
         "en": "Angielski",
         "uk": "ukraiński",
         "pt": "portugalski",
-        "ru": "rosyjski"
+        "ru": "rosyjski",
+        "de": "niemiecki",
+        "fr": "francuski"
       }
     },
     "ai_audience": {

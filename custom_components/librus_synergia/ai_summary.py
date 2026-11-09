@@ -279,6 +279,20 @@ _LABELS: dict[str, dict[str, Any]] = {
                      "behaviour": "Поведение", "next_week": "Следующая неделя",
                      "school_news": "Новости школы"},
     },
+    "de": {
+        "title": "Wochenzusammenfassung", "advice": "Für die kommende Woche", "warning": "Achtung",
+        "statuses": {"good": "Gut", "ok": "OK", "caution": "Beachten"},
+        "sections": {"grades": "Noten", "attendance": "Anwesenheit",
+                     "behaviour": "Verhalten", "next_week": "Nächste Woche",
+                     "school_news": "Von der Schule"},
+    },
+    "fr": {
+        "title": "Résumé de la semaine", "advice": "Pour la semaine à venir", "warning": "Attention",
+        "statuses": {"good": "Bien", "ok": "OK", "caution": "À surveiller"},
+        "sections": {"grades": "Notes", "attendance": "Assiduité",
+                     "behaviour": "Comportement", "next_week": "Semaine prochaine",
+                     "school_news": "De l'école"},
+    },
 }
 
 

@@ -3,7 +3,8 @@
 "Ola: new grade 5 - Matematyka (Sprawdzian)" in the logbook and on the
 student's device page (the logbook matches events to a device by the
 `device_id` in their data), instead of nothing. In Home Assistant's
-language (English, Polish, Ukrainian, Portuguese; English for any other) -
+language (English, Polish, Ukrainian, Portuguese, Russian, German, French;
+English for any other) -
 the logbook has no translation step for these lines.
 """
 
@@ -166,6 +167,51 @@ _WORDS: dict[str, dict[str, str]] = {
         "read_by": "{who} прочитал(-а) ваше сообщение", "read": "ваше сообщение прочитано",
         "badge": "получен значок", "summary": "итоги недели готовы",
         "for_parent": " (для родителей)", "for_student": " (для ученика)",
+    },
+    "de": {
+        "behaviour": "Verhaltensnote", "new_grade": "neue Note",
+        "grade_removed": "Note entfernt", "grade_changed": "Note geändert",
+        "note_positive": "positive Verhaltensnotiz", "note_negative": "negative Verhaltensnotiz",
+        "note": "Verhaltensnotiz",
+        "absence_excused": "entschuldigte Fehlzeit", "absence_unexcused": "unentschuldigte Fehlzeit",
+        "lesson": "Stunde",
+        "message_from": "neue Nachricht von {who}", "message": "neue Nachricht",
+        "announcement": "neue Ankündigung", "agenda": "neuer Termin",
+        "homework": "neue Hausaufgabe", "due": "fällig",
+        "canceled": "Stunde entfällt", "substitution": "Vertretung",
+        "room_change": "Raumänderung", "moved": "Stunde verlegt",
+        "agenda_removed": "Termin entfernt", "agenda_changed": "Termin geändert",
+        "justification_accepted": "Entschuldigung akzeptiert",
+        "justification_rejected": "Entschuldigung abgelehnt",
+        "justification_status": "Status der Entschuldigung geändert",
+        "forecast": "Prognose", "trip": "neuer Schulausflug", "document": "neues Schuldokument",
+        "library_returned": "an die Bibliothek zurückgegeben",
+        "library_lent": "aus der Bibliothek ausgeliehen",
+        "read_by": "{who} hat deine Nachricht gelesen", "read": "deine Nachricht wurde gelesen",
+        "badge": "Abzeichen erhalten", "summary": "Wochenzusammenfassung fertig",
+        "for_parent": " (für die Eltern)", "for_student": " (für Schüler/in)",
+    },
+    "fr": {
+        "behaviour": "note de conduite", "new_grade": "nouvelle note",
+        "grade_removed": "note supprimée", "grade_changed": "note modifiée",
+        "note_positive": "observation positive", "note_negative": "observation négative",
+        "note": "observation",
+        "absence_excused": "absence justifiée", "absence_unexcused": "absence non justifiée",
+        "lesson": "cours",
+        "message_from": "nouveau message de {who}", "message": "nouveau message",
+        "announcement": "nouvelle annonce", "agenda": "nouvelle entrée d'agenda",
+        "homework": "nouveau devoir", "due": "pour le",
+        "canceled": "cours annulé", "substitution": "remplacement",
+        "room_change": "changement de salle", "moved": "cours déplacé",
+        "agenda_removed": "entrée d'agenda supprimée", "agenda_changed": "entrée d'agenda modifiée",
+        "justification_accepted": "justificatif accepté",
+        "justification_rejected": "justificatif refusé",
+        "justification_status": "statut du justificatif modifié",
+        "forecast": "prévision", "trip": "nouvelle sortie scolaire", "document": "nouveau document scolaire",
+        "library_returned": "rendu à la bibliothèque", "library_lent": "emprunté à la bibliothèque",
+        "read_by": "{who} a lu votre message", "read": "votre message a été lu",
+        "badge": "badge obtenu", "summary": "résumé de la semaine prêt",
+        "for_parent": " (pour le parent)", "for_student": " (pour l'élève)",
     },
 }
 

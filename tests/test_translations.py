@@ -43,7 +43,6 @@ def test_translation_matches_strings(path: Path) -> None:
     assert not wrong, wrong[:10]
 
 
-def test_ukrainian_portuguese_russian_exist() -> None:
-    assert (ROOT / "translations" / "uk.json").exists()
-    assert (ROOT / "translations" / "pt.json").exists()
-    assert (ROOT / "translations" / "ru.json").exists()
+def test_every_offered_language_has_a_file() -> None:
+    for code in ("pl", "en", "uk", "pt", "ru", "de", "fr"):
+        assert (ROOT / "translations" / f"{code}.json").exists(), code

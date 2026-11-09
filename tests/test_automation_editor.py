@@ -298,8 +298,10 @@ def test_logbook_lines() -> None:
     )
     assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "uk")["message"].startswith("нова оцінка 5")
     assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "ru")["message"].startswith("новая оценка 5")
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "de")["message"].startswith("neue Note 5")
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "fr")["message"].startswith("nouvelle note 5")
     # Any other language: English.
-    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "de")["message"].startswith("new grade")
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "sv")["message"].startswith("new grade")
     # Every language has every phrase.
     words = librus_logbook._WORDS
     assert all(set(table) == set(words["en"]) for table in words.values())
