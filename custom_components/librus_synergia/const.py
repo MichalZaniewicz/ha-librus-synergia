@@ -232,7 +232,7 @@ DEFAULT_AI_INCLUDE_MESSAGES = False
 # server language (Settings > System > General), not a user's profile.
 CONF_AI_LANGUAGE = "ai_language"
 AI_LANGUAGE_AUTO = "auto"
-AI_LANGUAGES = (AI_LANGUAGE_AUTO, "pl", "en", "uk", "pt")
+AI_LANGUAGES = (AI_LANGUAGE_AUTO, "pl", "en", "uk", "pt", "ru")
 DEFAULT_AI_LANGUAGE = AI_LANGUAGE_AUTO
 AI_OPTION_KEYS = (
     CONF_AI_TASK_ENTITY,

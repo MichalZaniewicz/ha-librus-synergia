@@ -487,7 +487,8 @@ async def test_output_token_limit_error_says_what_to_change(hass) -> None:
     assert TOKEN_LIMIT_HINT in error
 
 
-async def test_parent_and_student_get_their_own_text(hass) -> None:
+async def test_parent_and_student_get_their_own_text(hass, freezer) -> None:
+    freezer.move_to("2026-10-05T00:59:00+00:00")
     calls: list[dict] = []
 
     async def _handler(call):

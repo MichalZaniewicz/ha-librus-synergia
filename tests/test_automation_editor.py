@@ -297,6 +297,7 @@ def test_logbook_lines() -> None:
         == "falta injustificada: 02.11, aula 3"
     )
     assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "uk")["message"].startswith("нова оцінка 5")
+    assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "ru")["message"].startswith("новая оценка 5")
     # Any other language: English.
     assert librus_logbook.describe(EVENT_NEW_GRADE, grade, "de")["message"].startswith("new grade")
     # Every language has every phrase.
