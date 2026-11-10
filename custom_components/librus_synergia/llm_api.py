@@ -960,6 +960,7 @@ class MessagesTool(_LibrusTool):
         messages = [
             _compact(
                 {
+                    "id": m.id,
                     "date": _dated(m.send_date),
                     "from": m.sender_name,
                     "topic": _cut(m.topic, 120),
@@ -974,6 +975,7 @@ class MessagesTool(_LibrusTool):
         sent = [
             _compact(
                 {
+                    "id": m.id,
                     "date": _dated(m.send_date),
                     "to": m.receiver_name,
                     "topic": _cut(m.topic, 120),
@@ -1011,9 +1013,10 @@ class MessagesTool(_LibrusTool):
 class FullMessageTool(_LibrusTool):
     name = "librus_get_full_message"
     description = (
-        "Fetch the FULL text of a single message by its message_id (from librus_get_messages "
-        "or the 'recent' attribute of an unread_messages sensor). Returns the complete body, "
-        "attachments list and sender. Use when the preview from librus_get_messages is not enough."
+        "Fetch the FULL text of a single message by its message_id (the 'id' field returned by "
+        "librus_get_messages, or the 'recent' attribute of an unread_messages sensor). Returns "
+        "the complete body, attachments list and sender. Use when the preview from "
+        "librus_get_messages is not enough."
     )
     parameters = _schema(
         {
