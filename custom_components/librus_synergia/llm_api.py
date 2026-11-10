@@ -1028,13 +1028,25 @@ class FullMessageTool(_LibrusTool):
         if not message_id:
             return _result({"error": "message_id is required"}, error=True)
         mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
-        # Find the device_id for this config entry from the device registry.
+        # Find the device_id for Librus from the device registry.
         from homeassistant.helpers import device_registry as dr
         dev_reg = dr.async_get(coordinator.hass)
-        devices = dr.async_entries_for_config_entry(dev_reg, coordinator.config_entry.entry_id)
-        if not devices:
+        device_id = None
+        for device in dev_reg.devices.values():
+            if any("librus_synergia" in (ident[0] or "") for ident in device.identifiers):
+                device_id = device.id
+                break
+            if device.manufacturer and "librus" in (device.manufacturer or "").lower():
+                device_id = device.id
+                break
+        if device_id is None:
+            # Fallback: first device whose name contains librus
+            for device in dev_reg.devices.values():
+                if device.name and "librus" in (device.name or "").lower():
+                    device_id = device.id
+                    break
+        if device_id is None:
             return _result({"error": "No Librus device found in device registry"}, error=True)
-        device_id = devices[0].id
         try:
             response = await coordinator.hass.services.async_call(
                 "librus_synergia",
