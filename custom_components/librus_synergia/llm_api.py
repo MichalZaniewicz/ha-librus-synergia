@@ -1028,9 +1028,17 @@ class FullMessageTool(_LibrusTool):
 
     async def _async_for_student(self, coordinator, data, today, args):
         message_id = str(args.get("message_id") or "").strip()
+        mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
+        # Fallback: if the model passed a topic/sender instead of a numeric id,
+        # try to resolve it against the cached messages.
+        if not message_id or not message_id.isdigit():
+            topic_hint = message_id.lower()
+            for m in getattr(data, "messages", []) or []:
+                if topic_hint and (topic_hint in (m.topic or "").lower() or topic_hint in (m.sender_name or "").lower()):
+                    message_id = str(m.id)
+                    break
         if not message_id:
             return _result({"error": "message_id is required"}, error=True)
-        mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
         # Find the device_id for Librus from the device registry.
         from homeassistant.helpers import device_registry as dr
         dev_reg = dr.async_get(coordinator.hass)
