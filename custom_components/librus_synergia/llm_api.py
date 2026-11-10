@@ -1058,6 +1058,115 @@ class LessonTopicsTool(_LibrusTool):
         )
 
 
+class FullMessageTool(_LibrusTool):
+    name = "librus_get_full_message"
+    description = (
+        "Fetch the FULL text of a single message by its message_id (from librus_get_messages "
+        "or the 'recent' attribute of an unread_messages sensor). Returns the complete body, "
+        "attachments list and sender. Use when the preview from librus_get_messages is not enough."
+    )
+    parameters = _schema(
+        {
+            "message_id": (str, "The message id (from librus_get_messages or sensor attribute 'recent')."),
+            "student": _STUDENT_FIELD,
+            "mailbox": (str, "Mailbox: inbox (default) or sent."),
+        }
+    )
+
+    async def _async_for_student(self, coordinator, data, today, args):
+        message_id = str(args.get("message_id") or "").strip()
+        mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
+        # Fallback: if the model passed a topic/sender instead of a numeric id,
+        # try to resolve it against the cached messages.
+        if not message_id or not message_id.isdigit():
+            topic_hint = message_id.lower()
+            for m in getattr(data, "messages", []) or []:
+                if topic_hint and (topic_hint in (m.topic or "").lower() or topic_hint in (m.sender_name or "").lower()):
+                    message_id = str(m.id)
+                    break
+        if not message_id:
+            return {"error": "message_id is required"}
+        # Find the device_id for Librus from the device registry.
+        from homeassistant.helpers import device_registry as dr
+        dev_reg = dr.async_get(coordinator.hass)
+        device_id = None
+        for device in dev_reg.devices.values():
+            if any("librus_synergia" in (ident[0] or "") for ident in device.identifiers):
+                device_id = device.id
+                break
+            if device.manufacturer and "librus" in (device.manufacturer or "").lower():
+                device_id = device.id
+                break
+        if device_id is None:
+            for device in dev_reg.devices.values():
+                if device.name and "librus" in (device.name or "").lower():
+                    device_id = device.id
+                    break
+        if device_id is None and dev_reg.devices:
+            device_id = list(dev_reg.devices.values())[0].id
+        if device_id is None:
+            return {"error": "No Librus device found in device registry"}
+        # Resolve message_id from sensor recent attribute if needed
+        resolved_id = await self._resolve_message_id_from_sensor(coordinator, data, message_id)
+        _LOGGER.debug("librus_get_full_message: device_id=%s message_id=%s (resolved=%s)", device_id, message_id, resolved_id)
+        try:
+            response = await coordinator.hass.services.async_call(
+                "librus_synergia",
+                "get_message",
+                {"device_id": device_id, "message_id": resolved_id, "mailbox": mailbox},
+                blocking=True,
+                return_response=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.exception("librus_get_full_message failed: %s", err)
+            return {"error": str(err)}
+        if not isinstance(response, dict):
+            _LOGGER.debug("librus_get_full_message: unexpected response type %s", type(response))
+            return {"error": f"Unexpected response fetching message {resolved_id}"}
+        return _compact(
+            {
+                "message_id": resolved_id,
+                "mailbox": mailbox,
+                "sender": response.get("sender"),
+                "topic": response.get("topic"),
+                "content": response.get("content"),
+                "send_date": response.get("send_date"),
+                "read_date": response.get("read_date"),
+                "attachments": response.get("attachments"),
+            }
+        )
+
+    async def _resolve_message_id_from_sensor(self, coordinator, data, message_id):
+        # If message_id is already numeric and exists in data.messages, use it.
+        # But it may be invalid in Librus API; we'll try to resolve from sensor.
+        student_name = getattr(data.me, "display_name", "") or ""
+        student_parts = [p.casefold() for p in student_name.split() if p]
+        for entity_id in coordinator.hass.states.async_entity_ids("sensor"):
+            if "unread_messages" not in entity_id:
+                continue
+            if not any(part in entity_id for part in student_parts):
+                continue
+            state = coordinator.hass.states.get(entity_id)
+            if not state or not state.attributes:
+                continue
+            recent = state.attributes.get("recent") or []
+            if not recent:
+                continue
+            # If message_id is a topic/sender hint, match
+            if not message_id.isdigit():
+                hint = message_id.lower()
+                for entry in recent:
+                    if hint in (entry.get("topic") or "").lower() or hint in (entry.get("sender") or "").lower():
+                        return str(entry.get("id"))
+            # If message_id is numeric, try to find it in recent; if not found, use latest
+            for entry in recent:
+                if str(entry.get("id")) == message_id:
+                    return message_id
+            # Fallback to latest
+            return str(recent[0].get("id"))
+        return message_id
+
+
 TOOLS: tuple[type[_LibrusTool], ...] = (
     TimetableTool,
     GradesTool,
