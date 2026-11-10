@@ -1008,6 +1008,59 @@ class MessagesTool(_LibrusTool):
         )
 
 
+class FullMessageTool(_LibrusTool):
+    name = "librus_get_full_message"
+    description = (
+        "Fetch the FULL text of a single message by its message_id (from librus_get_messages "
+        "or the 'recent' attribute of an unread_messages sensor). Returns the complete body, "
+        "attachments list and sender. Use when the preview from librus_get_messages is not enough."
+    )
+    parameters = _schema(
+        {
+            "message_id": (str, "The message id (from librus_get_messages or sensor attribute 'recent')."),
+            "student": _STUDENT_FIELD,
+            "mailbox": (str, "Mailbox: inbox (default) or sent."),
+        }
+    )
+
+    async def _async_for_student(self, coordinator, data, today, args):
+        message_id = str(args.get("message_id") or "").strip()
+        if not message_id:
+            return _result({"error": "message_id is required"}, error=True)
+        mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
+        # Find the device_id for this integration from the device registry.
+        from homeassistant.helpers import device_registry as dr
+        dev_reg = dr.async_get(self.hass)
+        device_id = None
+        for device in dev_reg.devices.values():
+            if device.manufacturer and "librus" in (device.manufacturer or "").lower():
+                device_id = device.id
+                break
+            if any("librus" in (ident[1] or "").lower() for ident in device.identifiers):
+                device_id = device.id
+                break
+        if device_id is None:
+            # Fallback: first device whose identifiers contain the domain.
+            for device in dev_reg.devices.values():
+                if any("librus_synergia" in (ident[0] or "") for ident in device.identifiers):
+                    device_id = device.id
+                    break
+        if device_id is None:
+            return _result({"error": "No Librus device found in device registry"}, error=True)
+        try:
+            response = await self.hass.services.async_call(
+                "librus_synergia",
+                "get_message",
+                {"device_id": device_id, "message_id": message_id, "mailbox": mailbox},
+                blocking=True,
+                return_response=True,
+            )
+        except Exception as err:  # noqa: BLE001
+            return _result({"error": str(err)}, error=True)
+        data_resp = (response or {}).get("data") if isinstance(response, dict) else response
+        return _result({"message_id": message_id, "mailbox": mailbox, "data": data_resp})
+
+
 class LessonTopicsTool(_LibrusTool):
     name = "librus_get_lesson_topics"
     description = (
@@ -1067,6 +1120,7 @@ TOOLS: tuple[type[_LibrusTool], ...] = (
     BehaviourTool,
     SchoolInfoTool,
     MessagesTool,
+    FullMessageTool,
 )
 
 
@@ -1094,6 +1148,8 @@ class LibrusLLMAPI(llm.API):
             "answer questions about school for: "
             f"{who}. Today is {_dated(dt_util.now().date())}. Every date in tool results "
             "comes with its weekday; trust those weekdays instead of working them out. "
+            "For full message text, use librus_get_full_message with the message_id from "
+            "librus_get_messages. "
             "For 'tomorrow' or a weekday, pass that date to librus_get_timetable. The "
             "tools only read data; nothing is changed or sent. Answer in the user's "
             "language and keep subject names as Librus writes them."
