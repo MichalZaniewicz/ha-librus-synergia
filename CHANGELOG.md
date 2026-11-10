@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Weekly AI summary made up after a failed run covered the wrong week.** When
+  the scheduled run failed (for example the AI hit its output token limit) and a
+  coordinator update made it up the next morning, the summary covered the 7 days
+  up to the catch-up day instead of the scheduled week - a Monday catch-up said
+  "3-9.11" and wrote about "a great start of the week". A made-up run now covers
+  the week ending on its scheduled day (the next week starts the day after it),
+  and the model is told the summary is late.
+
 ## 0.12.46
 
 ### Added

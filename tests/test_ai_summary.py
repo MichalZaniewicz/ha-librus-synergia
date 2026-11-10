@@ -172,6 +172,28 @@ async def test_build_context_covers_this_week_and_next(hass) -> None:
     assert not is_empty_week(context)
 
 
+
+async def test_build_context_window_can_end_before_today(hass) -> None:
+    """A scheduled run made up the next day still covers the scheduled week."""
+    entry = await setup_integration(hass, _client())
+    monday = date(2026, 10, 5)
+
+    context = build_context(
+        entry.runtime_data.data, monday, weighted=True, include_news=False,
+        student="Ola K", week_end=_TODAY,
+    )
+
+    assert context["today"] == "2026-10-05 Mon"
+    assert context["this_week"] == {"from": "2026-09-28 Mon", "to": "2026-10-04 Sun"}
+    assert context["next_week"]["from"] == "2026-10-05 Mon"
+    assert [g["value"] for g in context["grades"]] == ["6"]
+    # A week end after today is not allowed: the window never reaches the future.
+    future = build_context(
+        entry.runtime_data.data, _TODAY, weighted=True, include_news=False,
+        student=None, week_end=monday,
+    )
+    assert future["this_week"]["to"] == "2026-10-04 Sun"
+
 async def test_build_context_includes_this_weeks_descriptive_grades(hass) -> None:
     entry = await setup_integration(hass, _client())
     data = dataclasses.replace(
@@ -277,6 +299,18 @@ def test_instructions_follow_the_audience() -> None:
     assert "Polish" in student
     assert "egzamin w tym roku" in student
 
+
+
+def test_instructions_say_when_the_summary_is_late() -> None:
+    context = {"student": "Ola K", "this_week": {}}
+    monday = date(2026, 10, 5)
+    late = build_instructions(context, monday, "pl", "parent", None, _TODAY)
+    assert "This summary is late" in late
+    assert "2026-10-04" in late
+    assert "This summary is late" not in build_instructions(context, _TODAY, "pl", "parent", None)
+    assert "This summary is late" not in build_instructions(
+        context, _TODAY, "pl", "parent", None, _TODAY
+    )
 
 def test_structure_and_parse_respect_the_news_option() -> None:
     assert "school_news" not in build_structure(False)
@@ -539,3 +573,43 @@ async def test_one_audience_has_no_versions_and_old_store_still_loads(hass, hass
     state = hass.states.get(_entity_id(hass, "sensor", f"{entry.entry_id}_weekly_summary"))
     assert state.state == "Stary tekst"
     assert "versions" not in state.attributes
+
+
+async def test_failed_sunday_run_made_up_on_monday_covers_the_scheduled_week(hass, freezer) -> None:
+    # Sunday 2026-10-04 18:00 local (tests run in US/Pacific): the provider fails.
+    freezer.move_to("2026-10-05T00:59:00+00:00")
+    calls: list[dict] = []
+    fail = [True]
+
+    async def _handler(call):
+        calls.append(dict(call.data))
+        if fail[0]:
+            raise HomeAssistantError(
+                "Claude reached the output token limit before completing the response."
+            )
+        return {"data": _ANSWER}
+
+    hass.services.async_register(
+        "ai_task", "generate_data", _handler, supports_response=SupportsResponse.ONLY
+    )
+    events = []
+    hass.bus.async_listen(EVENT_WEEKLY_SUMMARY, events.append)
+    entry = await setup_integration(hass, _client(), options=_AI_OPTIONS)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    freezer.move_to("2026-10-05T01:00:00+00:00")
+    async_fire_time_changed(hass, dt_util.utcnow())
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1
+    assert "This summary is late" not in calls[0]["instructions"]
+    assert events == []
+
+    # Monday 2026-10-05 07:54 local: a coordinator update makes it up.
+    fail[0] = False
+    freezer.move_to("2026-10-05T14:54:00+00:00")
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(calls) == 2
+    assert "This summary is late" in calls[1]["instructions"]
+    assert '"this_week":{"from":"2026-09-28 Mon","to":"2026-10-04 Sun"}' in calls[1]["instructions"]
+    assert [(e.data["week_from"], e.data["week_to"]) for e in events] == [("2026-09-28", "2026-10-04")]
