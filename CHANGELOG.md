@@ -8,6 +8,15 @@
   `librus_synergia.get_message` service, so conversation agents can read
   complete message bodies instead of the preview returned by
   `librus_get_messages`.
+## 0.12.46
+
+### Added
+- **Russian, German and French.** The integration's own texts (entity names,
+  Configure, services, triggers and conditions, repairs) are translated, and so
+  are the logbook lines, the labels of the weekly AI summary report and the
+  Language option for the AI summary. The companion cards follow. Librus data
+  stays as the school writes it - use Subject and category names to translate
+  those. (Thanks @snooppoland-cpu for the Russian translation)
 
 ## 0.12.44
 
@@ -28,11 +37,6 @@
   and sentence breaks. (Thanks @tOOmki for reporting)
 
 ### Added
-- **Russian.** The integration's own texts (entity names, Configure, services,
-  triggers and conditions, repairs) are translated into Russian, and so are the
-  logbook lines, the labels of the weekly AI summary report, and the Language
-  option for the AI summary. Librus data stays as the school writes it - use
-  Subject and category names to translate those.
 - **Ukrainian and Portuguese.** The integration's own texts (entity names,
   Configure, services, triggers and conditions, repairs) are translated, and
   so are the logbook lines and the labels of the weekly AI summary report.

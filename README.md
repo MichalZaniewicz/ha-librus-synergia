@@ -149,6 +149,7 @@ Thanks to everyone who sent code to this project:
 
 - <img src="https://github.com/keysim86.png?size=40" width="20" height="20" alt=""> [@keysim86](https://github.com/keysim86): point-graded subjects in the forecast, the new-grade event, the badges, the streak and the rank; only the student's own class free days; events that arrive while Home Assistant restarts; edited and deleted grades
 - <img src="https://github.com/Lucaspog.png?size=40" width="20" height="20" alt=""> [@Lucaspog](https://github.com/Lucaspog): kindergarten timetable and classroom names
+- <img src="https://github.com/snooppoland-cpu.png?size=40" width="20" height="20" alt=""> [@snooppoland-cpu](https://github.com/snooppoland-cpu): Russian translation
 
 ## Supporters
 
