@@ -52,6 +52,7 @@ async def test_api_registered_with_read_only_tools(hass) -> None:
         "librus_get_behaviour",
         "librus_get_school_info",
         "librus_get_messages",
+        "librus_get_full_message",
     }
     assert "Librus Synergia" in instance.api_prompt
 

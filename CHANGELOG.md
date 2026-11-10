@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **LLM API: `librus_get_full_message` tool.** Fetches the full text of a
+  single message (sender, topic, content, dates, attachments) via the
+  `librus_synergia.get_message` service, so conversation agents can read
+  complete message bodies instead of the preview returned by
+  `librus_get_messages`.
+
 ## 0.12.44
 
 ### Fixed
