@@ -1028,27 +1028,15 @@ class FullMessageTool(_LibrusTool):
         if not message_id:
             return _result({"error": "message_id is required"}, error=True)
         mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
-        # Find the device_id for this integration from the device registry.
+        # Find the device_id for this config entry from the device registry.
         from homeassistant.helpers import device_registry as dr
-        dev_reg = dr.async_get(self.hass)
-        device_id = None
-        for device in dev_reg.devices.values():
-            if device.manufacturer and "librus" in (device.manufacturer or "").lower():
-                device_id = device.id
-                break
-            if any("librus" in (ident[1] or "").lower() for ident in device.identifiers):
-                device_id = device.id
-                break
-        if device_id is None:
-            # Fallback: first device whose identifiers contain the domain.
-            for device in dev_reg.devices.values():
-                if any("librus_synergia" in (ident[0] or "") for ident in device.identifiers):
-                    device_id = device.id
-                    break
-        if device_id is None:
+        dev_reg = dr.async_get(coordinator.hass)
+        devices = dr.async_entries_for_config_entry(dev_reg, coordinator.config_entry.entry_id)
+        if not devices:
             return _result({"error": "No Librus device found in device registry"}, error=True)
+        device_id = devices[0].id
         try:
-            response = await self.hass.services.async_call(
+            response = await coordinator.hass.services.async_call(
                 "librus_synergia",
                 "get_message",
                 {"device_id": device_id, "message_id": message_id, "mailbox": mailbox},
@@ -1057,8 +1045,20 @@ class FullMessageTool(_LibrusTool):
             )
         except Exception as err:  # noqa: BLE001
             return _result({"error": str(err)}, error=True)
-        data_resp = (response or {}).get("data") if isinstance(response, dict) else response
-        return _result({"message_id": message_id, "mailbox": mailbox, "data": data_resp})
+        if not isinstance(response, dict):
+            return _result({"error": f"Unexpected response fetching message {message_id}"}, error=True)
+        return _compact(
+            {
+                "message_id": message_id,
+                "mailbox": mailbox,
+                "sender": response.get("sender"),
+                "topic": response.get("topic"),
+                "content": response.get("content"),
+                "send_date": response.get("send_date"),
+                "read_date": response.get("read_date"),
+                "attachments": response.get("attachments"),
+            }
+        )
 
 
 class LessonTopicsTool(_LibrusTool):
