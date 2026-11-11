@@ -52,6 +52,7 @@ async def test_api_registered_with_read_only_tools(hass) -> None:
         "librus_get_behaviour",
         "librus_get_school_info",
         "librus_get_messages",
+        "librus_get_full_message",
     }
     assert "Librus Synergia" in instance.api_prompt
 
@@ -220,7 +221,7 @@ async def test_messages_tool_lists_sent_messages(hass, freezer) -> None:
 
     data = await _call(hass, "librus_get_messages")
     assert data["sent_messages"] == [
-        {"date": data["sent_messages"][0]["date"], "to": "Anna Nowak", "topic": "Nieobecność"}
+        {"id": "9", "date": data["sent_messages"][0]["date"], "to": "Anna Nowak", "topic": "Nieobecność"}
     ]
 
 
