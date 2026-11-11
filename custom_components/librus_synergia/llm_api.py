@@ -1027,8 +1027,10 @@ class FullMessageTool(_LibrusTool):
     )
 
     async def _async_for_student(self, coordinator, data, today, args):
-        message_id = str(args.get("message_id") or "").strip()
         mailbox = str(args.get("mailbox") or "inbox").strip() or "inbox"
+        if mailbox == "sent":
+            mailbox = "outbox"
+        message_id = str(args.get("message_id") or "").strip()
         # Fallback: if the model passed a topic/sender instead of a numeric id,
         # try to resolve it against the cached messages.
         if not message_id or not message_id.isdigit():
@@ -1039,27 +1041,21 @@ class FullMessageTool(_LibrusTool):
                     break
         if not message_id:
             return _result({"error": "message_id is required"}, error=True)
-        # Find the device_id for Librus from the device registry.
+        # Resolve device_id deterministically from the coordinator's config entry.
         from homeassistant.helpers import device_registry as dr
+
         dev_reg = dr.async_get(coordinator.hass)
-        device_id = None
-        for device in dev_reg.devices.values():
-            if any("librus_synergia" in (ident[0] or "") for ident in device.identifiers):
-                device_id = device.id
-                break
-            if device.manufacturer and "librus" in (device.manufacturer or "").lower():
-                device_id = device.id
-                break
-        if device_id is None:
-            for device in dev_reg.devices.values():
-                if device.name and "librus" in (device.name or "").lower():
-                    device_id = device.id
+        entry_id = getattr(coordinator.config_entry, "entry_id", None)
+        device = dev_reg.async_get_device(identifiers={(DOMAIN, entry_id)}) if entry_id else None
+        if device is None:
+            # Fallback scan only if the entry-based lookup failed.
+            for d in dev_reg.devices.values():
+                if any("librus_synergia" in (ident[0] or "") for ident in d.identifiers):
+                    device = d
                     break
-        if device_id is None and dev_reg.devices:
-            # Last resort: first device in registry
-            device_id = list(dev_reg.devices.values())[0].id
-        if device_id is None:
+        if device is None:
             return _result({"error": "No Librus device found in device registry"}, error=True)
+        device_id = device.id
         _LOGGER.debug("librus_get_full_message: device_id=%s message_id=%s", device_id, message_id)
         try:
             response = await coordinator.hass.services.async_call(
