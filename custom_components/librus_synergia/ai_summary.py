@@ -188,7 +188,7 @@ _AUDIENCE = {
 }
 
 _INSTRUCTIONS = """You summarise one student's school week from the Polish e-gradebook
-Librus Synergia. Below is a JSON snapshot as of {today}.
+Librus Synergia. Below is a JSON snapshot as of {today}.{late}
 {audience}
 
 Rules:
@@ -404,12 +404,16 @@ def build_context(
     thresholds: tuple[float, ...] | None = None,
     owner: Hashable | None = None,
     point_thresholds: PointThresholdsArg = None,
+    week_end: date | None = None,
 ) -> dict[str, Any]:
-    """Compact, JSON-ready snapshot of the week before and after ``today``.
+    """Compact, JSON-ready snapshot of the week before and after ``week_end``
+    (``today`` unless given: a scheduled run made up later still covers the week
+    it was scheduled for, not the days up to the catch-up).
     ``owner`` is the config entry id the forecasts are cached under (see
     forecast.DataMemo) - without it every summary left a slot of its own."""
-    week_from = today - timedelta(days=WINDOW_DAYS - 1)
-    next_from, next_to = today + timedelta(days=1), today + timedelta(days=WINDOW_DAYS)
+    week_end = min(week_end or today, today)
+    week_from = week_end - timedelta(days=WINDOW_DAYS - 1)
+    next_from, next_to = week_end + timedelta(days=1), week_end + timedelta(days=WINDOW_DAYS)
 
     def subject(subject_id: Any) -> str | None:
         return data.subjects.get(subject_id) if subject_id is not None else None
@@ -418,7 +422,7 @@ def build_context(
         return data.teachers.get(teacher_id) if teacher_id is not None else None
 
     # Grades added this week, and every subject's average with and without them.
-    new_grades = [g for g in data.grades if _in(_day(g.add_date), week_from, today)]
+    new_grades = [g for g in data.grades if _in(_day(g.add_date), week_from, week_end)]
     new_ids = {id(g) for g in new_grades}
     older = [g for g in data.grades if id(g) not in new_ids]
     grades = []
@@ -454,7 +458,7 @@ def build_context(
             )
         )
     for text_grade in sorted(data.text_grades, key=lambda t: t.date or ""):
-        if not _in(_day(text_grade.date or text_grade.add_date), week_from, today):
+        if not _in(_day(text_grade.date or text_grade.add_date), week_from, week_end):
             continue
         grades.append(
             _compact(
@@ -469,7 +473,7 @@ def build_context(
             )
         )
     for descriptive in sorted(data.descriptive_grades, key=lambda d: d.date or d.add_date or ""):
-        if not _in(_day(descriptive.date or descriptive.add_date), week_from, today):
+        if not _in(_day(descriptive.date or descriptive.add_date), week_from, week_end):
             continue
         grades.append(
             _compact(
@@ -514,7 +518,7 @@ def build_context(
         day = _day(record.date)
         if kind is not None and not kind.is_presence_kind and not kind.is_excused_absence:
             open_unexcused.append(day.isoformat() if day else "?")
-        if not _in(day, week_from, today) or kind is None:
+        if not _in(day, week_from, week_end) or kind is None:
             continue
         if kind.is_presence_kind:
             late = "późn" in kind.name.lower()
@@ -550,7 +554,7 @@ def build_context(
             }
         )
         for note in data.notes
-        if _in(_day(note.date), week_from, today)
+        if _in(_day(note.date), week_from, week_end)
     ]
     behaviour_grade = None
     if data.behaviour_grades:
@@ -599,7 +603,7 @@ def build_context(
     school_days_this_week = school_days_next_week = 0
     for day, lessons in sorted(data.timetable.items()):
         held = [lesson for lesson in lessons if not lesson.is_canceled]
-        if held and week_from <= day <= today:
+        if held and week_from <= day <= week_end:
             school_days_this_week += 1
         if not next_from <= day <= next_to:
             continue
@@ -638,7 +642,7 @@ def build_context(
             }
         )
         for change in data.plan_changes
-        if _in(_day(change.original_date), week_from, today)
+        if _in(_day(change.original_date), week_from, week_end)
     ]
     year_cancelled = sum(1 for change in data.plan_changes if change.kind == "cancelled")
     free_days = [
@@ -669,7 +673,7 @@ def build_context(
             }
         )
         for lesson in sorted(data.lesson_topics, key=lambda t: (t.date or "", t.lesson_no or 0))
-        if _in(_day(lesson.date), week_from, today)
+        if _in(_day(lesson.date), week_from, week_end)
         and ((lesson.date or "")[:10], lesson.lesson_no) in missed
     ]
     # Tests next week with the topics to revise for each.
@@ -704,7 +708,7 @@ def build_context(
     documents = [
         _cut(item.name, 120)
         for item in data.school_files
-        if _in(_day(item.added), week_from, today)
+        if _in(_day(item.added), week_from, week_end)
     ]
     justifications = _compact(
         {
@@ -726,7 +730,7 @@ def build_context(
         else None,
         "today": _dated(today),
         # Weekdays spelled out like every other date here (see _dated).
-        "this_week": {"from": _dated(week_from), "to": _dated(today)},
+        "this_week": {"from": _dated(week_from), "to": _dated(week_end)},
         "school_days_this_week": school_days_this_week,
         "average_mode": "weighted" if weighted else "arithmetic",
         "grades": grades,
@@ -824,7 +828,7 @@ def build_context(
                 }
             )
             for message in data.messages
-            if _in(_day(message.send_date), week_from, today)
+            if _in(_day(message.send_date), week_from, week_end)
         ] + [
             _compact(
                 {
@@ -835,7 +839,7 @@ def build_context(
                 }
             )
             for notice in data.school_notices
-            if _in(_day(notice.creation_date or notice.start_date), week_from, today)
+            if _in(_day(notice.creation_date or notice.start_date), week_from, week_end)
         ]
         context["school_news"] = news[:15]
     return {key: value for key, value in context.items() if value not in (None, [], {})}
@@ -861,14 +865,26 @@ def build_instructions(
     language: str | None,
     audience: str,
     extra: str | None,
+    week_end: date | None = None,
 ) -> str:
-    """The full prompt: persona, rules, field notes, the user's notes and the data."""
+    """The full prompt: persona, rules, field notes, the user's notes and the data.
+
+    ``week_end`` before ``today`` = a scheduled run made up later (provider
+    error, Home Assistant down): the text is about the week that ended then."""
     code = (language or "en").split("-")[0].lower()
     extra = (extra or "").strip()
     name = (context.get("student") or "").split(" ")[0] or "the student"
     persona = _AUDIENCE["student" if audience == AI_AUDIENCE_STUDENT else "parent"]
+    late = (
+        f"\nThis summary is late: it covers the week that ended on {week_end.isoformat()}"
+        " (this_week); next_week starts the day after it. Write about that week as the"
+        " week that has just ended - today is not the start of it."
+        if week_end is not None and week_end < today
+        else ""
+    )
     return _INSTRUCTIONS.format(
         today=today.isoformat(),
+        late=late,
         audience=persona.format(name=name),
         language=_LANGUAGE_NAMES.get(code, f"the language with code '{code}'"),
         extra=f"\nNotes from the family (take them into account):\n{extra}\n" if extra else "",
@@ -1115,7 +1131,9 @@ class LibrusWeeklySummary:
             self.running = True
             self._notify()
             try:
-                results = await self._async_call(skip_empty=scheduled_for is not None)
+                results = await self._async_call(
+                    skip_empty=scheduled_for is not None, scheduled_for=scheduled_for
+                )
                 if results is not None:
                     self.results = results
                 self.last_error = None
@@ -1158,9 +1176,12 @@ class LibrusWeeklySummary:
                 },
             )
 
-    async def _async_call(self, skip_empty: bool) -> dict[str, dict[str, Any]] | None:
+    async def _async_call(
+        self, skip_empty: bool, scheduled_for: str | None = None
+    ) -> dict[str, dict[str, Any]] | None:
         """Ask the model once per audience; None when an automatic run found
-        an empty week."""
+        an empty week. A scheduled run (``scheduled_for``) covers the week
+        ending on its scheduled day even when it is made up a day later."""
         data = self._coordinator.data
         if data is None:
             raise HomeAssistantError("No Librus data yet")
@@ -1169,6 +1190,9 @@ class LibrusWeeklySummary:
                 "The AI Task integration is not available (Home Assistant 2025.8 or newer is needed)"
             )
         today = dt_util.now().date()
+        week_end = today
+        if scheduled_for and (due := dt_util.parse_datetime(scheduled_for)) is not None:
+            week_end = min(dt_util.as_local(due).date(), today)
         weighted = (
             self._entry.options.get(CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE)
             != AVERAGE_MODE_ARITHMETIC
@@ -1183,24 +1207,30 @@ class LibrusWeeklySummary:
             thresholds=self._coordinator.grade_thresholds,
             owner=self._coordinator.memo_owner,
             point_thresholds=self._coordinator.point_grade_thresholds,
+            week_end=week_end,
         )
         if skip_empty and is_empty_week(context):
             _LOGGER.debug("Weekly summary skipped: nothing happened this week or next")
             return None
         return {
-            audience: await self._async_ask(context, today, student, audience)
+            audience: await self._async_ask(context, today, student, audience, week_end)
             for audience in self.audiences
         }
 
     async def _async_ask(
-        self, context: dict[str, Any], today: date, student: str | None, audience: str
+        self,
+        context: dict[str, Any],
+        today: date,
+        student: str | None,
+        audience: str,
+        week_end: date | None = None,
     ) -> dict[str, Any]:
         """One text, written to ``audience``."""
         service_data: dict[str, Any] = {
             "task_name": "Librus weekly summary",
             "entity_id": self.ai_task_entity,
             "instructions": build_instructions(
-                context, today, self.language, audience, self._extra
+                context, today, self.language, audience, self._extra, week_end
             ),
         }
         try:
@@ -1228,8 +1258,8 @@ class LibrusWeeklySummary:
             "student": student,
             # Plain dates here (the sensor attributes and the event); the
             # context spells out the weekday for the model.
-            "week_from": (today - timedelta(days=WINDOW_DAYS - 1)).isoformat(),
-            "week_to": today.isoformat(),
+            "week_from": ((week_end or today) - timedelta(days=WINDOW_DAYS - 1)).isoformat(),
+            "week_to": (week_end or today).isoformat(),
             "audience": audience,
             "generated_at": dt_util.utcnow().isoformat(),
             "ai_task_entity": self.ai_task_entity,
