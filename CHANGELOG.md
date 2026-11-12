@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.48
 
 ### Added
 - **Latenesses get an event.** `librus_synergia_new_late` (date, type, lesson
