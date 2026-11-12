@@ -352,6 +352,7 @@
       "grade_event": { "name": "Nowa ocena", "state_attributes": { "event_type": { "state": { "new_grade": "Nowa ocena" } } } },
       "note_event": { "name": "Nowa uwaga", "state_attributes": { "event_type": { "state": { "positive": "Pozytywna", "negative": "Negatywna", "neutral": "Neutralna" } } } },
       "absence_event": { "name": "Nowa nieobecność", "state_attributes": { "event_type": { "state": { "unexcused": "Nieusprawiedliwiona", "excused": "Usprawiedliwiona" } } } },
+      "late_event": { "name": "Nowe spóźnienie", "state_attributes": { "event_type": { "state": { "late": "Spóźnienie" } } } },
       "timetable_change_event": { "name": "Zmiana w planie", "state_attributes": { "event_type": { "state": { "canceled": "Lekcja odwołana", "substitution": "Zastępstwo" } } } },
       "homework_event": { "name": "Nowe zadanie domowe", "state_attributes": { "event_type": { "state": { "new_homework": "Nowe zadanie domowe" } } } },
       "agenda_event": { "name": "Nowy wpis w terminarzu", "state_attributes": { "event_type": { "state": { "new_entry": "Nowy wpis" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "Nowa nieobecność",
-      "description": "Pojawia się nowa nieobecność (nie obecność ani spóźnienie).",
+      "description": "Pojawia się nowa nieobecność (spóźnienia ma wyzwalacz Nowe spóźnienie).",
       "fields": {
         "only_unexcused": {
           "name": "Tylko nieusprawiedliwione",
           "description": "Pomiń nieobecności od razu usprawiedliwione."
         }
       }
+    },
+    "new_late": {
+      "name": "Nowe spóźnienie",
+      "description": "Uczeń dostaje spóźnienie."
     },
     "new_message": {
       "name": "Nowa wiadomość",

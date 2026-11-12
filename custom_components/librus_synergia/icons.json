@@ -60,6 +60,9 @@
       "absence_event": {
         "default": "mdi:account-cancel-outline"
       },
+      "late_event": {
+        "default": "mdi:clock-alert-outline"
+      },
       "achievement_event": {
         "default": "mdi:trophy-outline"
       },
@@ -349,6 +352,9 @@
     },
     "new_absence": {
       "trigger": "mdi:account-cancel-outline"
+    },
+    "new_late": {
+      "trigger": "mdi:clock-alert-outline"
     },
     "new_message": {
       "trigger": "mdi:email-outline"

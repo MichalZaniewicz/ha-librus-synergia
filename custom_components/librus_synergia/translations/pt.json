@@ -352,6 +352,7 @@
       "grade_event": { "name": "Nova nota", "state_attributes": { "event_type": { "state": { "new_grade": "Nova nota" } } } },
       "note_event": { "name": "Nova observação de comportamento", "state_attributes": { "event_type": { "state": { "positive": "Positiva", "negative": "Negativa", "neutral": "Neutra" } } } },
       "absence_event": { "name": "Nova falta", "state_attributes": { "event_type": { "state": { "unexcused": "Injustificada", "excused": "Justificada" } } } },
+      "late_event": { "name": "Novo atraso", "state_attributes": { "event_type": { "state": { "late": "Atraso" } } } },
       "timetable_change_event": { "name": "Alteração no horário", "state_attributes": { "event_type": { "state": { "canceled": "Aula cancelada", "substitution": "Substituição" } } } },
       "homework_event": { "name": "Novo trabalho de casa", "state_attributes": { "event_type": { "state": { "new_homework": "Novo trabalho de casa" } } } },
       "agenda_event": { "name": "Nova entrada na agenda", "state_attributes": { "event_type": { "state": { "new_entry": "Nova entrada" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "Nova falta",
-      "description": "É marcada uma nova falta (ausência ou atraso).",
+      "description": "É marcada uma nova falta (ausência; os atrasos têm o acionador Novo atraso).",
       "fields": {
         "only_unexcused": {
           "name": "Apenas injustificadas",
           "description": "Ignorar as faltas marcadas logo como justificadas."
         }
       }
+    },
+    "new_late": {
+      "name": "Novo atraso",
+      "description": "É marcado um atraso (Spóźnienie)."
     },
     "new_message": {
       "name": "Nova mensagem",

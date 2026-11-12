@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+- **Latenesses get an event.** `librus_synergia_new_late` (date, type, lesson
+  number, subject) fires when the student is marked late ("Spóźnienie"). Librus
+  counts a lateness as being present, so `librus_synergia_new_absence` never
+  covered it. Also a "New lateness" event entity, a "New lateness" trigger in
+  the automation editor, a logbook line and a New Lateness Notification
+  blueprint (40 blueprints). The first sync after updating only records the
+  latenesses already there.
+- **Assist can read a whole message.** A new tool, `librus_get_full_message`,
+  opens one message by the id `librus_get_messages` now gives each message,
+  for questions where the start of the text isn't enough ("what does she need
+  for tomorrow's assembly?"). Opening a message marks it read in Librus, so
+  the tool is off by default: turn on "Let Assist open whole messages" under
+  Configure. It only opens messages on the student's own lists.
+
 ### Fixed
 - **Weekly AI summary made up after a failed run covered the wrong week.** When
   the scheduled run failed (for example the AI hit its output token limit) and a

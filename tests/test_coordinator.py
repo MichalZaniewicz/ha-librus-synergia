@@ -20,6 +20,7 @@ from custom_components.librus_synergia.const import (
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
+    EVENT_NEW_LATE,
     EVENT_TIMETABLE_CHANGED,
 )
 from custom_components.librus_synergia.coordinator import (
@@ -1298,6 +1299,51 @@ async def test_new_absence_event_fires_with_excused_flag(hass) -> None:
     assert events[0].data["date"] == "2026-09-11"
     assert events[0].data["lesson_no"] == 3
     assert events[0].data["student"] == "Ola Kowalska"
+
+
+async def test_new_late_event_fires_for_a_lateness_only(hass) -> None:
+    """Issue #33: "Spóźnienie" is a presence kind to Librus, so it never
+    reaches new_absence - it gets an event of its own."""
+    late_events = async_capture_events(hass, EVENT_NEW_LATE)
+    absence_events = async_capture_events(hass, EVENT_NEW_ABSENCE)
+    client = build_mock_client(
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 2, "Name": "Spóźnienie", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+            ]
+        },
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 600, "Date": "2026-09-10", "LessonNo": 1, "Type": {"Id": 2}},
+            ]
+        },
+    )
+    coordinator = _make_coordinator(hass, client)
+    await coordinator.async_config_entry_first_refresh()  # seeds silently
+
+    client.async_get_attendances.return_value = {
+        "Attendances": [
+            {"Id": 600, "Date": "2026-09-10", "LessonNo": 1, "Type": {"Id": 2}},
+            {"Id": 601, "Date": "2026-09-11", "LessonNo": 2, "Type": {"Id": 2}},
+            {"Id": 602, "Date": "2026-09-11", "Type": {"Id": 100}},  # present - nothing
+            {"Id": 603, "Date": "2026-09-11", "LessonNo": 5, "Type": {"Id": 1}},
+        ]
+    }
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    (late,) = late_events
+    assert late.data["id"] == 601
+    assert (late.data["date"], late.data["type"], late.data["lesson_no"]) == (
+        "2026-09-11",
+        "Spóźnienie",
+        2,
+    )
+    assert late.data["student"] == "Ola Kowalska"
+    # The absence still goes to new_absence only.
+    assert [e.data["id"] for e in absence_events] == [603]
 
 
 async def test_attendance_with_non_numeric_id_does_not_crash_coordinator(hass) -> None:

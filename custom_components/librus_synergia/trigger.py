@@ -43,6 +43,7 @@ from .const import (
     EVENT_MESSAGE_READ,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
+    EVENT_NEW_LATE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
@@ -237,6 +238,7 @@ _SPECS: dict[
         {vol.Optional("only_unexcused", default=False): cv.boolean},
         _absence_filter,
     ),
+    "new_late": (EVENT_NEW_LATE, {}, _no_filter),
     "new_message": (
         EVENT_NEW_MESSAGE,
         {

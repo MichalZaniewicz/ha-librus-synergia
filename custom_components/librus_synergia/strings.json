@@ -352,6 +352,7 @@
       "grade_event": { "name": "New grade", "state_attributes": { "event_type": { "state": { "new_grade": "New grade" } } } },
       "note_event": { "name": "New behaviour note", "state_attributes": { "event_type": { "state": { "positive": "Positive", "negative": "Negative", "neutral": "Neutral" } } } },
       "absence_event": { "name": "New absence", "state_attributes": { "event_type": { "state": { "unexcused": "Unexcused", "excused": "Excused" } } } },
+      "late_event": { "name": "New lateness", "state_attributes": { "event_type": { "state": { "late": "Late" } } } },
       "timetable_change_event": { "name": "Timetable change", "state_attributes": { "event_type": { "state": { "canceled": "Lesson cancelled", "substitution": "Substitution" } } } },
       "homework_event": { "name": "New homework", "state_attributes": { "event_type": { "state": { "new_homework": "New homework" } } } },
       "agenda_event": { "name": "New agenda entry", "state_attributes": { "event_type": { "state": { "new_entry": "New entry" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "New absence",
-      "description": "A new absence is marked (not present or late).",
+      "description": "A new absence is marked (not present; a lateness is the New lateness trigger).",
       "fields": {
         "only_unexcused": {
           "name": "Only unexcused",
           "description": "Skip absences marked excused right away."
         }
       }
+    },
+    "new_late": {
+      "name": "New lateness",
+      "description": "The student is marked late (Spóźnienie)."
     },
     "new_message": {
       "name": "New message",

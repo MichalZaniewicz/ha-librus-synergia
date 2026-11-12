@@ -352,6 +352,7 @@
       "grade_event": { "name": "Nouvelle note", "state_attributes": { "event_type": { "state": { "new_grade": "Nouvelle note" } } } },
       "note_event": { "name": "Nouvelle observation", "state_attributes": { "event_type": { "state": { "positive": "Positive", "negative": "Négative", "neutral": "Neutre" } } } },
       "absence_event": { "name": "Nouvelle absence", "state_attributes": { "event_type": { "state": { "unexcused": "Non justifiée", "excused": "Justifiée" } } } },
+      "late_event": { "name": "Nouveau retard", "state_attributes": { "event_type": { "state": { "late": "Retard" } } } },
       "timetable_change_event": { "name": "Changement d'emploi du temps", "state_attributes": { "event_type": { "state": { "canceled": "Cours annulé", "substitution": "Remplacement" } } } },
       "homework_event": { "name": "Nouveau devoir", "state_attributes": { "event_type": { "state": { "new_homework": "Nouveau devoir" } } } },
       "agenda_event": { "name": "Nouvelle entrée d'agenda", "state_attributes": { "event_type": { "state": { "new_entry": "Nouvelle entrée" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "Nouvelle absence",
-      "description": "Une nouvelle absence est enregistrée (absent ou en retard).",
+      "description": "Une nouvelle absence est enregistrée (absent ; les retards ont le déclencheur Nouveau retard).",
       "fields": {
         "only_unexcused": {
           "name": "Non justifiées uniquement",
           "description": "Ignore les absences marquées d'emblée comme justifiées."
         }
       }
+    },
+    "new_late": {
+      "name": "Nouveau retard",
+      "description": "Un retard est enregistré (Spóźnienie)."
     },
     "new_message": {
       "name": "Nouveau message",

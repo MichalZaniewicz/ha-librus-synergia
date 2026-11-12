@@ -352,6 +352,7 @@
       "grade_event": { "name": "Neue Note", "state_attributes": { "event_type": { "state": { "new_grade": "Neue Note" } } } },
       "note_event": { "name": "Neue Verhaltensnotiz", "state_attributes": { "event_type": { "state": { "positive": "Positiv", "negative": "Negativ", "neutral": "Neutral" } } } },
       "absence_event": { "name": "Neue Fehlzeit", "state_attributes": { "event_type": { "state": { "unexcused": "Unentschuldigt", "excused": "Entschuldigt" } } } },
+      "late_event": { "name": "Neue Verspätung", "state_attributes": { "event_type": { "state": { "late": "Verspätet" } } } },
       "timetable_change_event": { "name": "Stundenplanänderung", "state_attributes": { "event_type": { "state": { "canceled": "Stunde ausgefallen", "substitution": "Vertretung" } } } },
       "homework_event": { "name": "Neue Hausaufgabe", "state_attributes": { "event_type": { "state": { "new_homework": "Neue Hausaufgabe" } } } },
       "agenda_event": { "name": "Neuer Terminkalender-Eintrag", "state_attributes": { "event_type": { "state": { "new_entry": "Neuer Eintrag" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "Neue Fehlzeit",
-      "description": "Eine neue Fehlzeit wird eingetragen (nicht anwesend oder verspätet).",
+      "description": "Eine neue Fehlzeit wird eingetragen (nicht anwesend; Verspätungen hat der Auslöser Neue Verspätung).",
       "fields": {
         "only_unexcused": {
           "name": "Nur unentschuldigt",
           "description": "Sofort als entschuldigt eingetragene Fehlzeiten überspringen."
         }
       }
+    },
+    "new_late": {
+      "name": "Neue Verspätung",
+      "description": "Eine Verspätung wird eingetragen (Spóźnienie)."
     },
     "new_message": {
       "name": "Neue Nachricht",

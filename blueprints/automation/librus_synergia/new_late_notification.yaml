@@ -1,0 +1,65 @@
+blueprint:
+  name: "Librus: New Lateness Notification"
+  description: >
+    Runs an action - typically "Send a notification" to your phone - when the
+    student is marked late ("Spóźnienie") via the `librus_synergia_new_late`
+    event. Librus counts a lateness as being present, so the absence
+    blueprints never see one.
+
+
+    Inside your chosen action, use `{{ late_summary }}` for a ready-made
+    message ("Ola: spóźnienie 12.11, lekcja 1 (Matematyka)."), or
+    `{{ late_date }}` and `{{ trigger.event.data.lesson_no }}` /
+    `{{ trigger.event.data.subject }}` / `{{ trigger.event.data.type }}`
+    directly. `late_summary` starts with the child's name
+    (`{{ trigger.event.data.student }}`).
+
+
+    More than one child: leave the student empty to be told about every
+    child, or pick one to make this automation about that child only.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/new_late_notification.yaml
+  input:
+    student_device:
+      name: Student (optional)
+      description: >
+        Only this student's latenesses. Leave empty for every student.
+      default: ""
+      selector:
+        device:
+          integration: librus_synergia
+    notify_action:
+      name: Notification action
+      description: The action to run for each new lateness.
+      selector:
+        action: {}
+
+variables:
+  student_device: !input student_device
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_late
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ not student_device or trigger.event.data.device_id == student_device }}
+
+actions:
+  - variables:
+      late_date: >-
+        {%- set d = trigger.event.data.date or '' -%}
+        {{ (d[8:10] ~ '.' ~ d[5:7]) if d | length >= 10 else d }}
+      # Formatted again here rather than reusing late_date: HA turns a lone
+      # "12.10" variable into the number 12.1.
+      late_summary: >-
+        {%- set d = trigger.event.data.date or '' -%}
+        {%- set lesson = trigger.event.data.lesson_no -%}
+        {%- set subject = trigger.event.data.subject -%}
+        {{ (trigger.event.data.student ~ ': ') if trigger.event.data.student else '' }}Spóźnienie {{ (d[8:10] ~ '.' ~ d[5:7]) if d | length >= 10 else d }}{{ (', lekcja ' ~ lesson) if lesson else '' }}{{ (' (' ~ subject ~ ')') if subject else '' }}.
+  - sequence: !input notify_action
+
+# Several latenesses in one sync (rare) each get their own message.
+mode: queued
+max: 10

@@ -29,6 +29,7 @@ from .const import (
     EVENT_JUSTIFICATION_STATUS,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
+    EVENT_NEW_LATE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
@@ -69,6 +70,7 @@ DESCRIPTIONS: tuple[LibrusEventDescription, ...] = (
         ("unexcused", "excused"),
         lambda d: "excused" if d.get("excused") else "unexcused",
     ),
+    LibrusEventDescription("late", EVENT_NEW_LATE, ("late",), lambda d: "late"),
     LibrusEventDescription(
         "timetable_change",
         EVENT_TIMETABLE_CHANGED,

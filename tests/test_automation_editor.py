@@ -23,6 +23,7 @@ from custom_components.librus_synergia.const import (
     DOMAIN,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_GRADE,
+    EVENT_NEW_LATE,
     EVENT_TIMETABLE_CHANGED,
 )
 
@@ -287,6 +288,11 @@ def test_logbook_lines() -> None:
     assert (
         librus_logbook.describe(EVENT_NEW_ABSENCE, absence, "pl")["message"]
         == "nieobecność nieusprawiedliwiona: 02.11, lekcja 3"
+    )
+    late = {"date": "2026-11-12", "lesson_no": 1, "subject": "Matematyka"}
+    assert (
+        librus_logbook.describe(EVENT_NEW_LATE, late, "pl")["message"]
+        == "spóźnienie: 12.11, lekcja 1 (Matematyka)"
     )
     change = {"date": "2026-11-03", "change": "room_change", "subject": "Fizyka", "lesson_no": 2}
     entry = librus_logbook.describe(EVENT_TIMETABLE_CHANGED, change, "en")

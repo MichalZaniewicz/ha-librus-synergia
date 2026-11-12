@@ -465,6 +465,9 @@ EVENT_NEW_HOMEWORK_ASSIGNMENT = f"{DOMAIN}_new_homework_assignment"
 # Fires for a newly-seen real absence record (excused or not - `excused`
 # in the payload says which). Seeded silently on the first sync.
 EVENT_NEW_ABSENCE = f"{DOMAIN}_new_absence"
+# A new lateness ("Spóźnienie"). Librus counts it as a presence kind, so
+# EVENT_NEW_ABSENCE never covers it.
+EVENT_NEW_LATE = f"{DOMAIN}_new_late"
 # Fires when a lesson on today's date or later newly turns up cancelled or
 # as a substitution vs. the previous poll (seeded silently on the first
 # sync, same as the *_new_* events). Signature-keyed on date+period+kind,

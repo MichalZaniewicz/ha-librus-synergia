@@ -131,6 +131,7 @@ from librus_synergia.parsers import (  # noqa: F401
     resolve_sender_name,
 )
 
+from .absence_days import is_late_type_name
 from .const import (
     MESSAGE_SEND_LIMIT_PER_HOUR,
     AVERAGE_MODE_ARITHMETIC,
@@ -181,6 +182,7 @@ from .const import (
     EVENT_NEW_SCHOOL_TRIP,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
+    EVENT_NEW_LATE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
@@ -1270,9 +1272,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self.message_recipients_summary: dict[str, Any] | None = None
         self._sent_at: list[datetime] = []
         # Ids already announced per kind (text, descriptive, point and
-        # behaviour grades, school trips, school documents, messages in the
-        # mailboxes other than the inbox); None until the first sync, which
-        # only seeds them.
+        # behaviour grades, school trips, school documents, latenesses,
+        # messages in the mailboxes other than the inbox); None until the
+        # first sync, which only seeds them.
         self._known_items: dict[str, set[Any] | None] = {
             "text_grades": None,
             "descriptive_grades": None,
@@ -1280,6 +1282,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             "behaviour_grades": None,
             "school_trips": None,
             "school_files": None,
+            "late": None,
             **{f"{box}_messages": None for box in _EVENT_MAILBOXES},
         }
         # Every grade as last seen, per kind ("grades" for the ordinary ones,
@@ -5670,6 +5673,22 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             item.id: {"name": item.name, "added": item.added, "url": school_file_url(item.download_path)}
             for item in data.school_files
         }
+        # Latenesses ("Spóźnienie"): a presence kind to Librus, so the
+        # library's absence tracking (EVENT_NEW_ABSENCE) skips them. Told
+        # apart by the type's name, like everywhere else (is_late_type_name).
+        late = {}
+        for record in data.attendances:
+            kind = data.attendance_types.get(record.type_id)
+            if kind is None or not kind.is_presence_kind or not is_late_type_name(kind.name):
+                continue
+            subject_id = data.lesson_subjects.get(record.lesson_id)
+            late[record.id] = {
+                "date": record.date,
+                "type": kind.name,
+                "lesson_no": record.lesson_no,
+                "subject_id": subject_id,
+                "subject": data.subjects.get(subject_id) if subject_id is not None else None,
+            }
         # Behaviour grades ("ocena zachowania"): `value` is the short form
         # ("bdb", or the points "+5"), `name` the full one ("bardzo dobre"),
         # `month` the month it is for. A grade with nothing set yet is left
@@ -5721,6 +5740,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             ("behaviour_grades", EVENT_NEW_GRADE, behaviour_grades),
             ("school_trips", EVENT_NEW_SCHOOL_TRIP, trips),
             ("school_files", EVENT_NEW_SCHOOL_DOCUMENT, files),
+            ("late", EVENT_NEW_LATE, late),
             *((f"{box}_messages", EVENT_NEW_MESSAGE, mailbox_items[box]) for box in _EVENT_MAILBOXES),
         ):
             if kind.endswith("_messages"):
@@ -5749,6 +5769,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "behaviour_grades": "BehaviourGrades/Points",
                 "school_trips": "SchoolTrips",
                 "school_files": "SchoolFiles",
+                "late": "Attendances",
             }[kind]
             available = label not in self._failed_this_cycle
             if kind == "descriptive_grades":

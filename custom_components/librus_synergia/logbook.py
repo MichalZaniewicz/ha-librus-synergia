@@ -32,6 +32,7 @@ from .const import (
     EVENT_MESSAGE_READ,
     EVENT_NEW_ABSENCE,
     EVENT_NEW_ANNOUNCEMENT,
+    EVENT_NEW_LATE,
     EVENT_NEW_GRADE,
     EVENT_NEW_HOMEWORK,
     EVENT_NEW_HOMEWORK_ASSIGNMENT,
@@ -56,6 +57,7 @@ def _short(value: Any) -> str:
 # stays as the school wrote it.
 _WORDS: dict[str, dict[str, str]] = {
     "en": {
+        "late": "late",
         "behaviour": "behaviour grade", "new_grade": "new grade",
         "grade_removed": "grade removed", "grade_changed": "grade changed",
         "note_positive": "positive note", "note_negative": "negative note", "note": "note",
@@ -77,6 +79,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (for the parent)", "for_student": " (for the student)",
     },
     "pl": {
+        "late": "spóźnienie",
         "behaviour": "ocena z zachowania", "new_grade": "nowa ocena",
         "grade_removed": "usunięta ocena", "grade_changed": "zmieniona ocena",
         "note_positive": "uwaga pozytywna", "note_negative": "uwaga negatywna", "note": "uwaga",
@@ -99,6 +102,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (dla rodzica)", "for_student": " (dla ucznia)",
     },
     "uk": {
+        "late": "запізнення",
         "behaviour": "оцінка за поведінку", "new_grade": "нова оцінка",
         "grade_removed": "оцінку видалено", "grade_changed": "оцінку змінено",
         "note_positive": "позитивне зауваження", "note_negative": "негативне зауваження",
@@ -123,6 +127,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (для батьків)", "for_student": " (для учня)",
     },
     "pt": {
+        "late": "atraso",
         "behaviour": "nota de comportamento", "new_grade": "nova nota",
         "grade_removed": "nota removida", "grade_changed": "nota alterada",
         "note_positive": "observação positiva", "note_negative": "observação negativa",
@@ -145,6 +150,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (para o encarregado de educação)", "for_student": " (para o aluno)",
     },
     "ru": {
+        "late": "опоздание",
         "behaviour": "оценка за поведение", "new_grade": "новая оценка",
         "grade_removed": "оценка удалена", "grade_changed": "оценка изменена",
         "note_positive": "положительное замечание", "note_negative": "отрицательное замечание",
@@ -169,6 +175,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (для родителей)", "for_student": " (для ученика)",
     },
     "de": {
+        "late": "Verspätung",
         "behaviour": "Verhaltensnote", "new_grade": "neue Note",
         "grade_removed": "Note entfernt", "grade_changed": "Note geändert",
         "note_positive": "positive Verhaltensnotiz", "note_negative": "negative Verhaltensnotiz",
@@ -192,6 +199,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "for_parent": " (für die Eltern)", "for_student": " (für Schüler/in)",
     },
     "fr": {
+        "late": "retard",
         "behaviour": "note de conduite", "new_grade": "nouvelle note",
         "grade_removed": "note supprimée", "grade_changed": "note modifiée",
         "note_positive": "observation positive", "note_negative": "observation négative",
@@ -285,6 +293,12 @@ def _absence(d: Mapping[str, Any], w: _Words) -> str:
     return f"{label}: {w.day(d.get('date'))}{lesson}"
 
 
+def _late(d: Mapping[str, Any], w: _Words) -> str:
+    lesson = f", {w['lesson']} {d['lesson_no']}" if d.get("lesson_no") else ""
+    subject = f" ({d['subject']})" if d.get("subject") else ""
+    return f"{w['late']}: {w.day(d.get('date'))}{lesson}{subject}"
+
+
 def _message(d: Mapping[str, Any], w: _Words) -> str:
     sender = d.get("sender")
     head = w["message_from"].replace("{who}", str(sender)) if sender else w["message"]
@@ -376,6 +390,7 @@ DESCRIBERS: dict[str, tuple[Callable[[Mapping[str, Any], _Words], str], str]] = 
     EVENT_NEW_GRADE: (_grade, "mdi:numeric-6-box-outline"),
     EVENT_NEW_NOTE: (_note, "mdi:note-text-outline"),
     EVENT_NEW_ABSENCE: (_absence, "mdi:account-cancel-outline"),
+    EVENT_NEW_LATE: (_late, "mdi:clock-alert-outline"),
     EVENT_NEW_MESSAGE: (_message, "mdi:email-outline"),
     EVENT_NEW_ANNOUNCEMENT: (_announcement, "mdi:bullhorn-outline"),
     EVENT_NEW_HOMEWORK: (_agenda, "mdi:calendar-plus"),

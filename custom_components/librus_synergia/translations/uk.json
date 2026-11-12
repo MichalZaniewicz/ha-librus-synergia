@@ -352,6 +352,7 @@
       "grade_event": { "name": "Нова оцінка", "state_attributes": { "event_type": { "state": { "new_grade": "Нова оцінка" } } } },
       "note_event": { "name": "Нове зауваження щодо поведінки", "state_attributes": { "event_type": { "state": { "positive": "Позитивне", "negative": "Негативне", "neutral": "Нейтральне" } } } },
       "absence_event": { "name": "Нова відсутність", "state_attributes": { "event_type": { "state": { "unexcused": "Без поважної причини", "excused": "З поважною причиною" } } } },
+      "late_event": { "name": "Нове запізнення", "state_attributes": { "event_type": { "state": { "late": "Запізнення" } } } },
       "timetable_change_event": { "name": "Зміна в розкладі", "state_attributes": { "event_type": { "state": { "canceled": "Урок скасовано", "substitution": "Заміна" } } } },
       "homework_event": { "name": "Нове домашнє завдання", "state_attributes": { "event_type": { "state": { "new_homework": "Нове домашнє завдання" } } } },
       "agenda_event": { "name": "Новий запис у розкладі подій", "state_attributes": { "event_type": { "state": { "new_entry": "Новий запис" } } } },
@@ -661,13 +662,17 @@
     },
     "new_absence": {
       "name": "Нова відсутність",
-      "description": "Позначено нову відсутність (не присутній або спізнення).",
+      "description": "Позначено нову відсутність (не присутній; для запізнень є тригер Нове запізнення).",
       "fields": {
         "only_unexcused": {
           "name": "Лише без поважної причини",
           "description": "Пропускати відсутності, одразу позначені як з поважною причиною."
         }
       }
+    },
+    "new_late": {
+      "name": "Нове запізнення",
+      "description": "Позначено запізнення (Spóźnienie)."
     },
     "new_message": {
       "name": "Нове повідомлення",
