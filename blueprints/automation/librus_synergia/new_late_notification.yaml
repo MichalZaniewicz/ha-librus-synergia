@@ -8,7 +8,7 @@ blueprint:
 
 
     Inside your chosen action, use `{{ late_summary }}` for a ready-made
-    message ("Ola: spóźnienie 12.11, lekcja 1 (Matematyka)."), or
+    message ("Ola: Spóźnienie 12.11, lekcja 1 (Matematyka)."), or
     `{{ late_date }}` and `{{ trigger.event.data.lesson_no }}` /
     `{{ trigger.event.data.subject }}` / `{{ trigger.event.data.type }}`
     directly. `late_summary` starts with the child's name

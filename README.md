@@ -147,9 +147,9 @@ Everything else is in the **[wiki](https://github.com/MichalZaniewicz/ha-librus-
 
 Thanks to everyone who sent code to this project:
 
-- <img src="https://github.com/keysim86.png?size=40" width="20" height="20" alt=""> [@keysim86](https://github.com/keysim86): point-graded subjects in the forecast, the new-grade event, the badges, the streak and the rank; only the student's own class free days; events that arrive while Home Assistant restarts; edited and deleted grades
+- <img src="https://github.com/keysim86.png?size=40" width="20" height="20" alt=""> [@keysim86](https://github.com/keysim86): point-graded subjects in the forecast, the new-grade event, the badges, the streak and the rank; only the student's own class free days; events that arrive while Home Assistant restarts; edited and deleted grades; the weekly AI summary made up after a failed run
 - <img src="https://github.com/Lucaspog.png?size=40" width="20" height="20" alt=""> [@Lucaspog](https://github.com/Lucaspog): kindergarten timetable and classroom names
-- <img src="https://github.com/snooppoland-cpu.png?size=40" width="20" height="20" alt=""> [@snooppoland-cpu](https://github.com/snooppoland-cpu): Russian translation
+- <img src="https://github.com/snooppoland-cpu.png?size=40" width="20" height="20" alt=""> [@snooppoland-cpu](https://github.com/snooppoland-cpu): Russian translation; Assist reading a whole message
 
 ## Supporters
 
