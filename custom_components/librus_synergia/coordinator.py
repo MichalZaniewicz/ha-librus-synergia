@@ -2972,6 +2972,29 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 self._show_messages_read(mailbox, set(done))
         return done
 
+    async def async_open_message(self, mailbox: str, message_id: str) -> Any:
+        """Opens one message for its whole body (Assist's full-message tool)
+        and shows it read straight away, as `async_mark_messages_read` does -
+        opening is what marks it read in Wiadomości. The outbox has nothing
+        of ours to mark."""
+        raw = await self.async_fetch_message(mailbox, message_id)
+        if mailbox in _MARKABLE_MAILBOXES:
+            self._show_messages_read(mailbox, {message_id})
+        return raw
+
+    def find_message(self, message_id: str) -> tuple[str, MessageData] | None:
+        """(mailbox, message) for a message id on one of this student's lists
+        (inbox, the other mailboxes, the archive, the outbox)."""
+        if self.data is None:
+            return None
+        lists = [(box, getattr(self.data, attr)) for box, attr in _MARKABLE_MAILBOXES.items()]
+        lists.append(("outbox", self.data.sent_messages))
+        for mailbox, messages in lists:
+            for message in messages or []:
+                if str(message.id) == message_id:
+                    return mailbox, message
+        return None
+
     def _mailbox_messages(self, mailbox: str) -> list[MessageData]:
         if self.data is None:
             return []

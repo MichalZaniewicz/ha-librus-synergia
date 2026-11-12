@@ -65,6 +65,44 @@ from .messaging import RecipientError, recipient_dict, resolve_recipient
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def message_details(raw: Any, mailbox: str, message_id: str) -> dict[str, Any] | None:
+    """One opened message (`async_fetch_message`'s answer) as `get_message`
+    returns it - also what the Assist full-message tool reads. None when the
+    answer has no message in it."""
+    data = raw.get("data") if isinstance(raw, dict) else None
+    if not isinstance(data, dict):
+        return None
+    full = parse_message(raw, mailbox, message_id)
+    # CONFIRMED live (2026-09-17): each entry is {"filename": ..., "id":
+    # ...}. The file itself downloads through attachment_view.py.
+    attachments = [
+        {"id": str(a["id"]), "filename": a.get("filename")}
+        for a in data.get("attachments") or []
+        if isinstance(a, dict) and a.get("id") is not None
+    ]
+    return {
+        "id": message_id,
+        "mailbox": mailbox,
+        "sender": resolve_sender_name(data),
+        "topic": data.get("topic", ""),
+        "content": decode_message_content(data.get("Message", "")),
+        "send_date": data.get("sendDate"),
+        "read_date": data.get("readDate"),
+        "has_attachment": bool(attachments),
+        "attachments": attachments,
+        # A sent message: who it went to and when each one read it.
+        "receivers": [
+            {"name": r.name, "group": r.group, "read_date": r.read_date}
+            for r in parse_message_receivers(data)
+        ],
+        # For writing (send_message): whether Librus takes a reply to it,
+        # and - for a sent one - whether it can still be withdrawn.
+        "no_reply": full.no_reply if full else False,
+        "can_withdraw": full.can_withdraw if full else None,
+    }
+
+
 SERVICE_GET_MESSAGE = "get_message"
 SERVICE_REFRESH = "refresh"
 SERVICE_GET_GRADES = "get_grades"
@@ -233,39 +271,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
         except LibrusError as err:
             raise HomeAssistantError(f"Failed to fetch message {message_id}: {err}") from err
 
-        data = raw.get("data")
-        if not isinstance(data, dict):
+        details = message_details(raw, mailbox, message_id)
+        if details is None:
             raise HomeAssistantError(f"Unexpected response fetching message {message_id}.")
-
-        sender_name = resolve_sender_name(data)
-        full = parse_message(raw, mailbox, message_id)
-        # CONFIRMED live (2026-09-17): each entry is {"filename": ..., "id":
-        # ...}. The file itself downloads through attachment_view.py.
-        attachments = [
-            {"id": str(a["id"]), "filename": a.get("filename")}
-            for a in data.get("attachments") or []
-            if isinstance(a, dict) and a.get("id") is not None
-        ]
-        return {
-            "id": message_id,
-            "mailbox": mailbox,
-            "sender": sender_name,
-            "topic": data.get("topic", ""),
-            "content": decode_message_content(data.get("Message", "")),
-            "send_date": data.get("sendDate"),
-            "read_date": data.get("readDate"),
-            "has_attachment": bool(attachments),
-            "attachments": attachments,
-            # A sent message: who it went to and when each one read it.
-            "receivers": [
-                {"name": r.name, "group": r.group, "read_date": r.read_date}
-                for r in parse_message_receivers(data)
-            ],
-            # For writing (send_message): whether Librus takes a reply to it,
-            # and - for a sent one - whether it can still be withdrawn.
-            "no_reply": full.no_reply if full else False,
-            "can_withdraw": full.can_withdraw if full else None,
-        }
+        return details
 
     hass.services.async_register(
         DOMAIN,

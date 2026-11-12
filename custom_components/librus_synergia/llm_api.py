@@ -6,10 +6,13 @@ settings. The model then answers school questions - "what does he have
 tomorrow?", "any grades this week?", "when is the next maths test?" - by
 calling these tools instead of reading dozens of sensors.
 
-Every tool is read-only and answers from the data the coordinators already
-hold, so a question never adds a Librus request. The one exception is a
-timetable date outside the cached current+next week, which fetches that
-single week on demand (same path the timetable calendar uses).
+Every tool answers from the data the coordinators already hold, so a
+question never adds a Librus request. Two exceptions: a timetable date
+outside the cached current+next week fetches that single week on demand
+(same path the timetable calendar uses), and librus_get_full_message -
+offered only when a student's entry has "Let Assist open whole messages"
+on - opens one message, which marks it read in Librus. Every other tool is
+read-only.
 
 Compatibility: Home Assistant's `llm` helper changed over time - tool
 parameters moved from voluptuous to probatio schemas, tools gained
@@ -30,13 +33,21 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import llm
 from homeassistant.util import dt as dt_util
 
+from librus_synergia import LibrusError
 from librus_synergia.models import LibrusData
 from librus_synergia.parsers import plan_differences, point_grades_percentage
 
 from .absence_budget import absence_budget
 from .ai_summary import _compact, _cut, _dated, _day
 from .catch_up import catch_up
-from .const import AVERAGE_MODE_ARITHMETIC, CONF_AVERAGE_MODE, DEFAULT_AVERAGE_MODE, DOMAIN
+from .const import (
+    AVERAGE_MODE_ARITHMETIC,
+    CONF_ASSIST_FULL_MESSAGES,
+    CONF_AVERAGE_MODE,
+    DEFAULT_ASSIST_FULL_MESSAGES,
+    DEFAULT_AVERAGE_MODE,
+    DOMAIN,
+)
 from .coordinator import (
     LibrusDataUpdateCoordinator,
     calculate_average,
@@ -50,6 +61,7 @@ from .coordinator import (
 )
 from .exam_prep import exam_prep, is_exam, missed_lessons
 from .forecast import subject_forecasts
+from .services import message_details
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -946,7 +958,8 @@ class MessagesTool(_LibrusTool):
     description = (
         "Recent private messages from teachers and the school (sender, subject line, the "
         "start of the text, whether it is unread), messages the parent sent (to whom) and "
-        "school announcements. Listing does not mark anything as read."
+        "school announcements. Listing does not mark anything as read. Each message has an "
+        "id for librus_get_full_message, when that tool is available."
     )
     parameters = _schema(
         {
@@ -960,6 +973,7 @@ class MessagesTool(_LibrusTool):
         messages = [
             _compact(
                 {
+                    "id": m.id,
                     "date": _dated(m.send_date),
                     "from": m.sender_name,
                     "topic": _cut(m.topic, 120),
@@ -974,6 +988,7 @@ class MessagesTool(_LibrusTool):
         sent = [
             _compact(
                 {
+                    "id": m.id,
                     "date": _dated(m.send_date),
                     "to": m.receiver_name,
                     "topic": _cut(m.topic, 120),
@@ -1004,6 +1019,128 @@ class MessagesTool(_LibrusTool):
                 "messages": messages,
                 "sent_messages": sent,
                 "announcements": announcements,
+            }
+        )
+
+
+_FULL_MESSAGE_MAX = 6000
+
+
+def _full_text(text: str | None) -> str | None:
+    """The message body with its line breaks (lists of what to bring),
+    blank-line runs squeezed, cut at _FULL_MESSAGE_MAX."""
+    lines = [" ".join(line.split()) for line in (text or "").splitlines()]
+    kept: list[str] = []
+    for line in lines:
+        if line or (kept and kept[-1]):
+            kept.append(line)
+    body = "\n".join(kept).strip()
+    if not body:
+        return None
+    return body if len(body) <= _FULL_MESSAGE_MAX else body[: _FULL_MESSAGE_MAX - 1].rstrip() + "\u2026"
+
+
+def full_messages_allowed(coordinator: LibrusDataUpdateCoordinator) -> bool:
+    """Whether this student's entry lets Assist open whole messages (read
+    live: the option doesn't reload the integration)."""
+    return bool(
+        coordinator.config_entry.options.get(
+            CONF_ASSIST_FULL_MESSAGES, DEFAULT_ASSIST_FULL_MESSAGES
+        )
+    )
+
+
+class FullMessageTool(_LibrusTool):
+    """The one tool that changes something in Librus: opening a message in
+    Wiadomości marks it read there (CONFIRMED live 2026-09-06), exactly like
+    opening it in the Librus app. Offered only when a student's entry has
+    "Let Assist open whole messages" on (CONF_ASSIST_FULL_MESSAGES), and
+    only for message ids on that student's own lists - never a guessed id
+    or a topic, which could open (and mark read) the wrong message."""
+
+    name = "librus_get_full_message"
+    description = (
+        "The whole text of one message, by the id librus_get_messages gives it - use it "
+        "when the start of the text there is not enough, e.g. what to bring or wear for an "
+        "event. Opening a message marks it as read in Librus, so open only messages the "
+        "question is really about."
+    )
+    parameters = _schema(
+        {
+            "message_id": (str, "The message's id from librus_get_messages."),
+            "student": _STUDENT_FIELD,
+        }
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        annotations = getattr(llm, "ToolAnnotations", None)
+        if annotations is not None:
+            self.annotations = annotations(
+                read_only=False, destructive=False, idempotent=True, open_world=True
+            )
+
+    async def async_call(
+        self, hass: HomeAssistant, tool_input: llm.ToolInput, llm_context: llm.LLMContext
+    ) -> Any:
+        args = tool_input.tool_args or {}
+        message_id = str(args.get("message_id") or "").strip()
+        if not message_id:
+            return _result({"error": "message_id is required."}, error=True)
+        students = _students(hass)
+        wanted = args.get("student")
+        if wanted:
+            students = [s for s in students if _name_matches(s[0], str(wanted))]
+        found = [
+            (name, coordinator, hit)
+            for name, coordinator in students
+            if (hit := coordinator.find_message(message_id)) is not None
+        ]
+        if len(found) != 1:
+            return _result(
+                {
+                    "error": f"No message with id {message_id!r} on the lists"
+                    " librus_get_messages shows. Use an id from there."
+                },
+                error=True,
+            )
+        name, coordinator, (mailbox, listed) = found[0]
+        if not full_messages_allowed(coordinator):
+            return _result(
+                {
+                    "error": f"Opening whole messages is turned off for {name}"
+                    " (Librus Synergia -> Configure)."
+                },
+                error=True,
+            )
+        try:
+            raw = await coordinator.async_open_message(mailbox, message_id)
+        except LibrusError as err:
+            return _result({"error": f"Librus did not open the message: {err}"}, error=True)
+        details = message_details(raw, mailbox, message_id)
+        if details is None:
+            return _result({"error": "Librus sent back no message."}, error=True)
+        return _result(
+            {
+                "today": _dated(dt_util.now().date()),
+                "student": name,
+                "message": _compact(
+                    {
+                        "id": message_id,
+                        "sent_by_parent": True if mailbox == "outbox" else None,
+                        "date": _dated(details.get("send_date")),
+                        "from": details.get("sender") if mailbox != "outbox" else None,
+                        "to": [r["name"] for r in details.get("receivers") or [] if r.get("name")]
+                        if mailbox == "outbox"
+                        else None,
+                        "topic": details.get("topic"),
+                        "text": _full_text(details.get("content")),
+                        "attachments": [
+                            a["filename"] for a in details.get("attachments") or [] if a.get("filename")
+                        ],
+                        "was_unread": True if mailbox != "outbox" and not listed.read_date else None,
+                    }
+                ),
             }
         )
 
@@ -1089,20 +1226,32 @@ class LibrusLLMAPI(llm.API):
             )
         else:
             who = "no student data loaded yet"
+        tools: list[llm.Tool] = [tool() for tool in TOOLS]
+        full_messages = any(full_messages_allowed(c) for _, c in students)
+        if full_messages:
+            tools.append(FullMessageTool())
+            changes = (
+                "The tools only read data, except librus_get_full_message: opening a message "
+                "marks it read in Librus, so open only the messages the question is about - "
+                "for 'what to bring or wear' questions, the ones about that event. Nothing "
+                "is ever sent."
+            )
+        else:
+            changes = "The tools only read data; nothing is changed or sent."
         prompt = (
             "Librus Synergia is the Polish school e-register. Use the librus_* tools to "
             "answer questions about school for: "
             f"{who}. Today is {_dated(dt_util.now().date())}. Every date in tool results "
             "comes with its weekday; trust those weekdays instead of working them out. "
-            "For 'tomorrow' or a weekday, pass that date to librus_get_timetable. The "
-            "tools only read data; nothing is changed or sent. Answer in the user's "
-            "language and keep subject names as Librus writes them."
+            "For 'tomorrow' or a weekday, pass that date to librus_get_timetable. "
+            f"{changes} Answer in the user's language and keep subject names as "
+            "Librus writes them."
         )
         return llm.APIInstance(
             api=self,
             api_prompt=prompt,
             llm_context=llm_context,
-            tools=[tool() for tool in TOOLS],
+            tools=tools,
         )
 
 

@@ -153,7 +153,12 @@ DEFAULT_MESSAGE_SENDING_ENABLED = False
 MESSAGE_SEND_LIMIT_PER_HOUR = 10
 # Options read live wherever they're used - changing one doesn't reload
 # the integration.
-LIVE_OPTIONS = frozenset({CONF_MESSAGE_SENDING_ENABLED})
+# Assist (the "Librus Synergia" LLM API) may open a whole message - off by
+# default: opening a message in Wiadomosci marks it read (CONFIRMED live,
+# 2026-09-06), so a question to Assist would change what Librus shows.
+CONF_ASSIST_FULL_MESSAGES = "assist_full_messages"
+DEFAULT_ASSIST_FULL_MESSAGES = False
+LIVE_OPTIONS = frozenset({CONF_MESSAGE_SENDING_ENABLED, CONF_ASSIST_FULL_MESSAGES})
 
 # Same "skip the fetch, sensor goes unavailable" shape as CONF_MESSAGES_
 # ENABLED above, extended to the other optional (non-core) data groups.
