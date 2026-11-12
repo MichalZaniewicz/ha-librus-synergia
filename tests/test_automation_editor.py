@@ -101,6 +101,10 @@ def test_other_filters() -> None:
     f = {key: spec[2] for key, spec in librus_trigger._SPECS.items()}
     assert f["new_absence"]({"excused": True}, {}) is True
     assert f["new_absence"]({"excused": True}, {"only_unexcused": True}) is False
+    assert f["new_late"]({"subject": "Matematyka"}, {})
+    assert f["new_late"]({"subject": "Matematyka"}, {"subject": "matem"})
+    assert not f["new_late"]({"subject": "Fizyka"}, {"subject": "matem"})
+    assert not f["new_late"]({"subject": None}, {"subject": "matem"})
     assert f["new_note"]({"sentiment": None}, {"sentiment": ["neutral"]})
     assert not f["new_note"]({"sentiment": "positive"}, {"sentiment": ["negative"]})
     assert f["new_message"]({}, {"mailbox": ["inbox"]})

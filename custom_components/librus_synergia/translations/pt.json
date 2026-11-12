@@ -674,7 +674,13 @@
     },
     "new_late": {
       "name": "Novo atraso",
-      "description": "É marcado um atraso (Spóźnienie)."
+      "description": "É marcado um atraso (Spóźnienie).",
+      "fields": {
+        "subject": {
+          "name": "Disciplina",
+          "description": "Apenas estas disciplinas - basta parte do nome, várias separadas por vírgulas. Vazio: todas as disciplinas."
+        }
+      }
     },
     "new_message": {
       "name": "Nova mensagem",

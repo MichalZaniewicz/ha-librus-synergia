@@ -674,7 +674,13 @@
     },
     "new_late": {
       "name": "New lateness",
-      "description": "The student is marked late (Spóźnienie)."
+      "description": "The student is marked late (Spóźnienie).",
+      "fields": {
+        "subject": {
+          "name": "Subject",
+          "description": "Only these subjects - part of the name is enough, several separated by commas. Empty: every subject."
+        }
+      }
     },
     "new_message": {
       "name": "New message",

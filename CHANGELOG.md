@@ -9,7 +9,11 @@
   covered it. Also a "New lateness" event entity, a "New lateness" trigger in
   the automation editor, a logbook line and a New Lateness Notification
   blueprint (40 blueprints). The first sync after updating only records the
-  latenesses already there.
+  latenesses already there. The trigger can be limited to some subjects
+  ("matem, fizyka").
+- **Lateness counts on the Attendance sensor.** `late_count` (the school year)
+  and `late_this_semester`, plus a `late` count in each `by_semester` entry.
+  A lateness counts as being present, so it was never in the sensor's state.
 - **Assist can read a whole message.** A new tool, `librus_get_full_message`,
   opens one message by the id `librus_get_messages` now gives each message,
   for questions where the start of the text isn't enough ("what does she need

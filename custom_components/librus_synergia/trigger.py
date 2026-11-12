@@ -238,7 +238,7 @@ _SPECS: dict[
         {vol.Optional("only_unexcused", default=False): cv.boolean},
         _absence_filter,
     ),
-    "new_late": (EVENT_NEW_LATE, {}, _no_filter),
+    "new_late": (EVENT_NEW_LATE, {vol.Optional("subject"): cv.string}, _subject_filter),
     "new_message": (
         EVENT_NEW_MESSAGE,
         {

@@ -674,7 +674,13 @@
     },
     "new_late": {
       "name": "Neue Verspätung",
-      "description": "Eine Verspätung wird eingetragen (Spóźnienie)."
+      "description": "Eine Verspätung wird eingetragen (Spóźnienie).",
+      "fields": {
+        "subject": {
+          "name": "Fach",
+          "description": "Nur diese Fächer - ein Teil des Namens genügt, mehrere durch Kommas getrennt. Leer: jedes Fach."
+        }
+      }
     },
     "new_message": {
       "name": "Neue Nachricht",

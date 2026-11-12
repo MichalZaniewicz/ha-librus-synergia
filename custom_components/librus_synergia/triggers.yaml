@@ -67,6 +67,8 @@ new_absence:
 
 new_late:
   target: *target
+  fields:
+    subject: *subject
 
 new_message:
   target: *target

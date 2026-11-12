@@ -191,8 +191,19 @@ async def test_attendance_sensor_counts_only_non_presence_types(hass) -> None:
     # Independent % calculation (new 2026-09-06) - 2 of
     # 4 records are presence-kind.
     assert state.attributes["percentage"] == round(100 * 2 / 4, 1)
-    assert state.attributes["by_semester"]["1"] == {"total": 2, "present": 2, "percentage": 100.0}
-    assert state.attributes["by_semester"]["2"] == {"total": 2, "present": 0, "percentage": 0.0}
+    assert state.attributes["by_semester"]["1"] == {
+        "total": 2,
+        "present": 2,
+        "late": 0,
+        "percentage": 100.0,
+    }
+    assert state.attributes["by_semester"]["2"] == {
+        "total": 2,
+        "present": 0,
+        "late": 0,
+        "percentage": 0.0,
+    }
+    assert state.attributes["late_count"] == 0
 
 
 async def test_attendance_by_date_takes_worst_status_per_day(hass) -> None:
@@ -261,6 +272,42 @@ async def test_attendance_by_weekday_splits_excused_unexcused_late(hass) -> None
     key_b = str(_date.fromisoformat(day_b).isoweekday())
     assert state.attributes["by_weekday"][key_a] == {"excused": 0, "unexcused": 1, "late": 1}
     assert state.attributes["by_weekday"][key_b] == {"excused": 1, "unexcused": 0, "late": 0}
+
+
+async def test_attendance_counts_late_arrivals(hass, freezer) -> None:
+    """`late_count` covers the year, `late_this_semester` only the current
+    semester (from the class's first-semester end), `by_semester` has a
+    `late` count per semester."""
+    freezer.move_to("2027-03-10T12:00:00Z")
+    client = build_mock_client(
+        async_get_classes={
+            "Class": {"Number": 7, "Symbol": "d", "EndFirstSemester": "2027-01-31"}
+        },
+        async_get_attendances={
+            "Attendances": [
+                {"Id": 1, "Date": "2026-10-05", "Semester": 1, "Type": {"Id": 2}},
+                {"Id": 2, "Date": "2026-11-02", "Semester": 1, "Type": {"Id": 2}},
+                {"Id": 3, "Date": "2027-03-01", "Semester": 2, "Type": {"Id": 2}},
+                {"Id": 4, "Date": "2027-03-02", "Semester": 2, "Type": {"Id": 100}},
+                {"Id": 5, "Date": "2027-03-03", "Semester": 2, "Type": {"Id": 1}},
+            ]
+        },
+        async_get_attendance_types={
+            "Types": [
+                {"Id": 100, "Name": "Obecność", "IsPresenceKind": True},
+                {"Id": 1, "Name": "Nieobecność", "IsPresenceKind": False},
+                {"Id": 2, "Name": "Spóźnienie", "IsPresenceKind": True},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    state = hass.states.get(_entity_id(hass, entry, "attendance"))
+    assert state.state == "1"  # lates are presence - not in the state
+    assert state.attributes["late_count"] == 3
+    assert state.attributes["late_this_semester"] == 1
+    assert state.attributes["by_semester"]["1"]["late"] == 2
+    assert state.attributes["by_semester"]["2"]["late"] == 1
 
 
 async def test_attendance_by_subject_resolves_via_lessons_lookup(hass) -> None:

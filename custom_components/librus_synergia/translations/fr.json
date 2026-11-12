@@ -674,7 +674,13 @@
     },
     "new_late": {
       "name": "Nouveau retard",
-      "description": "Un retard est enregistré (Spóźnienie)."
+      "description": "Un retard est enregistré (Spóźnienie).",
+      "fields": {
+        "subject": {
+          "name": "Matière",
+          "description": "Uniquement ces matières : une partie du nom suffit, plusieurs séparées par des virgules. Vide : toutes les matières."
+        }
+      }
     },
     "new_message": {
       "name": "Nouveau message",

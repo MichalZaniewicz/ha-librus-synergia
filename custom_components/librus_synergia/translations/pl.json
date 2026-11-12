@@ -674,7 +674,13 @@
     },
     "new_late": {
       "name": "Nowe spóźnienie",
-      "description": "Uczeń dostaje spóźnienie."
+      "description": "Uczeń dostaje spóźnienie.",
+      "fields": {
+        "subject": {
+          "name": "Przedmiot",
+          "description": "Tylko te przedmioty - wystarczy fragment nazwy, kilka po przecinku. Puste: każdy przedmiot."
+        }
+      }
     },
     "new_message": {
       "name": "Nowa wiadomość",

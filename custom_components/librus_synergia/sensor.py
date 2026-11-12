@@ -81,6 +81,7 @@ from .forecast import (
     HONOURS_AVERAGE,
     DataMemo,
     SubjectForecast,
+    current_semester,
     forecast_basis,
     overall_with_points,
     point_sums,
@@ -966,7 +967,7 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
     presence_by_type: dict[str, bool] = {}
     absence_dates: list[str] = []
     unexcused_dates: set[str] = set()
-    excused = unexcused = presence_records = 0
+    excused = unexcused = presence_records = late = 0
     by_date: dict[str, str] = {}
     by_semester: dict[str, dict[str, Any]] = {}
     by_weekday: dict[str, dict[str, int]] = {}
@@ -981,6 +982,8 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
             presence_by_type[name] = t.is_presence_kind
             if t.is_presence_kind:
                 presence_records += 1
+                if _is_late_type_name(t.name):
+                    late += 1
             else:
                 if a.date:
                     absence_dates.append(a.date)
@@ -1002,10 +1005,14 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
             if existing is None or _STATUS_RANK[status] > _STATUS_RANK[existing]:
                 by_date[a.date] = status
         if a.semester is not None:
-            bucket = by_semester.setdefault(str(a.semester), {"total": 0, "present": 0})
+            bucket = by_semester.setdefault(
+                str(a.semester), {"total": 0, "present": 0, "late": 0}
+            )
             bucket["total"] += 1
             if t is not None and t.is_presence_kind:
                 bucket["present"] += 1
+                if _is_late_type_name(t.name):
+                    bucket["late"] += 1
         if t is None:
             continue
         # The excused/unexcused/late split, by weekday and by subject (see
@@ -1064,6 +1071,7 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
         "unexcused_dates": unexcused_dates,
         "excused": excused,
         "unexcused": unexcused,
+        "late": late,
         "total_records": total,
         "percentage": round(100 * presence_records / total, 1) if total else None,
         "by_date": by_date,
@@ -1074,6 +1082,13 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
             sorted(subject_attendance.items(), key=lambda kv: (kv[1]["percentage"], kv[0]))
         ),
     }
+
+
+def _late_this_semester(data: LibrusData, summary: dict[str, Any]) -> int | None:
+    semester = current_semester(data, dt_util.now().date())
+    if semester is None:
+        return None
+    return summary["by_semester"].get(str(semester), {}).get("late", 0)
 
 
 # Absences and late arrivals listed in the Attendance sensor's `recent`.
@@ -1147,6 +1162,11 @@ class LibrusAttendanceSensor(LibrusSensorBase):
             # view. There's also a dedicated `sensor.*_unexcused_absences`.
             "excused_count": summary["excused"],
             "unexcused_count": summary["unexcused"],
+            # Late arrivals ("Spóźnienie" - a presence kind, so not in the
+            # state): this school year, and in the current semester (from
+            # the class's first-semester end date; 0 before any record).
+            "late_count": summary["late"],
+            "late_this_semester": _late_this_semester(self.coordinator.data, summary),
             # One worst status per calendar date (good/warn/bad).
             "by_date": summary["by_date"],
             # Excused/unexcused/late RECORDS per ISO weekday (1=Monday..
