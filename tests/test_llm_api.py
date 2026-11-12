@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import timedelta
 
 from homeassistant.helpers import llm
 from homeassistant.util import dt as dt_util
 
+from custom_components.librus_synergia.const import CONF_ASSIST_FULL_MESSAGES
 from custom_components.librus_synergia.llm_api import LLM_API_ID
 
 from .conftest import build_mock_client, messages_by_mailbox, setup_integration
@@ -52,7 +54,6 @@ async def test_api_registered_with_read_only_tools(hass) -> None:
         "librus_get_behaviour",
         "librus_get_school_info",
         "librus_get_messages",
-        "librus_get_full_message",
     }
     assert "Librus Synergia" in instance.api_prompt
 
@@ -221,7 +222,12 @@ async def test_messages_tool_lists_sent_messages(hass, freezer) -> None:
 
     data = await _call(hass, "librus_get_messages")
     assert data["sent_messages"] == [
-        {"id": "9", "date": data["sent_messages"][0]["date"], "to": "Anna Nowak", "topic": "Nieobecność"}
+        {
+            "id": "9",
+            "date": data["sent_messages"][0]["date"],
+            "to": "Anna Nowak",
+            "topic": "Nieobecność",
+        }
     ]
 
 
@@ -240,3 +246,94 @@ async def test_api_unregistered_with_last_entry(hass) -> None:
     await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert LLM_API_ID not in {api.id for api in llm.async_get_apis(hass)}
+
+
+def _inbox_client():
+    client = build_mock_client(
+        async_bootstrap_messages=True,
+        async_get_unread_messages_count={"data": {"inbox": 1}},
+    )
+    client.async_get_messages.side_effect = messages_by_mailbox(
+        {
+            "inbox": {
+                "data": [
+                    {
+                        "messageId": "100001",
+                        "senderName": "Anna Nowak",
+                        "topic": "Apel",
+                        "content": base64.b64encode("Jutro apel".encode()).decode(),
+                        "sendDate": f"{_shifted(-1)} 08:00:00",
+                        "readDate": None,
+                    }
+                ]
+            }
+        }
+    )
+    body = "Jutro apel o 8:00.\n\n\n\nStrój galowy:\n- biała koszula\n- granatowe spodnie"
+    client.async_get_message.return_value = {
+        "data": {
+            "messageId": "100001",
+            "senderFirstName": "Anna",
+            "senderLastName": "Nowak",
+            "topic": "Apel",
+            "Message": base64.b64encode(body.encode()).decode(),
+            "sendDate": f"{_shifted(-1)} 08:00:00",
+            "readDate": None,
+            "attachments": [{"id": "7", "filename": "plan.pdf"}],
+        }
+    }
+    return client
+
+
+async def test_full_message_tool_is_off_by_default(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    await setup_integration(hass, _inbox_client())
+
+    instance = await llm.async_get_api(hass, LLM_API_ID, _context())
+    assert "librus_get_full_message" not in {t.name for t in instance.tools}
+    assert "nothing is changed or sent" in instance.api_prompt
+    # The messages list still gives the id, for when it's turned on.
+    data = await _call(hass, "librus_get_messages")
+    assert data["messages"][0]["id"] == "100001"
+
+
+async def test_full_message_tool_opens_the_message_and_shows_it_read(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = _inbox_client()
+    entry = await setup_integration(
+        hass, client, options={CONF_ASSIST_FULL_MESSAGES: True}
+    )
+    coordinator = entry.runtime_data
+    client.async_get_message.reset_mock()
+
+    instance = await llm.async_get_api(hass, LLM_API_ID, _context())
+    assert "librus_get_full_message" in {t.name for t in instance.tools}
+    assert "marks it read" in instance.api_prompt
+
+    data = await _call(hass, "librus_get_full_message", message_id="100001")
+
+    client.async_get_message.assert_awaited_once_with("inbox", "100001")
+    message = data["message"]
+    assert message["from"] == "Anna Nowak"
+    assert message["topic"] == "Apel"
+    # Line breaks kept, the run of blank lines squeezed to one.
+    assert message["text"] == (
+        "Jutro apel o 8:00.\n\nStrój galowy:\n- biała koszula\n- granatowe spodnie"
+    )
+    assert message["attachments"] == ["plan.pdf"]
+    assert message["was_unread"] is True
+    # Shown read straight away, as Librus now has it.
+    assert coordinator.data.messages[0].read_date is not None
+    assert coordinator.data.unread_message_count == 0
+
+
+async def test_full_message_tool_only_opens_listed_ids(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = _inbox_client()
+    await setup_integration(hass, client, options={CONF_ASSIST_FULL_MESSAGES: True})
+    client.async_get_message.reset_mock()
+
+    for wrong in ("999", "Apel", ""):
+        data = await _call(hass, "librus_get_full_message", message_id=wrong)
+        assert "error" in data
+    client.async_get_message.assert_not_awaited()

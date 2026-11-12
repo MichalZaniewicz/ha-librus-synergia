@@ -90,6 +90,7 @@ from .const import (
     CONF_MESSAGES_COUNT,
     CONF_MESSAGES_ENABLED,
     CONF_MESSAGE_SENDING_ENABLED,
+    CONF_ASSIST_FULL_MESSAGES,
     CONF_POINT_GRADE_THRESHOLDS,
     CONF_POINT_GRADE_THRESHOLDS_BY_SUBJECT,
     CONF_QUIET_HOURS_ENABLED,
@@ -116,6 +117,7 @@ from .const import (
     DEFAULT_MESSAGES_COUNT,
     DEFAULT_MESSAGES_ENABLED,
     DEFAULT_MESSAGE_SENDING_ENABLED,
+    DEFAULT_ASSIST_FULL_MESSAGES,
     DEFAULT_QUIET_HOURS_ENABLED,
     DEFAULT_QUIET_HOURS_END,
     DEFAULT_QUIET_HOURS_START,
@@ -449,6 +451,10 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                     default=options.get(
                         CONF_MESSAGE_SENDING_ENABLED, DEFAULT_MESSAGE_SENDING_ENABLED
                     ),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_ASSIST_FULL_MESSAGES,
+                    default=options.get(CONF_ASSIST_FULL_MESSAGES, DEFAULT_ASSIST_FULL_MESSAGES),
                 ): BooleanSelector(),
                 vol.Required(
                     CONF_ANNOUNCEMENTS_ENABLED,
