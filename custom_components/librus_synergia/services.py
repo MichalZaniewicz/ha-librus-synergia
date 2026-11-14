@@ -190,6 +190,9 @@ _SYNC_CALENDAR_SCHEMA = vol.Schema(
         vol.Optional("free_days", default=True): cv.boolean,
         # "Ola:" in front of every title - handy with more than one child.
         vol.Optional("prefix"): cv.string,
+        # "07:00": Agenda copies become timed events (see calendar_sync).
+        # Empty or left out: all-day copies, as before.
+        vol.Optional("event_time"): vol.Any(None, cv.string),
         vol.Optional("dry_run", default=False): cv.boolean,
     }
 )
@@ -633,6 +636,10 @@ def _async_setup_message_writing(hass: HomeAssistant) -> None:
             raise HomeAssistantError("No Librus data yet - try again after the next refresh.")
         today = dt_util.now().date()
         days = call.data["days"]
+        raw_time = (call.data.get("event_time") or "").strip()
+        event_time = dt_util.parse_time(raw_time) if raw_time else None
+        if raw_time and event_time is None:
+            raise ServiceValidationError(f"event_time should look like 07:00, not {raw_time!r}.")
         items = sync_items(
             data,
             today=today,
@@ -641,6 +648,7 @@ def _async_setup_message_writing(hass: HomeAssistant) -> None:
             free_days=call.data["free_days"],
             prefix=call.data.get("prefix") or "",
             emoji=bool(entry.options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI)),
+            event_time=event_time,
         )
         return await async_sync_calendar(
             hass,

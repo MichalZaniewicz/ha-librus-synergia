@@ -513,3 +513,55 @@ async def test_sync_calendar_action(hass) -> None:
     assert result["created"] == 1
     [event] = calendar.events.values()
     assert event.summary == "Ola: [Sprawdzian] Matematyka: Dział 2"
+
+
+# --- event time ----------------------------------------------------------------
+
+
+def test_event_time_makes_agenda_copies_timed() -> None:
+    from datetime import time as dtime
+
+    from custom_components.librus_synergia.calendar_sync import _event_fields, _same
+
+    data = _data(
+        homeworks=[
+            HomeworkEventData(
+                id=1, date="2026-10-22", content="Dział 2", category_id=1, subject_id=10, time_from=None
+            ),
+            HomeworkEventData(
+                id=8, date="2026-10-23", content="Zebranie", category_id=2, subject_id=None, time_from="17:30"
+            ),
+        ]
+    )
+    items = {
+        i.key: i
+        for i in sync_items(
+            data, today=_TODAY, days=30, categories=[], free_days=True, event_time=dtime(7, 0)
+        )
+    }
+
+    test = items["a1"].timed()
+    assert (test[0].hour, test[0].minute, (test[1] - test[0]).seconds) == (7, 0, 30 * 60)
+    meeting = items["a8"].timed()
+    assert (meeting[0].hour, meeting[0].minute, (meeting[1] - meeting[0]).seconds) == (17, 30, 3600)
+    # Days off stay all-day.
+    assert items["f6-2026-11-02"].timed() is None
+
+    fields = _event_fields(items["a1"], "abc123")
+    assert isinstance(fields["dtstart"], datetime)
+    timed_copy = CalendarEvent(
+        start=fields["dtstart"], end=fields["dtend"], summary=items["a1"].summary,
+        description=fields["description"],
+    )
+    assert _same(items["a1"], timed_copy)
+    # An all-day copy made before turning the option on gets rewritten.
+    all_day_copy = CalendarEvent(
+        start=date(2026, 10, 22), end=date(2026, 10, 23), summary=items["a1"].summary,
+        description=fields["description"],
+    )
+    assert not _same(items["a1"], all_day_copy)
+
+
+def test_no_event_time_keeps_all_day_copies() -> None:
+    items = sync_items(_data(), today=_TODAY, days=30, categories=[], free_days=True)
+    assert all(item.timed() is None for item in items)

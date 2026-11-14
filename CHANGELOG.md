@@ -22,8 +22,30 @@
   timetable (cancelled lessons left out unless asked for), further ones from
   the standard weekly plan; days off are skipped. The answer lists each
   lesson with its date, number, hours and source.
+- **Lessons left before a test.** The Next exam sensor has `lessons_left`: how
+  many lessons of the test's subject fall after today and before the test
+  (cancelled ones left out), for the next test and for each one in
+  `upcoming`. Today isn't counted, so the number stays the same all day.
+- **Assist counts lessons.** A new Assist tool, `librus_count_lessons`,
+  answers "how many maths lessons until the 4th of December?" the same way
+  as the action.
+- **A time for copied events.** `librus_synergia.sync_calendar` takes an
+  `event_time` (e.g. `07:00`): copied tests, quizzes and trips become timed
+  events at that hour instead of all-day ones, so a phone reminds about them
+  at a useful time. An entry with its own time in Librus (a meeting at 17:30)
+  keeps it and lasts an hour. Days off stay all-day. Copies already in the
+  calendar are rewritten when the option changes. The Copy School Events to
+  a Calendar blueprint has a "Give the copies a time" switch.
+- **Parent to-dos from announcements (AI).** A new blueprint (41 now): every
+  new announcement - and, optionally, the start of every new message - is
+  read by your AI Task entity, and what you have to do (sign, pay, bring,
+  return, sign up) goes to a to-do list of your choice, each task with its
+  own deadline when the text gives one. Announcements that only inform add
+  nothing. The text is sent to that AI service.
 
 ### Changed
+- **Library 0.3.31.** The integration now uses `librus-synergia` 0.3.31, which
+  renews a rejected session with the token as well.
 - **Fewer password logins.** Librus drops a session after about 10 minutes
   without a request, so with the default 20-minute refresh nearly every
   refresh started with a full password login (about 70 a day). A rejected

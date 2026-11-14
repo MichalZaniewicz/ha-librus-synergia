@@ -1,0 +1,173 @@
+blueprint:
+  name: "Librus: Parent To-dos from Announcements (AI)"
+  description: >
+    Reads every new school announcement ("ogłoszenie") with an AI and, when it
+    asks you to do something - sign a form, pay for a trip, bring something,
+    return a book, sign up - adds that to a to-do list, with the deadline as
+    the due date when the text gives one. Announcements that only inform add
+    nothing.
+
+
+    Optionally reads new Wiadomości messages too. Only the start of a message
+    is available without opening it (opening it in Librus marks it read), so
+    a task further down a long message can be missed.
+
+
+    Needs an AI Task entity (Settings > Devices & services, e.g. Google
+    Generative AI or OpenAI) and a to-do list, e.g. a Local To-do list
+    "Szkoła - do zrobienia". The announcement text is sent to that AI
+    service.
+  domain: automation
+  source_url: https://github.com/MichalZaniewicz/ha-librus-synergia/blob/main/blueprints/automation/librus_synergia/parent_todos_from_announcements.yaml
+  input:
+    ai_task_entity:
+      name: AI Task entity
+      description: The AI that reads the announcements.
+      selector:
+        entity:
+          domain: ai_task
+    todo_list:
+      name: To-do list
+      description: Where the tasks go.
+      selector:
+        entity:
+          domain: todo
+    include_messages:
+      name: Also read new messages
+      description: Start of each new Wiadomości message (the part available without opening it).
+      default: false
+      selector:
+        boolean: {}
+    use_due_date:
+      name: Set the due date
+      description: Turn off if your to-do list doesn't support due dates.
+      default: true
+      selector:
+        boolean: {}
+    add_name:
+      name: Put the student's first name in front
+      description: '"Ola: Podpisać zgodę na wycieczkę" - handy with more than one child.'
+      default: true
+      selector:
+        boolean: {}
+
+triggers:
+  - trigger: event
+    event_type: librus_synergia_new_announcement
+    id: announcement
+  - trigger: event
+    event_type: librus_synergia_new_message
+    id: message
+    enabled: !input include_messages
+
+variables:
+  ai_entity: !input ai_task_entity
+  todo_entity: !input todo_list
+  use_due_date: !input use_due_date
+  add_name: !input add_name
+  ev: "{{ trigger.event.data }}"
+  student: "{{ ev.student | default('', true) }}"
+  name_prefix: "{{ (student.split(' ')[0] ~ ': ') if add_name and student else '' }}"
+  # The whole announcement from the Unread announcements sensor's `notices`
+  # (the event has the first 500 characters); a message's preview from the
+  # Unread messages sensor's lists.
+  source_text: >-
+    {%- set ns = namespace(text='') -%}
+    {%- set entities = device_entities(ev.device_id) if ev.device_id is defined else [] -%}
+    {%- if trigger.id == 'announcement' -%}
+      {%- for e in entities if e.startswith('sensor.') and state_attr(e, 'notices') -%}
+        {%- for n in state_attr(e, 'notices') if n.id == ev.id -%}
+          {%- set ns.text = n.content -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ (ev.subject ~ '\n\n' ~ (ns.text or ev.content | default(''))) | trim }}
+    {%- else -%}
+      {%- set box = ev.mailbox | default('inbox') -%}
+      {%- set key = 'recent' if box == 'inbox' else box ~ '_recent' -%}
+      {%- for e in entities if e.startswith('sensor.') and state_attr(e, 'mailbox_breakdown') is not none -%}
+        {%- for m in state_attr(e, key) or [] if m.id == ev.id -%}
+          {%- set ns.text = m.content -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ (ev.topic | default('') ~ '\n\n' ~ ns.text) | trim }}
+    {%- endif -%}
+  source_label: >-
+    {{ ('Ogłoszenie: ' ~ ev.subject) if trigger.id == 'announcement'
+       else ('Wiadomość: ' ~ ev.topic | default('') ~ ' (' ~ ev.sender | default('') ~ ')') }}
+
+conditions:
+  - condition: template
+    value_template: "{{ source_text | length > 0 }}"
+
+actions:
+  - action: ai_task.generate_data
+    target:
+      entity_id: "{{ ai_entity }}"
+    data:
+      task_name: Librus to-dos
+      instructions: >-
+        Below is a message from a Polish school to the parents of a student.
+        Today is {{ now().strftime('%Y-%m-%d') }}.
+        List only the things the parent (or the student) has to DO because of
+        it: sign or return a form, pay, bring or prepare something, sign up,
+        come to a meeting, return a book. Each task is one short line in the
+        language of the message, starting with a verb, with the key detail
+        (what, how much, where) - e.g. "Zapłacić 45 zł za wycieczkę do
+        Krakowa". If the message only informs (results, congratulations, a
+        competition the student isn't asked to join), return no tasks.
+        due_dates has one entry per task, in the same order: that task's
+        deadline as YYYY-MM-DD (for something to bring or prepare, the day
+        it's needed), or an empty string when the text gives none.
+
+
+        {{ source_text }}
+      structure:
+        tasks:
+          description: Short to-dos, one line each; empty when nothing has to be done.
+          required: true
+          selector:
+            text:
+              multiple: true
+        due_dates:
+          description: One per task, same order - YYYY-MM-DD or an empty string.
+          required: false
+          selector:
+            text:
+              multiple: true
+    response_variable: result
+  - variables:
+      tasks: "{{ (result.data.tasks | default([], true)) | select('string') | map('trim') | list }}"
+      due_dates: "{{ result.data.due_dates | default([], true) | list }}"
+  - repeat:
+      for_each: "{{ range(tasks | length) | list }}"
+      sequence:
+        - variables:
+            task: "{{ tasks[repeat.item] }}"
+            due: >-
+              {%- set d = ((due_dates[repeat.item] if repeat.item < due_dates | length else '') | string | trim)[:10] -%}
+              {{ d if use_due_date and (d | as_datetime(none)) is not none else '' }}
+        - if:
+            - condition: template
+              value_template: "{{ task != '' and due != '' }}"
+          then:
+            - action: todo.add_item
+              target:
+                entity_id: "{{ todo_entity }}"
+              data:
+                item: "{{ name_prefix }}{{ task }}"
+                due_date: "{{ due }}"
+                description: "{{ source_label }}"
+          else:
+            - if:
+                - condition: template
+                  value_template: "{{ task != '' }}"
+              then:
+                - action: todo.add_item
+                  target:
+                    entity_id: "{{ todo_entity }}"
+                  data:
+                    item: "{{ name_prefix }}{{ task }}"
+                    description: "{{ source_label }}"
+
+mode: queued
+max: 10

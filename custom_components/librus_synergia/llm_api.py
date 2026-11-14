@@ -57,9 +57,11 @@ from .coordinator import (
     grade_improvements,
     infer_subject_id,
     lesson_change,
+    on_demand_week_starts,
     teacher_subject_ids,
 )
 from .exam_prep import exam_prep, is_exam, missed_lessons
+from .lesson_count import MAX_RANGE_DAYS, count_lessons, match_subjects
 from .forecast import subject_forecasts
 from .services import message_details
 
@@ -1195,8 +1197,67 @@ class LessonTopicsTool(_LibrusTool):
         )
 
 
+class CountLessonsTool(_LibrusTool):
+    name = "librus_count_lessons"
+    description = (
+        "How many lessons of a subject fall between two dates, with each lesson's date and "
+        "number. Days off and cancelled lessons are left out. Weeks up to 12 weeks ahead "
+        "come from the real timetable, later ones from the standard weekly plan. Use it for "
+        "'how many maths lessons until the test' (find the test's date with "
+        "librus_get_upcoming first) or 'how many PE lessons are left before the holidays'."
+    )
+    parameters = _schema(
+        {
+            "subject": (str, "The subject: its name or part of it, several separated by commas."),
+            "date_from": (str, "First day counted, YYYY-MM-DD. Defaults to today."),
+            "date_to": (str, "Last day counted (included), YYYY-MM-DD."),
+            "student": _STUDENT_FIELD,
+        }
+    )
+
+    async def _async_for_student(self, coordinator, data, today, args):
+        start = _day(str(args.get("date_from") or "")) or today
+        end = _day(str(args.get("date_to") or ""))
+        if end is None:
+            return {"error": "date_to (YYYY-MM-DD) is needed."}
+        if end < start or (end - start).days > MAX_RANGE_DAYS:
+            return {"error": f"date_to must be after date_from and within {MAX_RANGE_DAYS} days."}
+        subjects = match_subjects(data, str(args.get("subject") or ""))
+        if not subjects:
+            return {
+                "error": f"No subject matches {args.get('subject')!r}.",
+                "subjects": sorted(data.subjects.values()),
+            }
+        timetable = dict(data.timetable)
+        weeks = on_demand_week_starts(start, end)
+        if weeks:
+            timetable.update(await coordinator.async_get_timetable_weeks(weeks))
+        lessons = count_lessons(data, timetable, set(subjects), start, end, today)
+        from_plan = sum(1 for lesson in lessons if lesson.source == "plan")
+        return _compact(
+            {
+                "subjects": sorted(subjects.values()),
+                "from": _dated(start),
+                "to": _dated(end),
+                "count": len(lessons),
+                "counted_from_the_standard_plan": from_plan or None,
+                "lessons": [
+                    _compact(
+                        {
+                            "date": _dated(lesson.day),
+                            "no": lesson.lesson_no,
+                            "subject": subjects.get(lesson.subject_id),
+                        }
+                    )
+                    for lesson in lessons[:60]
+                ],
+            }
+        )
+
+
 TOOLS: tuple[type[_LibrusTool], ...] = (
     TimetableTool,
+    CountLessonsTool,
     GradesTool,
     UpcomingTool,
     LessonTopicsTool,

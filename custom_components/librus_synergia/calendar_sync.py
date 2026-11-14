@@ -26,7 +26,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import partial
 from typing import Any
 
@@ -63,10 +63,33 @@ class SyncItem:
     start: date
     end: date  # exclusive, as for any all-day event
     description: str  # without the tag
+    # With `event_time` (sync_items): the copy is a timed event at this
+    # time on `start`, `minutes` long, instead of an all-day one - so a
+    # phone reminds about it at a useful hour.
+    at: time | None = None
+    minutes: int = 30
 
     def tagged_description(self, student: str) -> str:
         tag = f"[librus-sync:{student}:{self.key}]"
         return f"{self.description}\n\n{tag}" if self.description else tag
+
+    def timed(self) -> tuple[datetime, datetime] | None:
+        """(start, end) in Home Assistant's time zone, or None for an
+        all-day copy."""
+        if self.at is None:
+            return None
+        start = dt_util.start_of_local_day(self.start) + timedelta(
+            hours=self.at.hour, minutes=self.at.minute
+        )
+        return start, start + timedelta(minutes=self.minutes)
+
+
+def _hhmm(value: str | None) -> time | None:
+    """"17:30" / "17:30:00" -> a time; None for anything else."""
+    try:
+        return time.fromisoformat((value or "").strip()[:5])
+    except ValueError:
+        return None
 
 
 def student_tag(entry_id: str) -> str:
@@ -98,17 +121,30 @@ def sync_items(
     free_days: bool,
     prefix: str = "",
     emoji: bool = False,
+    event_time: time | None = None,
 ) -> list[SyncItem]:
     """What the target calendar should hold from `today` for `days` days.
 
     `categories` are folded words matched against the Agenda category
     (part of the name is enough, "kartk" matches "Kartkówka"); empty keeps
-    every entry. Parent-teacher meetings count as "zebranie"."""
+    every entry. Parent-teacher meetings count as "zebranie".
+
+    With `event_time`, Agenda entries and meetings become timed events: at
+    their own time when Librus gives one (a meeting at 17:30, an hour
+    long), otherwise at `event_time` (half an hour) - so a phone reminds
+    about a test at a useful hour instead of at midnight. Days off stay
+    all-day."""
     window_end = today + timedelta(days=days)
     head = f"{prefix.strip()} " if prefix and prefix.strip() else ""
     items: list[SyncItem] = []
 
-    def add(key: str, event: CalendarEvent | None, title_prefix: str = "") -> None:
+    def add(
+        key: str,
+        event: CalendarEvent | None,
+        title_prefix: str = "",
+        own_time: str | None = None,
+        timed: bool = False,
+    ) -> None:
         if event is None:
             return
         start, end = event.start, event.end
@@ -116,6 +152,11 @@ def sync_items(
             return
         if not (start < window_end and end > today):
             return
+        at, minutes = None, 30
+        # One-day entries only - a multi-day trip stays all-day.
+        if timed and event_time is not None and (end - start).days == 1:
+            own = _hhmm(own_time)
+            at, minutes = (own, 60) if own is not None else (event_time, 30)
         items.append(
             SyncItem(
                 key=key,
@@ -123,6 +164,8 @@ def sync_items(
                 start=start,
                 end=end,
                 description=(event.description or "").strip(),
+                at=at,
+                minutes=minutes,
             )
         )
 
@@ -137,10 +180,20 @@ def sync_items(
             data.homework_categories.get(item.category_id) if item.category_id is not None else None
         )
         if wanted(category):
-            add(f"a{item.id}", _homework_to_event(item, data, emoji))
+            add(
+                f"a{item.id}",
+                _homework_to_event(item, data, emoji),
+                own_time=item.time_from,
+                timed=True,
+            )
     if wanted("zebranie z rodzicami"):
         for conference in _pt_conferences_not_in_agenda(data):
-            add(f"p{conference.id}", _pt_conference_to_event(conference, data, emoji))
+            add(
+                f"p{conference.id}",
+                _pt_conference_to_event(conference, data, emoji),
+                own_time=conference.time,
+                timed=True,
+            )
     if free_days:
         for free_day in data.free_days:
             event = _free_day_to_event(free_day)
@@ -164,20 +217,37 @@ def _strip_tag(description: str | None) -> str:
     return _TAG_RE.sub("", description or "").strip()
 
 
+def _same_when(item: SyncItem, event: CalendarEvent) -> bool:
+    """Same day(s) - and, for a timed copy, the same time: turning
+    `event_time` on or off rewrites the copies already there."""
+    timed = item.timed()
+    if timed is None:
+        return (
+            not isinstance(event.start, datetime)
+            and event.start == item.start
+            and _day(event.end) == item.end
+        )
+    if not isinstance(event.start, datetime) or not isinstance(event.end, datetime):
+        return False
+    return dt_util.as_utc(event.start) == dt_util.as_utc(timed[0]) and dt_util.as_utc(
+        event.end
+    ) == dt_util.as_utc(timed[1])
+
+
 def _same(item: SyncItem, event: CalendarEvent) -> bool:
     return (
         event.summary == item.summary
-        and _day(event.start) == item.start
-        and _day(event.end) == item.end
+        and _same_when(item, event)
         and " ".join(_strip_tag(event.description).split()) == " ".join(item.description.split())
     )
 
 
 def _event_fields(item: SyncItem, student: str) -> dict[str, Any]:
+    timed = item.timed()
     return {
         "summary": item.summary,
-        "dtstart": item.start,
-        "dtend": item.end,
+        "dtstart": timed[0] if timed else item.start,
+        "dtend": timed[1] if timed else item.end,
         "description": item.tagged_description(student),
     }
 

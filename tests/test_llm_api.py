@@ -54,8 +54,40 @@ async def test_api_registered_with_read_only_tools(hass) -> None:
         "librus_get_behaviour",
         "librus_get_school_info",
         "librus_get_messages",
+        "librus_count_lessons",
     }
     assert "Librus Synergia" in instance.api_prompt
+
+
+async def test_count_lessons_tool(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    today = dt_util.now().date()
+    lesson = {
+        "LessonNo": "2",
+        "HourFrom": "08:55",
+        "HourTo": "09:40",
+        "Subject": {"Id": "100"},
+        "Teacher": {"Id": "500"},
+        "Classroom": {"Id": "12"},
+        "IsCanceled": False,
+        "IsSubstitutionClass": False,
+    }
+    client = build_mock_client(
+        async_get_timetable={"Timetable": {(today + timedelta(days=1)).isoformat(): [[lesson]]}},
+        async_get_subjects=_SUBJECTS,
+        async_get_teachers=_TEACHERS,
+    )
+    await setup_integration(hass, client)
+
+    data = await _call(
+        hass, "librus_count_lessons", subject="matem", date_to=(today + timedelta(days=6)).isoformat()
+    )
+    assert data["subjects"] == ["Matematyka"]
+    assert data["count"] == 1
+    assert data["lessons"][0]["no"] == 2
+
+    missing = await _call(hass, "librus_count_lessons", subject="chemia", date_to=today.isoformat())
+    assert "error" in missing and "Matematyka" in missing["subjects"]
 
 
 async def test_timetable_tool_returns_todays_lessons(hass, freezer) -> None:

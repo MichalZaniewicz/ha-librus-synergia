@@ -597,6 +597,10 @@
           "name": "Préfixe du titre",
           "description": "Placé devant chaque titre, par ex. le prénom de l'élève (\"Ola:\") lorsque plusieurs enfants partagent un même calendrier."
         },
+        "event_time": {
+          "name": "Heure des événements",
+          "description": "Donne une heure aux contrôles, interrogations et sorties copiés, par exemple 07:00, pour que le téléphone rappelle à une heure utile plutôt qu'à minuit. Une entrée qui a sa propre heure dans Librus (une réunion à 17:30) la garde. Les jours de congé restent sur la journée entière. Vide = copies sur la journée entière."
+        },
         "dry_run": {
           "name": "Simulation",
           "description": "Liste seulement ce qui changerait, sans modifier le calendrier."

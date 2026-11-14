@@ -35,6 +35,7 @@ from librus_synergia.parsers import justified_dates, plan_differences, point_gra
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
 from .calendar_feed import feed_url
+from .lesson_count import lessons_before
 from .const import (
     CONF_CALENDAR_FEED_ENABLED,
     CONF_CALENDAR_FEED_TOKEN,
@@ -2640,6 +2641,24 @@ class LibrusNextExamSensor(LibrusSensorBase):
         preps = self._prep()
         return preps[0].day if preps else None
 
+    def _lessons_left(self) -> dict[int, int | None]:
+        """Agenda id -> lessons of the test's subject after today and before
+        the test (lesson_count.lessons_before): the polled timetable, then
+        the standing plan. Once a day - today isn't counted, so the number
+        doesn't move as the day's lessons pass."""
+        data = self.coordinator.data
+        if data is None:
+            return {}
+        today = dt_util.now().date()
+        return self._cached(
+            "lessons_left",
+            today,
+            lambda: {
+                prep.item.id: lessons_before(data, prep.item.subject_id, today, prep.day)
+                for prep in self._prep()
+            },
+        )
+
     def _weeks(self) -> dict[str, Any]:
         """Tests in this Monday-Sunday week and the next one (exam_prep.
         week_load) - for "a heavy week ahead"."""
@@ -2692,10 +2711,12 @@ class LibrusNextExamSensor(LibrusSensorBase):
             return {**self._weeks(), **self._recently_added()} or None
         today = dt_util.now().date()
         first = preps[0]
+        lessons_left = self._lessons_left()
         return {
             **self._weeks(),
             **self._recently_added(),
             "days_until": (first.day - today).days,
+            "lessons_left": lessons_left.get(first.item.id),
             "subject": first.subject,
             "category": first.category,
             "content": first.item.content,
@@ -2711,6 +2732,7 @@ class LibrusNextExamSensor(LibrusSensorBase):
                     "date": prep.day.isoformat(),
                     "subject": prep.subject,
                     "category": prep.category,
+                    "lessons_left": lessons_left.get(prep.item.id),
                     "content": prep.item.content[:200],
                     "topics": topics_as_dicts(prep),
                     "topics_since": prep.since.isoformat() if prep.since else None,

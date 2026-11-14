@@ -597,6 +597,10 @@
           "name": "Prefixo do título",
           "description": "Colocado antes de cada título, p. ex. o primeiro nome do aluno (\"Ola:\") quando vários filhos partilham um calendário."
         },
+        "event_time": {
+          "name": "Hora dos eventos",
+          "description": "Dá uma hora aos testes, minitestes e visitas copiados, por exemplo 07:00, para o telemóvel lembrar a uma hora útil e não à meia-noite. Uma entrada com hora própria no Librus (uma reunião às 17:30) mantém-na. Os dias livres continuam de dia inteiro. Vazio = cópias de dia inteiro."
+        },
         "dry_run": {
           "name": "Simulação",
           "description": "Apenas listar o que mudaria, sem alterar o calendário."

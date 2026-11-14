@@ -177,6 +177,11 @@ sync_calendar:
       example: "Ola:"
       selector:
         text:
+    event_time:
+      required: false
+      example: "07:00"
+      selector:
+        time:
     dry_run:
       required: false
       default: false

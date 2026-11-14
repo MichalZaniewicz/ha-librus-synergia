@@ -597,6 +597,10 @@
           "name": "Titelpräfix",
           "description": "Wird jedem Titel vorangestellt, z. B. der Vorname des Kindes (\"Ola:\"), wenn sich mehrere Kinder einen Kalender teilen."
         },
+        "event_time": {
+          "name": "Uhrzeit der Termine",
+          "description": "Kopierte Klassenarbeiten, Tests und Ausflüge bekommen eine Uhrzeit, z. B. 07:00, damit das Handy zu einer sinnvollen Zeit erinnert statt um Mitternacht. Ein Eintrag mit eigener Uhrzeit in Librus (ein Elternabend um 17:30) behält sie. Freie Tage bleiben ganztägig. Leer = ganztägige Kopien."
+        },
         "dry_run": {
           "name": "Testlauf",
           "description": "Listet nur auf, was sich ändern würde, ohne den Kalender zu ändern."

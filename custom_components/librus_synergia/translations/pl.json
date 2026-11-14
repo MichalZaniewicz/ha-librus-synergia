@@ -597,6 +597,10 @@
           "name": "Przedrostek tytułu",
           "description": "Dodawany przed każdym tytułem, np. imię ucznia („Ola:”), gdy kilkoro dzieci dzieli jeden kalendarz."
         },
+        "event_time": {
+          "name": "Godzina wydarzeń",
+          "description": "Kopiowane sprawdziany, kartkówki i wycieczki dostają godzinę, np. 07:00, żeby telefon przypominał o nich o sensownej porze, a nie o północy. Wpis z własną godziną w Librusie (zebranie o 17:30) ją zachowuje. Dni wolne zostają całodniowe. Puste = kopie całodniowe."
+        },
         "dry_run": {
           "name": "Próba",
           "description": "Tylko pokaż, co by się zmieniło, bez zmieniania kalendarza."

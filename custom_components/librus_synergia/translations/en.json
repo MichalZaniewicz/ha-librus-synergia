@@ -597,6 +597,10 @@
           "name": "Title prefix",
           "description": "Put in front of every title, e.g. the student's first name (\"Ola:\") when several children share one calendar."
         },
+        "event_time": {
+          "name": "Event time",
+          "description": "Give the copied tests, quizzes and trips a time, e.g. 07:00, so a phone reminds about them at a useful hour instead of at midnight. An entry with its own time in Librus (a meeting at 17:30) keeps it. Days off stay all-day. Leave empty for all-day copies."
+        },
         "dry_run": {
           "name": "Dry run",
           "description": "Only list what would change, without changing the calendar."

@@ -214,3 +214,36 @@ async def test_count_lessons_uses_the_timetable_then_the_plan(hass, freezer) -> 
         await hass.services.async_call(
             DOMAIN, "count_lessons", {**call, "subject": "chemia"}, blocking=True, return_response=True
         )
+
+
+async def test_next_exam_counts_the_lessons_left_before_it(hass, freezer) -> None:
+    """Lessons of the test's subject after today and before the test day."""
+    freezer.move_to(_FROZEN)
+    today = dt_util.now().date()
+    exam_day = today + timedelta(days=3)
+    client = build_mock_client(
+        async_get_timetable={
+            "Timetable": {
+                today.isoformat(): [[_lesson(1, 100)]],
+                (today + timedelta(days=1)).isoformat(): [[_lesson(1, 100)], [_lesson(2, 300)]],
+                (today + timedelta(days=2)).isoformat(): [[_lesson(1, 100, canceled=True)], [_lesson(2, 100)]],
+            }
+        },
+        async_get_subjects={
+            "Subjects": [{"Id": 100, "Name": "Matematyka"}, {"Id": 300, "Name": "Historia"}]
+        },
+        async_get_homework_categories={"Categories": [{"Id": 1, "Name": "Sprawdzian"}]},
+        async_get_homeworks={
+            "HomeWorks": [
+                {"Id": 7, "Content": "Ułamki", "Date": exam_day.isoformat(), "Category": {"Id": 1}, "Subject": {"Id": 100}}
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_next_exam")
+    state = hass.states.get(entity_id)
+    # Tomorrow's maths and the held one the day after; today and the
+    # cancelled lesson don't count.
+    assert state.attributes["lessons_left"] == 2
+    assert state.attributes["upcoming"][0]["lessons_left"] == 2

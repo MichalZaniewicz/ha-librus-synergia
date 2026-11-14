@@ -72,6 +72,22 @@ blueprint:
       default: true
       selector:
         boolean: {}
+    timed_events:
+      name: Give the copies a time
+      description: >
+        Off: tests and trips are all-day events. On: they get the time below
+        (an entry with its own time in Librus, like a meeting at 17:30,
+        keeps it), so your phone reminds you at a useful hour instead of at
+        midnight. Days off stay all-day. Needs version 0.12.49-beta.4 or
+        later of the integration.
+      default: false
+      selector:
+        boolean: {}
+    event_time:
+      name: Time of the copies
+      default: "07:00:00"
+      selector:
+        time: {}
 
 variables:
   agenda_cal: !input agenda_calendar
@@ -80,6 +96,8 @@ variables:
   categories_raw: !input categories
   days: !input days_ahead
   add_name: !input add_name
+  timed_events: !input timed_events
+  event_time: !input event_time
   # The device is named "E-dziennik <first> <last>" by the integration.
   student_first: >-
     {{ ((device_attr(agenda_cal, 'name') or '') | replace('E-dziennik ', '')).split(' ')[0] }}
@@ -96,14 +114,30 @@ triggers:
 conditions: []
 
 actions:
-  - action: librus_synergia.sync_calendar
-    data:
-      device_id: "{{ device_id(agenda_cal) }}"
-      target_calendar: "{{ target_cal }}"
-      days: "{{ days | int(30) }}"
-      categories: "{{ categories_raw }}"
-      free_days: "{{ free_cal not in ['', none] }}"
-      prefix: "{{ prefix }}"
+  # Two calls, not one with an empty event_time: an integration older than
+  # 0.12.49-beta.4 doesn't know the field and would refuse the call.
+  - if:
+      - condition: template
+        value_template: "{{ timed_events }}"
+    then:
+      - action: librus_synergia.sync_calendar
+        data:
+          device_id: "{{ device_id(agenda_cal) }}"
+          target_calendar: "{{ target_cal }}"
+          days: "{{ days | int(30) }}"
+          categories: "{{ categories_raw }}"
+          free_days: "{{ free_cal not in ['', none] }}"
+          prefix: "{{ prefix }}"
+          event_time: "{{ event_time }}"
+    else:
+      - action: librus_synergia.sync_calendar
+        data:
+          device_id: "{{ device_id(agenda_cal) }}"
+          target_calendar: "{{ target_cal }}"
+          days: "{{ days | int(30) }}"
+          categories: "{{ categories_raw }}"
+          free_days: "{{ free_cal not in ['', none] }}"
+          prefix: "{{ prefix }}"
 
 mode: queued
 max: 3

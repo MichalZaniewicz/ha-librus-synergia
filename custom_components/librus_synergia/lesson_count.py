@@ -44,6 +44,25 @@ def match_subjects(data: LibrusData, query: str) -> dict[int | str, str]:
     return found
 
 
+def lessons_before(
+    data: LibrusData, subject_id: int | str | None, today: date, day: date
+) -> int | None:
+    """How many lessons of the subject fall after today and before `day`
+    (a test's date) - the polled timetable, then the standing plan. Today
+    is left out on purpose: the number then stays the same all day. None
+    without a subject; 0 when the test is tomorrow or today."""
+    if subject_id is None:
+        return None
+    try:
+        subject = int(subject_id)
+    except (TypeError, ValueError):
+        subject = subject_id
+    start, end = today + timedelta(days=1), day - timedelta(days=1)
+    if end < start:
+        return 0
+    return len(count_lessons(data, data.timetable, {subject}, start, end, today))
+
+
 def _week_is_empty(timetable: dict[date, list[LessonData]], day: date) -> bool:
     monday = day - timedelta(days=day.weekday())
     return not any(timetable.get(monday + timedelta(days=i)) for i in range(7))
