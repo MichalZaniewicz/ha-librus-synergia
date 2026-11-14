@@ -26,10 +26,12 @@ from librus_synergia.models import (
 from . import LibrusConfigEntry, librus_device_info
 from .absence_days import absence_days
 from .const import (
+    CONF_ANNOUNCEMENTS_ENABLED,
     CONF_CALENDAR_EMOJI,
     CONF_EXTRA_CALENDARS,
     CONF_FREE_DAYS_ENABLED,
     CONF_MERGE_PARALLEL_LESSONS,
+    DEFAULT_ANNOUNCEMENTS_ENABLED,
     DEFAULT_CALENDAR_EMOJI,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_MERGE_PARALLEL_LESSONS,
@@ -86,6 +88,8 @@ async def async_setup_entry(
     # "unavailable" state that reads as clearly as just not existing.
     if entry.options.get(CONF_FREE_DAYS_ENABLED, DEFAULT_FREE_DAYS_ENABLED):
         entities.append(LibrusFreeDaysCalendar(coordinator, entry))
+    if entry.options.get(CONF_ANNOUNCEMENTS_ENABLED, DEFAULT_ANNOUNCEMENTS_ENABLED):
+        entities.append(LibrusAnnouncementsCalendar(coordinator, entry))
     async_add_entities(entities)
 
 
@@ -600,6 +604,47 @@ def _absence_events(data: LibrusData) -> list[CalendarEvent]:
     return events
 
 
+# A notice valid for longer than this (a school rule "from September to
+# June") is shown on its first day only - as a months-long bar it would sit
+# on every day of the calendar. Its description says until when it's valid.
+ANNOUNCEMENT_MAX_SPAN_DAYS = 14
+ANNOUNCEMENT_UID_PREFIX = "librus-notice-"
+
+
+def _notice_day(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat((value or "")[:10])
+    except ValueError:
+        return None
+
+
+def _announcement_events(data: LibrusData) -> list[CalendarEvent]:
+    """One all-day event per school notice, across the days it's valid
+    (`StartDate`..`EndDate`; the creation date when it has no start)."""
+    events = []
+    for notice in data.school_notices:
+        start = _notice_day(notice.start_date) or _notice_day(notice.creation_date)
+        if start is None:
+            continue
+        end = _notice_day(notice.end_date)
+        if end is None or end < start:
+            end = start
+        lines = [notice.content.strip()] if notice.content and notice.content.strip() else []
+        if (end - start).days >= ANNOUNCEMENT_MAX_SPAN_DAYS:
+            lines.append(f"Ważne do {end.strftime('%d.%m.%Y')}")
+            end = start
+        events.append(
+            CalendarEvent(
+                start=start,
+                end=end + timedelta(days=1),
+                summary=notice.subject or "Ogłoszenie",
+                description="\n\n".join(lines) or None,
+                uid=f"{ANNOUNCEMENT_UID_PREFIX}{notice.id}",
+            )
+        )
+    return _sorted_events(events)
+
+
 def _first_not_over(events: list[CalendarEvent], today: date) -> CalendarEvent | None:
     """The first of start-sorted all-day events that isn't over by `today`
     (`end` is exclusive: yesterday's entry ends today and is over)."""
@@ -879,6 +924,47 @@ class LibrusFreeDaysCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Cal
         # Overlap check, not containment - a multi-day break can start
         # before the requested window and/or end after it. See
         # `_event_overlaps` (now shared with LibrusAgendaCalendar above).
+        return [event for event in self._events() if _event_overlaps(event, start, end)]
+
+
+class LibrusAnnouncementsCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], CalendarEntity):
+    """School notices ("Ogłoszenia") on the days they're valid - "upały,
+    skrócone lekcje" across 15-17.11. From the notices the coordinator
+    already polls (read ones too); no extra request. A notice valid for
+    weeks or months is shown on its first day only (see
+    ANNOUNCEMENT_MAX_SPAN_DAYS)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "announcements"
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_announcements"
+        self._attr_device_info = librus_device_info(entry)
+
+    @property
+    def event(self) -> CalendarEvent | None:
+        if self.coordinator.data is None:
+            return None
+        return _first_not_over(self._events(), dt_util.now().date())
+
+    def _events(self) -> list[CalendarEvent]:
+        data = self.coordinator.data
+        if data is None:
+            return []
+        return _CALENDAR_EVENTS.get(
+            data,
+            "announcements",
+            lambda: _announcement_events(data),
+            owner=self.coordinator.memo_owner,
+        )
+
+    async def async_get_events(
+        self, hass: HomeAssistant, start_date: datetime, end_date: datetime
+    ) -> list[CalendarEvent]:
+        if self.coordinator.data is None:
+            return []
+        start, end = start_date.date(), _inclusive_end_date(end_date)
         return [event for event in self._events() if _event_overlaps(event, start, end)]
 
 

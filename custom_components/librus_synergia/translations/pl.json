@@ -83,6 +83,7 @@
       "settings": {
         "title": "Opcje Librus Synergia",
         "data": {
+          "calendar_feed_enabled": "Link do kalendarza dla innych",
           "scan_interval": "Częstotliwość odpytywania (minuty)",
           "messages_enabled": "Pobieraj wiadomości prywatne (Wiadomości)",
           "messages_count": "Liczba pobieranych wiadomości w skrzynce",
@@ -109,6 +110,7 @@
           "quiet_hours_end": "Koniec ciszy nocnej"
         },
         "data_description": {
+          "calendar_feed_enabled": "Prywatny link do kalendarza .ics z planem lekcji na ten i przyszły tydzień, terminarzem, dniami wolnymi i ogłoszeniami - żeby dziadkowie albo drugi rodzic mogli go dodać w telefonie lub w Kalendarzu Google bez konta w Home Assistant. Widzi go każdy, kto ma link. Link jest w czujniku „Link do kalendarza”. Wyłącz i włącz ponownie, żeby dostać nowy link (stary przestanie działać).",
           "scan_interval": "Jak często odświeżać oceny, frekwencję, plan lekcji i ogłoszenia. Zachowaj umiar - to nieoficjalne API.",
           "messages_enabled": "Gdy wyłączone, sensor Nieprzeczytane wiadomości staje się niedostępny i nie są wykonywane żadne zapytania o wiadomości - mniej ruchu do Librusa.",
           "messages_count": "Ile najnowszych wiadomości trzyma lista każdej skrzynki (odebrane, wysłane, archiwum i pozostałe), 10-50. Więcej to dłuższe listy w karcie Wiadomości, trochę więcej danych przy odświeżaniu i większe atrybuty sensora.",
@@ -381,6 +383,7 @@
       "homework": { "name": "Zadania domowe" }
     },
     "sensor": {
+      "calendar_feed": { "name": "Link do kalendarza" },
       "lesson_topics": { "name": "Tematy lekcji" },
       "plan_changes": { "name": "Zmiany względem stałego planu" },
       "school_trips": { "name": "Najbliższa wycieczka" },
@@ -433,6 +436,7 @@
       "weekly_summary_enabled": { "name": "Automatyczne podsumowanie tygodnia" }
     },
     "calendar": {
+      "announcements": { "name": "Ogłoszenia" },
       "timetable": { "name": "Plan lekcji" },
       "agenda": { "name": "Terminarz" },
       "free_days": { "name": "Dni wolne" },
@@ -440,6 +444,17 @@
     }
   },
   "services": {
+    "count_lessons": {
+      "name": "Policz lekcje",
+      "description": "Ile lekcji danego przedmiotu wypada między dwiema datami, np. „ile matematyk przed sprawdzianem?”. Znane tygodnie liczy z prawdziwego planu, dalsze ze stałego planu tygodnia; dni wolne pomija.",
+      "fields": {
+        "device_id": { "name": "Urządzenie", "description": "Urządzenie Librus Synergia (uczeń)." },
+        "subject": { "name": "Przedmiot", "description": "Nazwa przedmiotu albo jej część („matem”), kilka po przecinku, albo id przedmiotu." },
+        "start_date": { "name": "Od", "description": "Pierwszy liczony dzień. Puste = dziś." },
+        "end_date": { "name": "Do", "description": "Ostatni liczony dzień (włącznie)." },
+        "include_cancelled": { "name": "Licz odwołane lekcje", "description": "Licz też lekcje odwołane w planie." }
+      }
+    },
     "refresh": {
       "name": "Odśwież teraz",
       "description": "Wymuś natychmiastowe odświeżenie danych, bez czekania na kolejne odpytanie.",

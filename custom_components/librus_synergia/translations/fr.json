@@ -83,6 +83,7 @@
       "settings": {
         "title": "Options de Librus Synergia",
         "data": {
+          "calendar_feed_enabled": "Lien du calendrier pour d'autres",
           "scan_interval": "Intervalle d'interrogation (minutes)",
           "messages_enabled": "Récupérer les messages privés (Wiadomości)",
           "messages_count": "Messages à récupérer par boîte",
@@ -109,6 +110,7 @@
           "quiet_hours_end": "Fin des heures silencieuses"
         },
         "data_description": {
+          "calendar_feed_enabled": "Un lien privé vers un calendrier .ics avec l'emploi du temps de cette semaine et de la suivante, l'agenda, les jours de congé et les annonces - pour que les grands-parents ou l'autre parent s'y abonnent sur leur téléphone ou dans Google Agenda, sans compte Home Assistant. Toute personne ayant le lien peut le voir. Le lien se trouve dans le capteur « Lien du calendrier ». Désactivez puis réactivez pour obtenir un nouveau lien (l'ancien cesse de fonctionner).",
           "scan_interval": "Fréquence d'actualisation des notes, de l'assiduité, de l'emploi du temps et des annonces. Restez raisonnable : c'est une API non officielle.",
           "messages_enabled": "Si désactivé, le capteur Messages non lus devient indisponible et aucun appel aux messages n'est effectué : moins de requêtes vers Librus.",
           "messages_count": "Nombre de messages les plus récents dans la liste de chaque boîte (reçus, envoyés, archives et autres), de 10 à 50. Davantage signifie des listes plus longues dans la carte Messages, un peu plus de données à chaque actualisation et des attributs de capteur plus volumineux.",
@@ -381,6 +383,7 @@
       "homework": { "name": "Devoirs" }
     },
     "sensor": {
+      "calendar_feed": { "name": "Lien du calendrier" },
       "lesson_topics": { "name": "Sujets des cours" },
       "plan_changes": { "name": "Changements de l'emploi du temps habituel" },
       "school_trips": { "name": "Prochaine sortie scolaire" },
@@ -433,6 +436,7 @@
       "weekly_summary_enabled": { "name": "Résumé hebdomadaire automatique" }
     },
     "calendar": {
+      "announcements": { "name": "Annonces" },
       "timetable": { "name": "Emploi du temps" },
       "agenda": { "name": "Agenda" },
       "free_days": { "name": "Jours de congé" },
@@ -440,6 +444,17 @@
     }
   },
   "services": {
+    "count_lessons": {
+      "name": "Compter les cours",
+      "description": "Combien de cours d'une matière tombent entre deux dates, par exemple « combien de cours de maths avant le contrôle ? ». Les semaines connues sont comptées d'après l'emploi du temps réel, les suivantes d'après le planning hebdomadaire fixe ; les jours de congé sont ignorés.",
+      "fields": {
+        "device_id": { "name": "Appareil", "description": "L'appareil Librus Synergia (élève)." },
+        "subject": { "name": "Matière", "description": "Un nom de matière ou une partie (« matem »), plusieurs séparés par des virgules, ou l'identifiant d'une matière." },
+        "start_date": { "name": "Du", "description": "Le premier jour compté. Aujourd'hui si vide." },
+        "end_date": { "name": "Au", "description": "Le dernier jour compté (inclus)." },
+        "include_cancelled": { "name": "Compter les cours annulés", "description": "Compter aussi les cours annulés dans l'emploi du temps." }
+      }
+    },
     "refresh": {
       "name": "Actualiser maintenant",
       "description": "Force une actualisation immédiate des données sans attendre la prochaine interrogation.",

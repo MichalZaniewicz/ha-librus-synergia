@@ -29,6 +29,8 @@ from .const import (
     CONF_AI_TASK_ENTITY,
     CONF_AI_TIME,
     CONF_AI_WEEKDAY,
+    CONF_CALENDAR_FEED_ENABLED,
+    CONF_CALENDAR_FEED_TOKEN,
     CONF_COOKIES,
     CONF_SESSION_LOGGED_IN_AT,
     CORE_ENDPOINT_LABELS,
@@ -37,6 +39,7 @@ from .const import (
     DEFAULT_AI_LANGUAGE,
     DEFAULT_AI_TIME,
     DEFAULT_AI_WEEKDAY,
+    DEFAULT_CALENDAR_FEED_ENABLED,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MISC_DEGRADABLE_ENDPOINT_LABELS,
@@ -55,6 +58,7 @@ from .coordinator import (
 )
 from .forecast import DataMemo
 from .attachment_view import async_register_attachment_view
+from .calendar_feed import async_register_calendar_feed_view, new_token
 from .llm_api import async_setup_llm_api, async_unload_llm_api
 from .services import async_setup_services, async_unload_services
 
@@ -165,6 +169,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
         await summary.async_start()
         entry.async_on_unload(summary.async_stop)
 
+    _sync_calendar_feed_token(hass, entry)
     options_at_setup = dict(entry.options)
 
     async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
@@ -215,7 +220,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
     async_setup_services(hass)
     async_setup_llm_api(hass)
     async_register_attachment_view(hass)
+    async_register_calendar_feed_view(hass)
     return True
+
+
+def _sync_calendar_feed_token(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:
+    """The calendar feed's secret (calendar_feed.py) exists exactly while
+    the option is on: made when it's turned on, dropped when it's turned
+    off - so off and on again gives a new link and kills the old one. Runs
+    before the update listener is added: a data-only change doesn't reload
+    anyway."""
+    enabled = entry.options.get(CONF_CALENDAR_FEED_ENABLED, DEFAULT_CALENDAR_FEED_ENABLED)
+    token = entry.data.get(CONF_CALENDAR_FEED_TOKEN)
+    if enabled and not token:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_CALENDAR_FEED_TOKEN: new_token()}
+        )
+    elif not enabled and token:
+        hass.config_entries.async_update_entry(
+            entry,
+            data={k: v for k, v in entry.data.items() if k != CONF_CALENDAR_FEED_TOKEN},
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bool:

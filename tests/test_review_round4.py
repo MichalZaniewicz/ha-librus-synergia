@@ -288,6 +288,63 @@ async def test_on_demand_week_logs_in_again_minutes_after_a_good_login(hass, fre
     assert coordinator._week_failed_at == {}
 
 
+async def test_rejected_session_is_renewed_with_the_token_first(hass, freezer) -> None:
+    """A session Librus dropped after ~10 idle minutes comes back through
+    /refreshToken - no password login (CONFIRMED live 2026-11-14)."""
+    freezer.move_to(_FROZEN)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    client.async_refresh_session.return_value = True
+    renewed = False
+
+    async def _refresh():
+        nonlocal renewed
+        renewed = True
+        return True
+
+    async def _timetable(_week):
+        if not renewed:
+            raise LibrusSessionExpiredError("Session rejected (HTTP 401).", status_code=401)
+        return {"Timetable": {}}
+
+    client.async_refresh_session.side_effect = _refresh
+    client.async_get_timetable.side_effect = _timetable
+
+    await coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=3))
+
+    assert renewed
+    assert _forced_logins(client) == 0
+    assert coordinator._week_failed_at == {}
+
+
+async def test_password_login_when_the_token_refresh_fails(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    client.async_refresh_session.return_value = False
+    logins = 0
+
+    async def _login(*_args, **kwargs):
+        nonlocal logins
+        if kwargs.get("force"):
+            logins += 1
+
+    async def _timetable(_week):
+        if not logins:
+            raise LibrusSessionExpiredError("Session rejected (HTTP 401).", status_code=401)
+        return {"Timetable": {}}
+
+    client.async_ensure_session_valid.side_effect = _login
+    client.async_get_timetable.side_effect = _timetable
+
+    await coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=3))
+
+    client.async_refresh_session.assert_awaited()
+    assert logins == 1
+
+
 async def test_two_on_demand_weeks_share_one_login(hass, freezer) -> None:
     """Two weeks fetched at once, both rejected by the same expired session:
     one login, and BOTH weeks retried with it. The second used to read the

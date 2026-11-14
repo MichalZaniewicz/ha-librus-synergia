@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Added
+- **Announcements calendar.** School notices ("Ogłoszenia") show on the days
+  they're valid: "Upały - skrócone lekcje" across 15-17.11. A notice valid
+  for two weeks or longer (a school rule from September to June) shows on its
+  first day only, with "Ważne do ..." in the description. Read ones too; no
+  extra request. Exists while announcements are on under Configure.
+- **Calendar link for others.** A new Configure option, off by default: a
+  private `.ics` link to this week's and next week's timetable, the Agenda,
+  the days off and the announcements, for a grandparent or the other parent
+  to subscribe to on their phone or in Google Calendar without a Home
+  Assistant account. The link is in a new "Calendar link" sensor. Anyone
+  with the link can see the calendar (no grades, absences or messages in
+  it). Turning the option off and on again gives a new link and the old one
+  stops working. The feed never makes the integration ask Librus for more.
+- **Count lessons action.** `librus_synergia.count_lessons` answers "how many
+  maths lessons before the test?": the lessons of a subject (a name, part of
+  it, several, or an id) between two dates. Known weeks count from the real
+  timetable (cancelled lessons left out unless asked for), further ones from
+  the standard weekly plan; days off are skipped. The answer lists each
+  lesson with its date, number, hours and source.
+
+### Changed
+- **Fewer password logins.** Librus drops a session after about 10 minutes
+  without a request, so with the default 20-minute refresh nearly every
+  refresh started with a full password login (about 70 a day). A rejected
+  session is now renewed with Librus's own token refresh first, the way the
+  Librus website does it, and the password is only used when that fails.
+  Tested on a real account: after 11.5 idle minutes the token brought the
+  session back.
+
 ### Fixed
 - **Older and later timetable weeks no longer fail with "HTTP 401".** A
   dashboard showing weeks outside this one and the next (a month calendar, the

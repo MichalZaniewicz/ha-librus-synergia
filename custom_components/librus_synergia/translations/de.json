@@ -83,6 +83,7 @@
       "settings": {
         "title": "Librus-Synergia-Optionen",
         "data": {
+          "calendar_feed_enabled": "Kalenderlink für andere",
           "scan_interval": "Abfrageintervall (Minuten)",
           "messages_enabled": "Private Nachrichten abrufen (Wiadomości)",
           "messages_count": "Abzurufende Nachrichten pro Postfach",
@@ -109,6 +110,7 @@
           "quiet_hours_end": "Ende der Ruhezeiten"
         },
         "data_description": {
+          "calendar_feed_enabled": "Ein privater Link zu einem .ics-Kalender mit dem Stundenplan dieser und der nächsten Woche, dem Terminkalender, den freien Tagen und den Ankündigungen - damit Großeltern oder der andere Elternteil ihn ohne Home-Assistant-Konto auf dem Handy oder im Google Kalender abonnieren können. Jeder mit dem Link kann ihn sehen. Der Link steht im Sensor „Kalenderlink“. Aus- und wieder einschalten ergibt einen neuen Link (der alte funktioniert dann nicht mehr).",
           "scan_interval": "Wie oft Noten, Anwesenheit, Stundenplan und Ankündigungen aktualisiert werden. Bleib zurückhaltend - das ist eine inoffizielle API.",
           "messages_enabled": "Wenn aus, ist der Sensor Ungelesene Nachrichten nicht verfügbar und es werden keine Nachrichten abgefragt - weniger Anfragen an Librus.",
           "messages_count": "Wie viele der neuesten Nachrichten jede Postfachliste enthält (empfangen, gesendet, Archiv und die übrigen), 10-50. Mehr bedeutet längere Listen in der Nachrichten-Karte, etwas mehr Daten pro Aktualisierung und größere Sensorattribute.",
@@ -381,6 +383,7 @@
       "homework": { "name": "Hausaufgaben" }
     },
     "sensor": {
+      "calendar_feed": { "name": "Kalenderlink" },
       "lesson_topics": { "name": "Stundenthemen" },
       "plan_changes": { "name": "Abweichungen vom Regelstundenplan" },
       "school_trips": { "name": "Nächster Schulausflug" },
@@ -433,6 +436,7 @@
       "weekly_summary_enabled": { "name": "Automatische Wochenzusammenfassung" }
     },
     "calendar": {
+      "announcements": { "name": "Ankündigungen" },
       "timetable": { "name": "Stundenplan" },
       "agenda": { "name": "Terminkalender" },
       "free_days": { "name": "Freie Tage" },
@@ -440,6 +444,17 @@
     }
   },
   "services": {
+    "count_lessons": {
+      "name": "Stunden zählen",
+      "description": "Wie viele Stunden eines Fachs zwischen zwei Daten liegen, z. B. „wie viele Mathestunden bis zur Klassenarbeit?“. Bekannte Wochen werden nach dem echten Stundenplan gezählt, spätere nach dem festen Wochenplan; freie Tage werden übersprungen.",
+      "fields": {
+        "device_id": { "name": "Gerät", "description": "Das Librus-Synergia-Gerät (Schüler)." },
+        "subject": { "name": "Fach", "description": "Ein Fachname oder ein Teil davon („matem“), mehrere durch Kommas getrennt, oder eine Fach-ID." },
+        "start_date": { "name": "Von", "description": "Der erste gezählte Tag. Leer = heute." },
+        "end_date": { "name": "Bis", "description": "Der letzte gezählte Tag (einschließlich)." },
+        "include_cancelled": { "name": "Ausgefallene Stunden mitzählen", "description": "Auch Stunden zählen, die im Stundenplan ausfallen." }
+      }
+    },
     "refresh": {
       "name": "Jetzt aktualisieren",
       "description": "Erzwingt eine sofortige Datenaktualisierung, statt auf die nächste Abfrage zu warten.",

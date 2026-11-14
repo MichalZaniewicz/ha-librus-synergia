@@ -83,6 +83,7 @@
       "settings": {
         "title": "Opções do Librus Synergia",
         "data": {
+          "calendar_feed_enabled": "Link do calendário para outros",
           "scan_interval": "Intervalo de consulta (minutos)",
           "messages_enabled": "Obter mensagens privadas (Wiadomości)",
           "messages_count": "Mensagens a obter por caixa de correio",
@@ -109,6 +110,7 @@
           "quiet_hours_end": "Fim das horas de silêncio"
         },
         "data_description": {
+          "calendar_feed_enabled": "Um link privado para um calendário .ics com o horário desta semana e da próxima, a Agenda, os dias livres e os avisos - para os avós ou o outro progenitor o subscreverem no telemóvel ou no Google Calendar, sem conta no Home Assistant. Quem tiver o link pode vê-lo. O link está no sensor \"Link do calendário\". Desative e volte a ativar para obter um link novo (o antigo deixa de funcionar).",
           "scan_interval": "Com que frequência atualizar notas, assiduidade, horário e anúncios. Mantenha um valor moderado - é uma API não oficial.",
           "messages_enabled": "Quando desativado, o sensor Mensagens não lidas fica indisponível e não são feitos pedidos de mensagens - menos pedidos ao Librus.",
           "messages_count": "Quantas das mensagens mais recentes cada lista de caixa de correio contém (recebidas, enviadas, arquivo e as restantes), 10-50. Mais significa listas mais longas no cartão Mensagens, um pouco mais de dados por atualização e atributos do sensor maiores.",
@@ -381,6 +383,7 @@
       "homework": { "name": "Trabalhos de casa" }
     },
     "sensor": {
+      "calendar_feed": { "name": "Link do calendário" },
       "lesson_topics": { "name": "Sumários das aulas" },
       "plan_changes": { "name": "Alterações ao horário habitual" },
       "school_trips": { "name": "Próxima visita de estudo" },
@@ -433,6 +436,7 @@
       "weekly_summary_enabled": { "name": "Resumo semanal automático" }
     },
     "calendar": {
+      "announcements": { "name": "Avisos" },
       "timetable": { "name": "Horário" },
       "agenda": { "name": "Agenda" },
       "free_days": { "name": "Dias livres" },
@@ -440,6 +444,17 @@
     }
   },
   "services": {
+    "count_lessons": {
+      "name": "Contar aulas",
+      "description": "Quantas aulas de uma disciplina há entre duas datas, por exemplo \"quantas aulas de matemática até ao teste?\". As semanas conhecidas contam pelo horário real, as seguintes pelo plano semanal fixo; os dias livres são ignorados.",
+      "fields": {
+        "device_id": { "name": "Dispositivo", "description": "O dispositivo Librus Synergia (aluno)." },
+        "subject": { "name": "Disciplina", "description": "O nome da disciplina ou parte dele (\"matem\"), várias separadas por vírgulas, ou o id da disciplina." },
+        "start_date": { "name": "De", "description": "O primeiro dia contado. Hoje, se ficar vazio." },
+        "end_date": { "name": "Até", "description": "O último dia contado (incluído)." },
+        "include_cancelled": { "name": "Contar aulas canceladas", "description": "Contar também as aulas canceladas no horário." }
+      }
+    },
     "refresh": {
       "name": "Atualizar agora",
       "description": "Força uma atualização imediata dos dados em vez de esperar pela próxima consulta.",

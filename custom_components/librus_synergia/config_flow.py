@@ -76,6 +76,7 @@ from .const import (
     CONF_AVERAGE_MODE,
     CONF_BEHAVIOUR_GRADES_ENABLED,
     CONF_CALENDAR_EMOJI,
+    CONF_CALENDAR_FEED_ENABLED,
     CONF_COOKIES,
     CONF_DESCRIPTIVE_GRADES_ENABLED,
     CONF_FREE_DAYS_ENABLED,
@@ -108,6 +109,7 @@ from .const import (
     DEFAULT_AVERAGE_MODE,
     DEFAULT_BEHAVIOUR_GRADES_ENABLED,
     DEFAULT_CALENDAR_EMOJI,
+    DEFAULT_CALENDAR_FEED_ENABLED,
     DEFAULT_DESCRIPTIVE_GRADES_ENABLED,
     DEFAULT_FREE_DAYS_ENABLED,
     DEFAULT_EXTRA_ACTIVITIES,
@@ -550,6 +552,10 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_CALENDAR_EMOJI,
                     default=options.get(CONF_CALENDAR_EMOJI, DEFAULT_CALENDAR_EMOJI),
+                ): BooleanSelector(),
+                vol.Required(
+                    CONF_CALENDAR_FEED_ENABLED,
+                    default=options.get(CONF_CALENDAR_FEED_ENABLED, DEFAULT_CALENDAR_FEED_ENABLED),
                 ): BooleanSelector(),
                 vol.Required(
                     CONF_SMART_POLLING,

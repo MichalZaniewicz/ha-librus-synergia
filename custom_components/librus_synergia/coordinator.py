@@ -2712,9 +2712,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         async with self._login_lock:
             if self._login_count != seen:
                 return
-            await self._client.async_ensure_session_valid(
-                self.config_entry.data[CONF_PASSWORD], force=True
-            )
+            # The token first, the password only when that fails. Librus
+            # drops a session after about 10 minutes without a request, so
+            # with polls 20 minutes apart nearly every poll used to start
+            # with a full password login (~70 a day). CONFIRMED live
+            # 2026-11-14: after 11.5 idle minutes Me answered 401, and
+            # /refreshToken (200, new oauth_token) brought the same session
+            # back - Me answered again, no password needed.
+            if not await self._client.async_refresh_session():
+                await self._client.async_ensure_session_valid(
+                    self.config_entry.data[CONF_PASSWORD], force=True
+                )
             # Stamped once the login is done: stamped before it, a request
             # rejected while the login was still running read "a forced
             # login just happened and didn't help" and gave up.

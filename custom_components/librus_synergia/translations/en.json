@@ -83,6 +83,7 @@
       "settings": {
         "title": "Librus Synergia options",
         "data": {
+          "calendar_feed_enabled": "Calendar link for others",
           "scan_interval": "Poll interval (minutes)",
           "messages_enabled": "Fetch private messages (Wiadomości)",
           "messages_count": "Messages to fetch per mailbox",
@@ -109,6 +110,7 @@
           "quiet_hours_end": "Quiet hours end"
         },
         "data_description": {
+          "calendar_feed_enabled": "A private link to an .ics calendar with this week's and next week's timetable, the Agenda, days off and announcements - for a grandparent or the other parent to subscribe to on their phone or in Google Calendar, without a Home Assistant account. Anyone with the link can see it. The link is in the \"Calendar link\" sensor. Turn this off and on again for a new link (the old one stops working).",
           "scan_interval": "How often to refresh grades, attendance, timetable and announcements. Keep this modest - it is an unofficial API.",
           "messages_enabled": "When off, the Unread messages sensor goes unavailable and no messages calls are made - fewer requests to Librus.",
           "messages_count": "How many of the newest messages each mailbox list holds (received, sent, archive and the others), 10-50. More means longer lists in the Messages card, a bit more data per refresh and larger sensor attributes.",
@@ -381,6 +383,7 @@
       "homework": { "name": "Homework" }
     },
     "sensor": {
+      "calendar_feed": { "name": "Calendar link" },
       "lesson_topics": { "name": "Lesson topics" },
       "plan_changes": { "name": "Changes to the usual timetable" },
       "school_trips": { "name": "Next school trip" },
@@ -433,6 +436,7 @@
       "weekly_summary_enabled": { "name": "Automatic weekly summary" }
     },
     "calendar": {
+      "announcements": { "name": "Announcements" },
       "timetable": { "name": "Timetable" },
       "agenda": { "name": "Agenda" },
       "free_days": { "name": "Free days" },
@@ -440,6 +444,17 @@
     }
   },
   "services": {
+    "count_lessons": {
+      "name": "Count lessons",
+      "description": "How many lessons of a subject fall between two dates, e.g. \"how many maths lessons before the test?\". Known weeks are counted from the real timetable, further ones from the standard weekly plan; days off are skipped.",
+      "fields": {
+        "device_id": { "name": "Device", "description": "The Librus Synergia device (student)." },
+        "subject": { "name": "Subject", "description": "A subject name or part of it (\"matem\"), several separated by commas, or a subject id." },
+        "start_date": { "name": "From", "description": "The first day counted. Today if left empty." },
+        "end_date": { "name": "To", "description": "The last day counted (included)." },
+        "include_cancelled": { "name": "Include cancelled lessons", "description": "Also count lessons that are cancelled in the timetable." }
+      }
+    },
     "refresh": {
       "name": "Refresh now",
       "description": "Force an immediate data refresh instead of waiting for the next poll.",

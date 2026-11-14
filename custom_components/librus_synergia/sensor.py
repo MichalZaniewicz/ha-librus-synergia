@@ -34,7 +34,11 @@ from librus_synergia.parsers import justified_dates, plan_differences, point_gra
 
 from . import LibrusConfigEntry, librus_device_info
 from .ai_summary import MAX_STATE_LENGTH, LibrusWeeklySummary
+from .calendar_feed import feed_url
 from .const import (
+    CONF_CALENDAR_FEED_ENABLED,
+    CONF_CALENDAR_FEED_TOKEN,
+    DEFAULT_CALENDAR_FEED_ENABLED,
     CONF_MESSAGE_SENDING_ENABLED,
     DEFAULT_MESSAGE_SENDING_ENABLED,
     ATTR_SUBJECT_ID,
@@ -457,6 +461,16 @@ async def async_setup_entry(
         coordinator.data is not None and coordinator.data.point_grades
     ):
         async_add_entities([LibrusPointGradesSensor(coordinator, entry)])
+
+    # The calendar feed's link - only while "Calendar link for others" is on.
+    if entry.options.get(CONF_CALENDAR_FEED_ENABLED, DEFAULT_CALENDAR_FEED_ENABLED) and entry.data.get(
+        CONF_CALENDAR_FEED_TOKEN
+    ):
+        async_add_entities([LibrusCalendarFeedSensor(coordinator, entry)])
+    elif entity_id := er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_calendar_feed"
+    ):
+        er.async_get(hass).async_remove(entity_id)
 
     # The weekly AI summary exists only while an ai_task entity is picked in
     # the options.
@@ -3208,6 +3222,28 @@ class LibrusLastUpdateSensor(LibrusSensorBase):
     @property
     def native_value(self) -> datetime | None:
         return self.coordinator.last_success_at
+
+
+class LibrusCalendarFeedSensor(LibrusSensorBase):
+    """The link to the student's calendar feed (calendar_feed.py) - to copy
+    into a phone's or Google's "subscribe to a calendar". Exists only while
+    "Calendar link for others" is on; anyone with the link sees the
+    timetable, Agenda, days off and announcements."""
+
+    _attr_translation_key = "calendar_feed"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, entry: LibrusConfigEntry) -> None:
+        super().__init__(coordinator, entry, "calendar_feed")
+
+    @property
+    def available(self) -> bool:
+        return bool(self._entry.data.get(CONF_CALENDAR_FEED_TOKEN))
+
+    @property
+    def native_value(self) -> str | None:
+        token = self._entry.data.get(CONF_CALENDAR_FEED_TOKEN)
+        return feed_url(self.hass, token) if token else None
 
 
 class LibrusWeeklySummarySensor(SensorEntity):

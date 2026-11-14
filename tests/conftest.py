@@ -86,6 +86,10 @@ def build_mock_client(**overrides) -> AsyncMock:
         logged_in_at=1000.0,
     )
     client.async_ensure_session_valid.return_value = None
+    # A rejected session is renewed with the token first (coordinator.
+    # _async_relogin); False here keeps the password login every test
+    # written before that expects. Tests of the token path set it True.
+    client.async_refresh_session.return_value = False
     client.async_get_me.return_value = ME_PAYLOAD
     client.async_get_token_info.return_value = {}
     client.async_get_user_info.return_value = {}

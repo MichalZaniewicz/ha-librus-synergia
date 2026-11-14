@@ -25,6 +25,8 @@
 - `sync_calendar` - copies the Agenda and days off into another calendar
   (e.g. a family Google Calendar) and keeps the copies up to date; see
   calendar_sync.py.
+- `count_lessons` - how many lessons of a subject fall between two dates
+  (lesson_count.py); read-only, may fetch timetable weeks like a dashboard.
 """
 
 from __future__ import annotations
@@ -59,8 +61,10 @@ from .coordinator import (
     LibrusDataUpdateCoordinator,
     decode_message_content,
     grade_improvements,
+    on_demand_week_starts,
     resolve_sender_name,
 )
+from .lesson_count import MAX_RANGE_DAYS, count_lessons, match_subjects
 from .messaging import RecipientError, recipient_dict, resolve_recipient
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,7 +116,9 @@ SERVICE_WITHDRAW_MESSAGE = "withdraw_message"
 SERVICE_MARK_ANNOUNCEMENT_READ = "mark_announcement_read"
 SERVICE_MARK_MESSAGE_READ = "mark_message_read"
 SERVICE_SYNC_CALENDAR = "sync_calendar"
+SERVICE_COUNT_LESSONS = "count_lessons"
 _SERVICES = (
+    SERVICE_COUNT_LESSONS,
     SERVICE_GET_MESSAGE,
     SERVICE_REFRESH,
     SERVICE_GET_GRADES,
@@ -185,6 +191,17 @@ _SYNC_CALENDAR_SCHEMA = vol.Schema(
         # "Ola:" in front of every title - handy with more than one child.
         vol.Optional("prefix"): cv.string,
         vol.Optional("dry_run", default=False): cv.boolean,
+    }
+)
+
+_COUNT_LESSONS_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        # "matematyka", "matem", "polski, angielski" or a subject id.
+        vol.Required("subject"): cv.string,
+        vol.Optional("start_date"): cv.date,
+        vol.Required("end_date"): cv.date,
+        vol.Optional("include_cancelled", default=False): cv.boolean,
     }
 )
 
@@ -641,6 +658,69 @@ def _async_setup_message_writing(hass: HomeAssistant) -> None:
         _async_handle_sync_calendar,
         schema=_SYNC_CALENDAR_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    async def _async_handle_count_lessons(call: ServiceCall) -> ServiceResponse:
+        """How many lessons of a subject fall between two dates - see
+        lesson_count.py. Weeks within the integration's on-demand range come
+        from the real timetable (fetched and cached like a dashboard's), the
+        rest from the standing weekly plan."""
+        coordinator = resolve_coordinator(hass, call.data["device_id"])
+        data = coordinator.data
+        if data is None:
+            raise HomeAssistantError("No Librus data yet - try again after the next refresh.")
+        today = dt_util.now().date()
+        start = call.data.get("start_date") or today
+        end = call.data["end_date"]
+        if end < start:
+            raise ServiceValidationError("end_date is before start_date.")
+        if (end - start).days > MAX_RANGE_DAYS:
+            raise ServiceValidationError(f"At most {MAX_RANGE_DAYS} days at once.")
+        subjects = match_subjects(data, call.data["subject"])
+        if not subjects:
+            raise ServiceValidationError(
+                f"No subject matches {call.data['subject']!r}. Subjects: "
+                + ", ".join(sorted(data.subjects.values()))
+            )
+        weeks = on_demand_week_starts(start, end)
+        timetable = await coordinator.async_get_timetable_weeks(weeks) if weeks else {}
+        lessons = count_lessons(
+            data,
+            timetable,
+            set(subjects),
+            start,
+            end,
+            today,
+            include_cancelled=call.data["include_cancelled"],
+        )
+        return {
+            "subjects": sorted(subjects.values()),
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+            "count": len(lessons),
+            "cancelled": sum(1 for lesson in lessons if lesson.cancelled),
+            "from_timetable": sum(1 for lesson in lessons if lesson.source == "timetable"),
+            "from_plan": sum(1 for lesson in lessons if lesson.source == "plan"),
+            "lessons": [
+                {
+                    "date": lesson.day.isoformat(),
+                    "lesson_no": lesson.lesson_no,
+                    "subject": subjects.get(lesson.subject_id),
+                    "start": lesson.start,
+                    "end": lesson.end,
+                    "source": lesson.source,
+                    "cancelled": lesson.cancelled,
+                }
+                for lesson in lessons
+            ],
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_COUNT_LESSONS,
+        _async_handle_count_lessons,
+        schema=_COUNT_LESSONS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
 
 

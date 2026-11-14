@@ -321,6 +321,7 @@ async def test_options_flow_round_trips_interval_and_messages_toggle(hass) -> No
         "merge_parallel_lessons": True,
         "extra_activities": ["other", "individual_path", "one_to_one"],
         "calendar_emoji": False,
+        "calendar_feed_enabled": False,
         "grade_thresholds": "1.75, 2.75, 3.75, 4.75, 5.50",
     }
 
@@ -374,6 +375,7 @@ async def test_options_flow_round_trips_all_feature_toggles(hass) -> None:
         "merge_parallel_lessons": False,
         "extra_activities": ["one_to_one"],
         "calendar_emoji": True,
+        "calendar_feed_enabled": False,
         "grade_thresholds": "1.6, 2.6, 3.6, 4.6, 5.3",
     }
 

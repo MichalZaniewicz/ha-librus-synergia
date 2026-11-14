@@ -175,6 +175,16 @@ DEFAULT_DESCRIPTIVE_GRADES_ENABLED = True
 CONF_FREE_DAYS_ENABLED = "free_days_enabled"
 DEFAULT_FREE_DAYS_ENABLED = True
 
+# A calendar feed (.ics) other people can subscribe to without a Home
+# Assistant account - the timetable, Agenda, days off and announcements
+# (calendar_feed.py). Off by default: the link opens the child's schedule to
+# anyone who has it. The secret part of the link lives in the entry's data
+# (CONF_CALENDAR_FEED_TOKEN); turning the option off drops it, so turning it
+# on again gives a new link and the old one stops working.
+CONF_CALENDAR_FEED_ENABLED = "calendar_feed_enabled"
+DEFAULT_CALENDAR_FEED_ENABLED = False
+CONF_CALENDAR_FEED_TOKEN = "calendar_feed_token"
+
 # Which average the Overall/Subject average sensors (and Rank) report as
 # their STATE. Weighted (by grade-category weight) is what Librus itself
 # shows and stays the default; some schools don't use weights at all and
