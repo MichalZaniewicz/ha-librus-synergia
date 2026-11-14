@@ -316,6 +316,9 @@ async def test_rejected_session_is_renewed_with_the_token_first(hass, freezer) -
     assert renewed
     assert _forced_logins(client) == 0
     assert coordinator._week_failed_at == {}
+    renewals = coordinator.session_renewals
+    assert (renewals["token_refreshes"], renewals["password_logins"]) == (1, 0)
+    assert renewals["last_token_refresh"] is not None
 
 
 async def test_password_login_when_the_token_refresh_fails(hass, freezer) -> None:
@@ -343,6 +346,9 @@ async def test_password_login_when_the_token_refresh_fails(hass, freezer) -> Non
 
     client.async_refresh_session.assert_awaited()
     assert logins == 1
+    renewals = coordinator.session_renewals
+    assert (renewals["token_refreshes"], renewals["password_logins"]) == (0, 1)
+    assert renewals["last_password_login"] is not None
 
 
 async def test_two_on_demand_weeks_share_one_login(hass, freezer) -> None:

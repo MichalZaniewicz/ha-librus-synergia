@@ -1353,6 +1353,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # for _WEEK_FAILURE_BACKOFF), and when the last forced login was made.
         self._week_failed_at: dict[date, datetime] = {}
         self._last_forced_login_at: datetime | None = None
+        # How rejected sessions were renewed since start (`session_renewals`,
+        # shown in the diagnostics): Librus's token refresh or a password login.
+        self._token_renewals = 0
+        self._password_logins = 0
+        self._last_token_renewal_at: datetime | None = None
+        self._last_password_login_at: datetime | None = None
         # The shared clock of the school-day entities (school_day.py),
         # created by the first one; stopped on unload.
         self.school_day_clock: Any = None
@@ -2523,6 +2529,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             await self._async_relogin(seen)
             return await self._fetch_timetable_or_unpublished(week_start, track=track)
 
+    @property
+    def session_renewals(self) -> dict[str, Any]:
+        """How sessions Librus rejected were renewed since Home Assistant
+        started - for the diagnostics."""
+
+        def iso(value: datetime | None) -> str | None:
+            return value.isoformat() if value is not None else None
+
+        return {
+            "token_refreshes": self._token_renewals,
+            "password_logins": self._password_logins,
+            "last_token_refresh": iso(self._last_token_renewal_at),
+            "last_password_login": iso(self._last_password_login_at),
+        }
+
     def _recent_forced_login(self) -> bool:
         last = self._last_forced_login_at
         return last is not None and dt_util.utcnow() - last < _ON_DEMAND_RELOGIN_GAP
@@ -2719,10 +2740,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # 2026-11-14: after 11.5 idle minutes Me answered 401, and
             # /refreshToken (200, new oauth_token) brought the same session
             # back - Me answered again, no password needed.
-            if not await self._client.async_refresh_session():
+            if await self._client.async_refresh_session():
+                self._token_renewals += 1
+                self._last_token_renewal_at = dt_util.utcnow()
+            else:
                 await self._client.async_ensure_session_valid(
                     self.config_entry.data[CONF_PASSWORD], force=True
                 )
+                self._password_logins += 1
+                self._last_password_login_at = dt_util.utcnow()
             # Stamped once the login is done: stamped before it, a request
             # rejected while the login was still running read "a forced
             # login just happened and didn't help" and gave up.

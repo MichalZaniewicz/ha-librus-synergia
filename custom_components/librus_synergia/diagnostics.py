@@ -226,6 +226,10 @@ async def async_get_config_entry_diagnostics(
         "options": async_redact_data(dict(entry.options), TO_REDACT),
         "session_valid": coordinator.client.is_session_valid(),
         "session_age_seconds": coordinator.client.session_age_seconds,
+        # How a session Librus rejected was renewed since Home Assistant
+        # started: Librus's token refresh, or a full password login (only
+        # when the token didn't work).
+        "session_renewals": coordinator.session_renewals,
         "reference_data_fetched_at": (
             reference_data_fetched_at.isoformat() if reference_data_fetched_at is not None else None
         ),

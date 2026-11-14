@@ -30,7 +30,9 @@
   session is now renewed with Librus's own token refresh first, the way the
   Librus website does it, and the password is only used when that fails.
   Tested on a real account: after 11.5 idle minutes the token brought the
-  session back.
+  session back. The diagnostics show how it went since Home Assistant
+  started: `session_renewals` counts token refreshes and password logins,
+  with the time of the last of each.
 
 ### Fixed
 - **Older and later timetable weeks no longer fail with "HTTP 401".** A
