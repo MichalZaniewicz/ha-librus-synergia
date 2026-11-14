@@ -247,7 +247,7 @@ async def test_on_demand_week_skips_a_second_forced_login(hass, freezer) -> None
     client = build_mock_client()
     coordinator = _coordinator(hass, client)
     await coordinator._async_update_data()
-    coordinator._last_forced_login_at = dt_util.utcnow() - timedelta(minutes=2)
+    coordinator._last_forced_login_at = dt_util.utcnow() - timedelta(minutes=1)
     client.async_get_timetable.side_effect = LibrusSessionExpiredError(
         "Session rejected (HTTP 401).", status_code=401
     )
@@ -256,6 +256,77 @@ async def test_on_demand_week_skips_a_second_forced_login(hass, freezer) -> None
 
     assert week == {}
     assert _forced_logins(client) == 0
+
+
+async def test_on_demand_week_logs_in_again_minutes_after_a_good_login(hass, freezer) -> None:
+    """Librus drops a session after ~10 idle minutes: a rejection five
+    minutes after a forced login is ordinary, and a new login fetches the
+    week (found live 2026-11-14 - a 10-minute guard showed the old copy)."""
+    freezer.move_to(_FROZEN)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    coordinator._last_forced_login_at = dt_util.utcnow() - timedelta(minutes=5)
+    logins = 0
+
+    async def _login(*_args, **kwargs):
+        nonlocal logins
+        if kwargs.get("force"):
+            logins += 1
+
+    async def _timetable(_week):
+        if not logins:
+            raise LibrusSessionExpiredError("Session rejected (HTTP 401).", status_code=401)
+        return {"Timetable": {}}
+
+    client.async_ensure_session_valid.side_effect = _login
+    client.async_get_timetable.side_effect = _timetable
+
+    await coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=3))
+
+    assert logins == 1
+    assert coordinator._week_failed_at == {}
+
+
+async def test_two_on_demand_weeks_share_one_login(hass, freezer) -> None:
+    """Two weeks fetched at once, both rejected by the same expired session:
+    one login, and BOTH weeks retried with it. The second used to read the
+    first one's login - stamped before it finished - as "a forced login that
+    didn't help" and give up (found live 2026-11-14)."""
+    freezer.move_to(_FROZEN)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    logins = 0
+    both_rejected = asyncio.Event()
+    rejected = 0
+
+    async def _login(*_args, **kwargs):
+        nonlocal logins
+        if kwargs.get("force"):
+            await asyncio.sleep(0)
+            logins += 1
+
+    async def _timetable(_week):
+        nonlocal rejected
+        if not logins:
+            rejected += 1
+            if rejected == 2:
+                both_rejected.set()
+            await both_rejected.wait()
+            raise LibrusSessionExpiredError("Session rejected (HTTP 401).", status_code=401)
+        return {"Timetable": {}}
+
+    client.async_ensure_session_valid.side_effect = _login
+    client.async_get_timetable.side_effect = _timetable
+
+    await asyncio.gather(
+        coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=3)),
+        coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=4)),
+    )
+
+    assert logins == 1
+    assert coordinator._week_failed_at == {}
 
 
 async def test_on_demand_weeks_are_limited_to_a_range_around_today(hass, freezer) -> None:

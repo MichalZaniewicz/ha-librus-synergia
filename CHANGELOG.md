@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Older and later timetable weeks no longer fail with "HTTP 401".** A
+  dashboard showing weeks outside this one and the next (a month calendar, the
+  week arrows) sometimes logged "Failed to fetch the timetable for the week
+  starting ... (HTTP 401) - showing the last copy". Two causes: when two weeks
+  were fetched at once, the second gave up while the first was still logging
+  in instead of waiting for that login; and a rejected session within 10
+  minutes of the last login was never logged in again, although Librus drops a
+  session after about 10 minutes without a request. Now the second week waits
+  for the login, and the guard against repeated logins only covers the last
+  2 minutes.
+
 ## 0.12.48
 
 ### Added

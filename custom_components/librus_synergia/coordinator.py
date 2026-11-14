@@ -349,10 +349,15 @@ _PAYLOADS_SAVE_INTERVAL = timedelta(hours=6)
 # retried for this long (the last copy or no lessons meanwhile), a week
 # further than ON_DEMAND_WEEKS from the current one is never fetched, and a
 # rejected session isn't logged in again for an on-demand week within
-# _ON_DEMAND_RELOGIN_GAP of the last forced login.
+# _ON_DEMAND_RELOGIN_GAP of the last forced login. Short on purpose: Librus
+# drops a session after about 10 minutes without a request (its oauth_token
+# cookie comes with Max-Age=600), so a rejection several minutes after a good
+# login is ordinary and a new login fixes it. Found live 2026-11-14: at 10
+# minutes the guard turned a dashboard's month view into "Failed to fetch the
+# timetable ... HTTP 401" for weeks that a login would have fetched fine.
 _WEEK_FAILURE_BACKOFF = timedelta(minutes=15)
 ON_DEMAND_WEEKS = 12
-_ON_DEMAND_RELOGIN_GAP = timedelta(minutes=10)
+_ON_DEMAND_RELOGIN_GAP = timedelta(minutes=2)
 # A kindergarten child's LID whose timetable Librus has refused (403) or
 # failed to give for _KINDERGARTEN_REFUSED_RESET, or that has had no lesson
 # in either polled week for _KINDERGARTEN_EMPTY_RESET, is dropped and the
@@ -2501,10 +2506,19 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         try:
             return await self._fetch_timetable_or_unpublished(week_start, track=track)
         except LibrusSessionExpiredError:
-            if not track and self._login_count == seen and self._recent_forced_login():
+            if (
+                not track
+                and self._login_count == seen
+                and not self._login_lock.locked()
+                and self._recent_forced_login()
+            ):
                 # An on-demand week (a dashboard paging months) right after
                 # a forced login that didn't help: not another full password
                 # login for it - the caller shows the last copy meanwhile.
+                # Not while a login is still running: two weeks fetched at
+                # once are both rejected by the same expired session, and the
+                # second must wait for the first one's login and retry, not
+                # give up (found live 2026-11-14 - one of two weeks failed).
                 raise
             await self._async_relogin(seen)
             return await self._fetch_timetable_or_unpublished(week_start, track=track)
@@ -2698,10 +2712,13 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         async with self._login_lock:
             if self._login_count != seen:
                 return
-            self._last_forced_login_at = dt_util.utcnow()
             await self._client.async_ensure_session_valid(
                 self.config_entry.data[CONF_PASSWORD], force=True
             )
+            # Stamped once the login is done: stamped before it, a request
+            # rejected while the login was still running read "a forced
+            # login just happened and didn't help" and gave up.
+            self._last_forced_login_at = dt_util.utcnow()
             self._login_count += 1
 
     async def async_fetch_message(self, mailbox: str, message_id: str) -> Any:
