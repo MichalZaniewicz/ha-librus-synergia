@@ -78,7 +78,7 @@ blueprint:
         Off: tests and trips are all-day events. On: they get the time below
         (an entry with its own time in Librus, like a meeting at 17:30,
         keeps it), so your phone reminds you at a useful hour instead of at
-        midnight. Days off stay all-day. Needs version 0.12.49-beta.4 or
+        midnight. Days off stay all-day. Needs version 0.12.50 or
         later of the integration.
       default: false
       selector:
@@ -115,7 +115,7 @@ conditions: []
 
 actions:
   # Two calls, not one with an empty event_time: an integration older than
-  # 0.12.49-beta.4 doesn't know the field and would refuse the call.
+  # 0.12.50 doesn't know the field and would refuse the call.
   - if:
       - condition: template
         value_template: "{{ timed_events }}"

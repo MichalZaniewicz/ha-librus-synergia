@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.50
 
 ### Added
 - **Announcements calendar.** School notices ("Ogłoszenia") show on the days
