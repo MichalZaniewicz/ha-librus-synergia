@@ -155,6 +155,7 @@ Thanks to everyone who sent code to this project:
 
 Thanks to everyone who [bought me a coffee](https://buymeacoffee.com/zanula) for the Librus projects:
 
+- **Anonymous supporter**
 - **Maciej Kozień**
 - **Mateusz**
 - **Paweł**
