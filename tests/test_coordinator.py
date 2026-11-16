@@ -1252,15 +1252,25 @@ async def test_timetable_change_event_seeds_silently_then_fires(hass, freezer) -
     day_iso = dt_util.now().date().isoformat()
     events = async_capture_events(hass, EVENT_TIMETABLE_CHANGED)
     client = build_mock_client(
-        async_get_timetable=_timetable_with_disruption(day_iso),
         async_get_subjects={"Subjects": [{"Id": 300, "Name": "Historia"}]},
     )
+    today = dt_util.now().date()
+    this_week = today - timedelta(days=today.weekday())
+    canceled = False
+
+    async def _timetable(week, *_args, **_kwargs):
+        # Each week answers with its own days only, like Librus.
+        if week != this_week:
+            return {"Timetable": {}}
+        return _timetable_with_disruption(day_iso, canceled=canceled)
+
+    client.async_get_timetable.side_effect = _timetable
     coordinator = _make_coordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
     await hass.async_block_till_done()
     assert events == []
 
-    client.async_get_timetable.return_value = _timetable_with_disruption(day_iso, canceled=True)
+    canceled = True
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
