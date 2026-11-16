@@ -119,8 +119,20 @@ def _when(value: date | datetime) -> str:
 def _uid(source: str, event: CalendarEvent) -> str:
     if event.uid:
         return f"{event.uid}@{DOMAIN}"
-    raw = f"{source}|{event.start}|{event.summary}"
+    raw = f"{source}|{event.start}|{event.end}|{event.summary}|{event.location}|{event.description}"
     return f"{source}-{hashlib.sha1(raw.encode()).hexdigest()[:16]}@{DOMAIN}"
+
+
+def _unique(uid: str, used: set[str]) -> str:
+    """RFC 5545 wants every UID once - a calendar app keeps only one of two
+    events that share it (two groups of one subject in one slot with the
+    merge option off, identical down to the room)."""
+    candidate, n = uid, 1
+    while candidate in used:
+        n += 1
+        candidate = uid.replace("@", f"-{n}@", 1)
+    used.add(candidate)
+    return candidate
 
 
 def build_ics(name: str, events: Iterable[tuple[str, str, CalendarEvent]], now: datetime) -> str:
@@ -136,10 +148,11 @@ def build_ics(name: str, events: Iterable[tuple[str, str, CalendarEvent]], now: 
         "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
         "X-PUBLISHED-TTL:PT1H",
     ]
+    used: set[str] = set()
     for source, category, event in events:
         lines += [
             "BEGIN:VEVENT",
-            f"UID:{_uid(source, event)}",
+            f"UID:{_unique(_uid(source, event), used)}",
             f"DTSTAMP:{stamp}",
             f"DTSTART{_when(event.start)}",
             f"DTEND{_when(event.end)}",
@@ -183,10 +196,18 @@ async def async_feed_events(
             start_day, end_day = monday, monday + timedelta(days=14)
         else:
             start_day, end_day = today - timedelta(days=back), today + timedelta(days=ahead)
+        start = dt_util.start_of_local_day(start_day)
+        end = dt_util.start_of_local_day(end_day)
         try:
-            events = await entity.async_get_events(
-                hass, dt_util.start_of_local_day(start_day), dt_util.start_of_local_day(end_day)
-            )
+            if key == "timetable":
+                # Not the family's own calendars ("Other calendars with
+                # activities") - the feed leaves them out, so they aren't
+                # even read.
+                events = await entity.async_get_events(
+                    hass, start, end, include_other_calendars=False
+                )
+            else:
+                events = await entity.async_get_events(hass, start, end)
         except Exception:  # noqa: BLE001 - one calendar must not break the feed
             _LOGGER.warning("Calendar feed: could not read %s", entity_id, exc_info=True)
             continue
@@ -199,13 +220,16 @@ async def async_feed_events(
 
 
 def _entry_for_token(hass: HomeAssistant, token: str):
+    """The entry whose (switched-on) link this is, or None. Compared as
+    bytes: `compare_digest` on two str raises TypeError when one of them
+    isn't ASCII, so a link with a Polish letter in it answered 500."""
+    wanted = token.encode()
     for entry in hass.config_entries.async_entries(DOMAIN):
         stored = entry.data.get(CONF_CALENDAR_FEED_TOKEN)
         if (
             stored
-            and secrets.compare_digest(str(stored), token)
+            and secrets.compare_digest(str(stored).encode(), wanted)
             and entry.options.get(CONF_CALENDAR_FEED_ENABLED)
-            and entry.state is ConfigEntryState.LOADED
         ):
             return entry
     return None
@@ -225,6 +249,15 @@ class LibrusCalendarFeedView(HomeAssistantView):
         entry = _entry_for_token(hass, token) if token else None
         if entry is None:
             return web.Response(status=HTTPStatus.NOT_FOUND, text="Not found")
+        if entry.state is not ConfigEntryState.LOADED:
+            # A good link while the integration reloads, retries its setup
+            # or waits for a new password: "try later", not "gone" - some
+            # calendar apps drop a subscription that answers 404.
+            return web.Response(
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                text="Try again later",
+                headers={"Retry-After": "600"},
+            )
         now = dt_util.now()
         events = await async_feed_events(hass, entry.entry_id, now.date())
         body = build_ics(_feed_name(hass, entry), events, now)

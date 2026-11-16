@@ -36,7 +36,7 @@ from .const import (
     DOMAIN,
     UNMATCHED_SETTING_ISSUES,
 )
-from .subject_names import parse_category_names
+from .subject_names import category_key, parse_category_names
 
 
 class LibrusSchoolYearRolloverRepairFlow(RepairsFlow):
@@ -81,7 +81,7 @@ class LibrusUnmatchedSettingRepairFlow(RepairsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict[str, Any]:
         # Imported here: config_flow imports the client library, repairs
         # loads with the integration.
-        from .config_flow import names_schema, names_text
+        from .config_flow import kept_name_lines, names_schema, names_text
 
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         coordinator = getattr(entry, "runtime_data", None) if entry else None
@@ -90,13 +90,26 @@ class LibrusUnmatchedSettingRepairFlow(RepairsFlow):
             return self.async_abort(reason="no_data")
         options = entry.options
         names: list[str] | None = None
+        # Lines that match but have no field here (a category without grades
+        # yet, a subject written by its id) stay - only the unmatched go.
+        kept: list[str] = []
         if option == CONF_SUBJECT_NAMES:
             names = coordinator.subject_choices
+            shown = {category_key(name) for name in names}
+            kept = kept_name_lines(
+                options.get(option),
+                names,
+                coordinator.subject_names_unmatched,
+                [sid for sid, name in coordinator.original_subjects.items() if category_key(name) in shown],
+            )
         elif option == CONF_GRADE_CATEGORY_NAMES:
             names = coordinator.grade_category_choices
+            kept = kept_name_lines(
+                options.get(option), names, coordinator.grade_category_names_unmatched
+            )
 
         if user_input is not None:
-            text = names_text(user_input) if names else str(user_input.get(option) or "").strip()
+            text = names_text(user_input, kept) if names else str(user_input.get(option) or "").strip()
             new = {**options, option: text}
             if not text:
                 new.pop(option)
@@ -108,6 +121,13 @@ class LibrusUnmatchedSettingRepairFlow(RepairsFlow):
         placeholders["subjects"] = ", ".join(coordinator.subject_choices) or "-"
         if names:
             current, _ = parse_category_names(options.get(option), names)
+            if option == CONF_SUBJECT_NAMES:
+                # A subject written by its id fills its field too.
+                current = {
+                    category_key(coordinator.original_subjects[sid]): name
+                    for sid, name in coordinator.subject_name_overrides.items()
+                    if sid in coordinator.original_subjects
+                }
             schema = names_schema(names, current)
         else:
             schema = vol.Schema(

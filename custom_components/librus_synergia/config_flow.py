@@ -15,7 +15,8 @@ user in the setup form's description.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+import re
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -159,12 +160,45 @@ def names_schema(names: list[str], current: dict[str, str]) -> vol.Schema:
     )
 
 
-def names_text(values: Mapping[str, Any]) -> str:
+def names_text(values: Mapping[str, Any], kept: Iterable[str] = ()) -> str:
     """The names fields saved the way the option stores them: one
-    "Librus name: your name" a line, empty fields left out."""
+    "Librus name: your name" a line, empty fields left out. `kept` (see
+    `kept_name_lines`) goes first, so a field shown in the form wins."""
     return "\n".join(
-        f"{name}: {str(value).strip()}" for name, value in values.items() if value and str(value).strip()
+        [
+            *kept,
+            *(
+                f"{name}: {str(value).strip()}"
+                for name, value in values.items()
+                if value and str(value).strip()
+            ),
+        ]
     )
+
+
+def kept_name_lines(
+    text: str | None,
+    shown: Iterable[str],
+    unmatched: Iterable[str],
+    shown_ids: Iterable[int | str] = (),
+) -> list[str]:
+    """Lines of a names option the form didn't show, to keep on save: a
+    category the grades don't use yet (September), a subject written by its
+    id. Not the lines that match nothing (the repair is for those) and not
+    the ones a field in the form stands for - a subject id included."""
+    shown_keys = {category_key(name) for name in shown}
+    ids = {str(subject_id) for subject_id in shown_ids}
+    bad = {line.strip() for line in unmatched}
+    kept: list[str] = []
+    for line in re.split(r"[\r\n]+", text or ""):
+        line = line.strip()
+        if not line or line in bad:
+            continue
+        original = line.partition(":")[0]
+        if category_key(original) in shown_keys or original.strip() in ids:
+            continue
+        kept.append(line)
+    return kept
 
 
 def _login_error_code(err: LibrusError) -> str:
@@ -593,15 +627,39 @@ class LibrusSynergiaOptionsFlow(OptionsFlow):
         subjects = coordinator.subject_choices
         categories = coordinator.grade_category_choices
         options = self.config_entry.options
+        shown_keys = {category_key(name) for name in subjects}
+        shown_ids = [
+            subject_id
+            for subject_id, name in coordinator.original_subjects.items()
+            if category_key(name) in shown_keys
+        ]
 
         if user_input is not None:
             data = {key: value for key, value in options.items() if key not in NAME_OPTION_KEYS}
+            kept = {
+                CONF_SUBJECT_NAMES: kept_name_lines(
+                    options.get(CONF_SUBJECT_NAMES),
+                    subjects,
+                    coordinator.subject_names_unmatched,
+                    shown_ids,
+                ),
+                CONF_GRADE_CATEGORY_NAMES: kept_name_lines(
+                    options.get(CONF_GRADE_CATEGORY_NAMES),
+                    categories,
+                    coordinator.grade_category_names_unmatched,
+                ),
+            }
             for key, part in ((CONF_SUBJECT_NAMES, "subjects"), (CONF_GRADE_CATEGORY_NAMES, "categories")):
-                if text := names_text(user_input.get(part) or {}):
+                if text := names_text(user_input.get(part) or {}, kept[key]):
                     data[key] = text
             return self.async_create_entry(data=data)
 
-        current_subjects, _ = parse_category_names(options.get(CONF_SUBJECT_NAMES), subjects)
+        # A subject written by its id ("41999: Maths") fills its field too.
+        current_subjects = {
+            category_key(coordinator.original_subjects[subject_id]): name
+            for subject_id, name in coordinator.subject_name_overrides.items()
+            if subject_id in coordinator.original_subjects
+        }
         current_categories, _ = parse_category_names(options.get(CONF_GRADE_CATEGORY_NAMES), categories)
 
         schema: dict[Any, Any] = {}

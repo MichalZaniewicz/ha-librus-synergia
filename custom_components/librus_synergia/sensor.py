@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timedelta
@@ -944,12 +945,6 @@ def _attendance_type(data: LibrusData, type_id: int | str | None) -> AttendanceT
 # to tell "already resolved" from "still needs attention".
 
 
-# "Spóźnienie" (late) is a PRESENCE-kind type - see
-# absence_days.is_late_type_name. Needed for by_weekday below -
-# _record_status()/by_date fold "late" into plain "good", which is fine for
-# a single worst-status-per-day heatmap but can't answer "how many lates
-# happened on a given weekday" on its own.
-_is_late_type_name = is_late_type_name
 
 
 # Same three-way status used by the companion cards' own attendanceStatus()
@@ -997,7 +992,7 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
             presence_by_type[name] = t.is_presence_kind
             if t.is_presence_kind:
                 presence_records += 1
-                if _is_late_type_name(t.name):
+                if is_late_type_name(t.name):
                     late += 1
             else:
                 if a.date:
@@ -1026,14 +1021,14 @@ def _compute_attendance(data: LibrusData) -> dict[str, Any]:
             bucket["total"] += 1
             if t is not None and t.is_presence_kind:
                 bucket["present"] += 1
-                if _is_late_type_name(t.name):
+                if is_late_type_name(t.name):
                     bucket["late"] += 1
         if t is None:
             continue
         # The excused/unexcused/late split, by weekday and by subject (see
         # the Attendance sensor's attribute comments below).
         if t.is_presence_kind:
-            split = "late" if _is_late_type_name(t.name) else None
+            split = "late" if is_late_type_name(t.name) else None
         else:
             split = "excused" if t.is_excused_absence else "unexcused"
         if split and a.date:
@@ -2151,9 +2146,17 @@ class LibrusSchoolSensor(LibrusSensorBase):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if self.coordinator.data is None or self.coordinator.data.school is None:
+        if self.coordinator.data is None:
             return None
         school = self.coordinator.data.school
+        if school is None:
+            # No Schools data (seen with kindergartens): the subject colours
+            # and the unmatched-settings lists still belong here - the cards
+            # read the colours from this sensor.
+            return {
+                "bell_schedule": _bell_schedule(self.coordinator.data.timetable),
+                **self._subject_colors(),
+            }
         return {
             "town": school.town,
             "street": school.street,
@@ -2488,6 +2491,8 @@ class LibrusSchoolDayEndSensor(SchoolDayRefresh, LibrusSensorBase):
         self._others: tuple[OtherActivity, ...] = ()
         self._loaded_at: datetime | None = None
         self._unsub_timer: CALLBACK_TYPE | None = None
+        self._load_task: asyncio.Task[None] | None = None
+        self._removed = False
 
     def _side_state(self) -> Any:
         return self._others
@@ -2549,18 +2554,34 @@ class LibrusSchoolDayEndSensor(SchoolDayRefresh, LibrusSensorBase):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_timer)
+        self.async_on_remove(self._cancel_load)
         self._arm_timer()
         if self._calendars:
-            self.hass.async_create_task(self._async_load_others())
+            self._start_load()
 
     @callback
     def _handle_coordinator_update(self) -> None:
         if self._calendars and (
             self._loaded_at is None or dt_util.now() - self._loaded_at >= _DAY_END_RELOAD
         ):
-            self.hass.async_create_task(self._async_load_others())
+            self._start_load()
         self._arm_timer()
         super()._handle_coordinator_update()
+
+    @callback
+    def _start_load(self) -> None:
+        if self._load_task is None or self._load_task.done():
+            self._load_task = self.hass.async_create_task(self._async_load_others())
+
+    @callback
+    def _cancel_load(self) -> None:
+        """A reload while the other calendars are still being read (up to 15 s
+        each): the read must not arm a timer for an entity that's gone - that
+        timer was never cancelled and re-armed itself every school day."""
+        self._removed = True
+        if self._load_task is not None and not self._load_task.done():
+            self._load_task.cancel()
+        self._load_task = None
 
     async def _async_load_others(self) -> None:
         """Read the other calendars' activities (they change outside Librus,
@@ -2570,6 +2591,8 @@ class LibrusSchoolDayEndSensor(SchoolDayRefresh, LibrusSensorBase):
         others = tuple(
             await async_other_activities(self.hass, self._calendars, start, start + _DAY_END_LOOKAHEAD)
         )
+        if self._removed:
+            return
         if others != self._others:
             self._others = others
             self._arm_timer()
@@ -2587,7 +2610,7 @@ class LibrusSchoolDayEndSensor(SchoolDayRefresh, LibrusSensorBase):
         activity can end after the lessons, which the school-day clock
         doesn't know about)."""
         self._cancel_timer()
-        if self.hass is None:
+        if self.hass is None or self._removed:
             return
         picked = self._pick()
         if picked is None:

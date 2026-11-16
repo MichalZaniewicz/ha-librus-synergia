@@ -49,6 +49,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import (
+    COUNT_FETCH_WEEKS,
     LibrusDataUpdateCoordinator,
     calculate_average,
     days_since_last_absence,
@@ -1093,12 +1094,29 @@ class FullMessageTool(_LibrusTool):
         wanted = args.get("student")
         if wanted:
             students = [s for s in students if _name_matches(s[0], str(wanted))]
+            if not students:
+                return _result(
+                    {
+                        "error": f"No student matches {str(wanted)!r}. Students: "
+                        + ", ".join(name for name, _ in _students(hass))
+                    },
+                    error=True,
+                )
         found = [
             (name, coordinator, hit)
             for name, coordinator in students
             if (hit := coordinator.find_message(message_id)) is not None
         ]
-        if len(found) != 1:
+        if len(found) > 1:
+            return _result(
+                {
+                    "error": f"Message id {message_id!r} is on the lists of several"
+                    " students (" + ", ".join(name for name, _, _ in found) + ")."
+                    " Call again with student."
+                },
+                error=True,
+            )
+        if not found:
             return _result(
                 {
                     "error": f"No message with id {message_id!r} on the lists"
@@ -1201,7 +1219,7 @@ class CountLessonsTool(_LibrusTool):
     name = "librus_count_lessons"
     description = (
         "How many lessons of a subject fall between two dates, with each lesson's date and "
-        "number. Days off and cancelled lessons are left out. Weeks up to 12 weeks ahead "
+        "number. Days off and cancelled lessons are left out. Weeks up to 3 weeks ahead "
         "come from the real timetable, later ones from the standard weekly plan. Use it for "
         "'how many maths lessons until the test' (find the test's date with "
         "librus_get_upcoming first) or 'how many PE lessons are left before the holidays'."
@@ -1231,7 +1249,9 @@ class CountLessonsTool(_LibrusTool):
         timetable = dict(data.timetable)
         weeks = on_demand_week_starts(start, end)
         if weeks:
-            timetable.update(await coordinator.async_get_timetable_weeks(weeks))
+            timetable.update(
+                await coordinator.async_get_timetable_weeks(weeks, fetch_weeks=COUNT_FETCH_WEEKS)
+            )
         lessons = count_lessons(data, timetable, set(subjects), start, end, today)
         from_plan = sum(1 for lesson in lessons if lesson.source == "plan")
         return _compact(

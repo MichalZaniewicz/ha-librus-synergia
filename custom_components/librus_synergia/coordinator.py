@@ -332,6 +332,11 @@ _REFERENCE_CONCURRENCY = 6
 # further ones for _WEEK_CACHE_FAR_TTL; nothing older than _WEEK_CACHE_KEEP
 # is kept. At most _WEEK_FETCH_CONCURRENCY weeks are fetched at once.
 _WEEK_CACHE_NEAR = timedelta(weeks=3)
+# How far ahead `count_lessons` (action and Assist tool) fetches real weeks:
+# where a substitution or a cancelled lesson can still be known. Beyond that
+# the standing plan counts just as well, and an automation counting "lessons
+# until the end of the semester" every hour used to fetch up to 12 weeks.
+COUNT_FETCH_WEEKS = 3
 _WEEK_CACHE_NEAR_TTL = timedelta(hours=2)
 _WEEK_CACHE_FAR_TTL = timedelta(hours=24)
 _WEEK_CACHE_KEEP = timedelta(weeks=8)
@@ -1089,7 +1094,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._force_next_fetch = False
         self._cached_subjects: dict[int | str, str] = {}
         # Subject names under Configure (see _display_subjects).
-        self._subject_names_key: tuple[int, str | None] | None = None
+        # The subjects dict and option text the parse below was made from -
+        # the dict itself, not its id(): a freed dict's id can come back for
+        # a new one, and the old parse (with its unmatched lines) stayed.
+        self._subject_names_for: tuple[dict[int | str, str], str | None] | None = None
         self._subject_names_parsed: tuple[dict[int | str, str], list[str]] = ({}, [])
         self._display_subjects_for: dict[int | str, str] | None = None
         self._display_subjects_cache: dict[int | str, str] = {}
@@ -1359,6 +1367,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         self._password_logins = 0
         self._last_token_renewal_at: datetime | None = None
         self._last_password_login_at: datetime | None = None
+        # True from a token refresh until a request on the refreshed session
+        # works. A rejection while it's still True means the refresh gave a
+        # session Librus won't take, so the next renewal is a password login
+        # - else every cycle refreshed the token, was rejected again and
+        # never fell back to the password.
+        self._token_session_unproven = False
         # The shared clock of the school-day entities (school_day.py),
         # created by the first one; stopped on unload.
         self.school_day_clock: Any = None
@@ -2527,7 +2541,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 # give up (found live 2026-11-14 - one of two weeks failed).
                 raise
             await self._async_relogin(seen)
-            return await self._fetch_timetable_or_unpublished(week_start, track=track)
+            result = await self._fetch_timetable_or_unpublished(week_start, track=track)
+            self._token_session_unproven = False
+            return result
 
     @property
     def session_renewals(self) -> dict[str, Any]:
@@ -2565,21 +2581,28 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         return days or None
 
     async def async_get_timetable_weeks(
-        self, week_starts: list[date]
+        self, week_starts: list[date], *, fetch_weeks: int = ON_DEMAND_WEEKS
     ) -> dict[date, list[LessonData]]:
         """Lessons of several weeks merged (a month view, a few days for
         Assist): the polled weeks from the data, the others from the
         on-demand cache, the missing ones fetched together - at most
-        _WEEK_FETCH_CONCURRENCY at a time (`_week_fetch_limit`)."""
+        _WEEK_FETCH_CONCURRENCY at a time (`_week_fetch_limit`). Weeks
+        further than `fetch_weeks` from this one are only read from the
+        cache (see `async_get_timetable_week`)."""
         weeks = await asyncio.gather(
-            *(self.async_get_timetable_week(week) for week in dict.fromkeys(week_starts))
+            *(
+                self.async_get_timetable_week(week, fetch_weeks=fetch_weeks)
+                for week in dict.fromkeys(week_starts)
+            )
         )
         merged: dict[date, list[LessonData]] = {}
         for week in weeks:
             merged.update(week)
         return merged
 
-    async def async_get_timetable_week(self, week_start: date) -> dict[date, list[LessonData]]:
+    async def async_get_timetable_week(
+        self, week_start: date, *, fetch_weeks: int = ON_DEMAND_WEEKS
+    ) -> dict[date, list[LessonData]]:
         """One week's lessons for the timetable calendar and the Assist
         timetable tool. Never raises a Librus error: a week that can't be
         fetched is its last copy (however old), or no lessons.
@@ -2594,7 +2617,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         twice.
 
         Not fetched at all (the last copy, or no lessons): a week further
-        than ON_DEMAND_WEEKS from the current one, a week whose fetch failed
+        than `fetch_weeks` (default ON_DEMAND_WEEKS) from the current one -
+        `count_lessons` passes COUNT_FETCH_WEEKS: further weeks it counts
+        from the standing plan instead of a request each -, a week whose
+        fetch failed
         less than _WEEK_FAILURE_BACKOFF ago, any week while the polls are
         backing off after failures (Librus is down), and anything once the
         entry is unloading. The fetch runs as the config entry's background
@@ -2611,7 +2637,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         failed_at = self._week_failed_at.get(week_start)
         if (
             self._closed
-            or abs(week_start - this_week) > timedelta(weeks=ON_DEMAND_WEEKS)
+            or abs(week_start - this_week) > timedelta(weeks=min(fetch_weeks, ON_DEMAND_WEEKS))
             or (failed_at is not None and now - failed_at < _WEEK_FAILURE_BACKOFF)
             or self._in_outage_backoff()
         ):
@@ -2740,10 +2766,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             # 2026-11-14: after 11.5 idle minutes Me answered 401, and
             # /refreshToken (200, new oauth_token) brought the same session
             # back - Me answered again, no password needed.
-            if await self._client.async_refresh_session():
+            if not self._token_session_unproven and await self._client.async_refresh_session():
                 self._token_renewals += 1
                 self._last_token_renewal_at = dt_util.utcnow()
+                self._token_session_unproven = True
             else:
+                self._token_session_unproven = False
                 await self._client.async_ensure_session_valid(
                     self.config_entry.data[CONF_PASSWORD], force=True
                 )
@@ -3280,6 +3308,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
             raise ConfigEntryAuthFailed(str(err)) from err
         except LibrusError as err:
             raise UpdateFailed(str(err)) from err
+        # The session (a refreshed one too) works.
+        self._token_session_unproven = False
 
         # Order: _CORE_PAYLOAD_LABELS (Me, tier 1, tier 2).
         me_payload = core_payloads[0]
@@ -3748,11 +3778,17 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     def _subject_names(self) -> tuple[dict[int | str, str], list[str]]:
         text = self.config_entry.options.get(CONF_SUBJECT_NAMES) if self.config_entry else None
-        key = (id(self._cached_subjects), text)
-        if self._subject_names_key != key:
-            self._subject_names_key = key
+        made_from = self._subject_names_for
+        if made_from is None or made_from[0] is not self._cached_subjects or made_from[1] != text:
+            self._subject_names_for = (self._cached_subjects, text)
             self._subject_names_parsed = parse_subject_names(text, self._cached_subjects)
         return self._subject_names_parsed
+
+    @property
+    def subject_name_overrides(self) -> dict[int | str, str]:
+        """Subject id -> your name, from Subject names under Configure (the
+        lines that matched)."""
+        return self._subject_names()[0]
 
     def _display_subjects(self) -> dict[int | str, str]:
         """The subjects as the data shows them: your names from Subject

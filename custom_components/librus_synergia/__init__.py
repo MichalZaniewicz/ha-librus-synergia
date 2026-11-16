@@ -97,6 +97,11 @@ def _reload_relevant(options: Any) -> dict[str, Any]:
 
 async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bool:
     """Set up the integration from a config entry."""
+    # First of all: turning the calendar link off must drop its token even
+    # when the reload that follows fails in its first refresh (Librus down,
+    # a new password needed) - else turning it on again brought the old
+    # link back.
+    _sync_calendar_feed_token(hass, entry)
 
     def _persist_session(session_data: LibrusSessionData) -> None:
         # Into the coordinator's own saved state - the config entry is only
@@ -169,7 +174,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: LibrusConfigEntry) -> bo
         await summary.async_start()
         entry.async_on_unload(summary.async_stop)
 
-    _sync_calendar_feed_token(hass, entry)
     options_at_setup = dict(entry.options)
 
     async def _async_update_listener(hass: HomeAssistant, entry: LibrusConfigEntry) -> None:

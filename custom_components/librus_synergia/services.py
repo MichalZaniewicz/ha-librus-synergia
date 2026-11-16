@@ -58,6 +58,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import (
+    COUNT_FETCH_WEEKS,
     LibrusDataUpdateCoordinator,
     decode_message_content,
     grade_improvements,
@@ -691,7 +692,11 @@ def _async_setup_message_writing(hass: HomeAssistant) -> None:
                 + ", ".join(sorted(data.subjects.values()))
             )
         weeks = on_demand_week_starts(start, end)
-        timetable = await coordinator.async_get_timetable_weeks(weeks) if weeks else {}
+        timetable = (
+            await coordinator.async_get_timetable_weeks(weeks, fetch_weeks=COUNT_FETCH_WEEKS)
+            if weeks
+            else {}
+        )
         lessons = count_lessons(
             data,
             timetable,

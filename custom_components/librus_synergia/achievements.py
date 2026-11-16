@@ -37,6 +37,7 @@ from librus_synergia.models import (
 )
 from librus_synergia.parsers import parse_grade_value, point_grades_percentage
 
+from .absence_days import is_late_type_name
 from .forecast import (
     HONOURS_AVERAGE,
     PointThresholdsArg,
@@ -50,7 +51,6 @@ from .forecast import (
 
 GOOD_GRADE = 4.0
 _TEST_CATEGORY_RE = re.compile(r"sprawdzian|praca klasowa|test", re.IGNORECASE)
-_LATE_RE = re.compile(r"późn", re.IGNORECASE)
 _EXEMPLARY_BEHAVIOUR = {"wz", "bdb"}
 SUBJECT_STAR_AVERAGE = 5.5
 SUBJECT_STAR_MIN_GRADES = 3
@@ -438,7 +438,7 @@ def compute_badges(
 
     def is_late(a: AttendanceData) -> bool:
         kind = types.get(a.type_id) if a.type_id is not None else None  # type: ignore[arg-type]
-        return kind is not None and _LATE_RE.search(kind.name) is not None
+        return kind is not None and is_late_type_name(kind.name)
 
     attendance = badge("attendance_streak", (7, 30, 90), unit="days")
     _streak_tiers(

@@ -41,6 +41,7 @@ from homeassistant.util import dt as dt_util
 from librus_synergia.models import LibrusData
 
 from .absence_budget import MIN_HELD, absence_budget
+from .absence_days import is_late_type_name
 from .const import (
     AI_AUDIENCE_BOTH,
     AI_AUDIENCE_PARENT,
@@ -521,7 +522,7 @@ def build_context(
         if not _in(day, week_from, week_end) or kind is None:
             continue
         if kind.is_presence_kind:
-            late = "późn" in kind.name.lower()
+            late = is_late_type_name(kind.name)
             this_week["late" if late else "present"] += 1
             if not late:
                 continue

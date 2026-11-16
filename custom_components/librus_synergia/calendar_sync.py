@@ -85,11 +85,14 @@ class SyncItem:
 
 
 def _hhmm(value: str | None) -> time | None:
-    """"17:30" / "17:30:00" -> a time; None for anything else."""
+    """"17:30" / "17:30:00" -> a time; None for anything else, midnight
+    included - Librus's "no time" (calendar._hhmm and the Test within 24
+    hours sensor read it the same way)."""
     try:
-        return time.fromisoformat((value or "").strip()[:5])
+        parsed = time.fromisoformat((value or "").strip()[:5])
     except ValueError:
         return None
+    return None if parsed == time(0, 0) else parsed
 
 
 def student_tag(entry_id: str) -> str:

@@ -351,6 +351,42 @@ async def test_password_login_when_the_token_refresh_fails(hass, freezer) -> Non
     assert renewals["last_password_login"] is not None
 
 
+async def test_password_login_when_the_refreshed_session_is_rejected(hass, freezer) -> None:
+    """/refreshToken answering fine while Librus still rejects the session
+    must not loop forever: the next renewal is a password login."""
+    freezer.move_to(_FROZEN)
+    client = build_mock_client()
+    coordinator = _coordinator(hass, client)
+    await coordinator._async_update_data()
+    client.async_refresh_session.return_value = True
+    logins = 0
+
+    async def _login(*_args, **kwargs):
+        nonlocal logins
+        if kwargs.get("force"):
+            logins += 1
+
+    async def _timetable(_week):
+        if not logins:
+            raise LibrusSessionExpiredError("Session rejected (HTTP 401).", status_code=401)
+        return {"Timetable": {}}
+
+    client.async_ensure_session_valid.side_effect = _login
+    client.async_get_timetable.side_effect = _timetable
+
+    await coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=3))
+    assert logins == 0
+    assert client.async_refresh_session.await_count == 1
+
+    freezer.tick(timedelta(minutes=5))
+    await coordinator.async_get_timetable_week(_this_week() + timedelta(weeks=4))
+
+    assert client.async_refresh_session.await_count == 1
+    assert logins == 1
+    renewals = coordinator.session_renewals
+    assert (renewals["token_refreshes"], renewals["password_logins"]) == (1, 1)
+
+
 async def test_two_on_demand_weeks_share_one_login(hass, freezer) -> None:
     """Two weeks fetched at once, both rejected by the same expired session:
     one login, and BOTH weeks retried with it. The second used to read the

@@ -738,8 +738,16 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
         return next((event for event in events.ordered[index:] if event.end >= now), None)
 
     async def async_get_events(
-        self, hass: HomeAssistant, start_date: datetime, end_date: datetime
+        self,
+        hass: HomeAssistant,
+        start_date: datetime,
+        end_date: datetime,
+        *,
+        include_other_calendars: bool = True,
     ) -> list[CalendarEvent]:
+        """`include_other_calendars=False` for the .ics feed, which leaves the
+        family's own calendars out anyway - no point reading them (a Google
+        or CalDAV round-trip each) on every phone poll."""
         data = self.coordinator.data
         polled = self._polled_events()
         if data is None or polled is None:
@@ -785,7 +793,8 @@ class LibrusTimetableCalendar(CoordinatorEntity[LibrusDataUpdateCoordinator], Ca
             for event in _extra_activity_events(extra, self._emoji)
             if event.start < end_date and event.end > start_date
         )
-        events.extend(await self._other_calendar_events(hass, start_date, end_date))
+        if include_other_calendars:
+            events.extend(await self._other_calendar_events(hass, start_date, end_date))
         events.sort(key=lambda event: event.start)
         return events
 

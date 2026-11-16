@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The calendar link's secret is no longer in the diagnostics file.**
+  Anyone who got a diagnostics download (it often ends up attached to a
+  GitHub issue) could open the child's timetable, Agenda and announcements
+  through the link. Turn the link off and on again under Configure to get
+  a new one if you ever shared diagnostics with it on.
+- **The calendar link** no longer answers an error 500 to an address with a
+  non-ASCII letter in it, gives every event its own UID (two groups of one
+  subject in the same slot showed as one in Google and Apple calendars),
+  answers "try again later" (503, not 404) while the integration reloads,
+  and turning it off drops the old link even when that reload fails.
+- **Saving Subject and category names keeps the names the step doesn't
+  list**: a renamed grade category with no grades yet (in September) and a
+  subject written by its id were dropped. A subject written by its id now
+  fills its field. The same in the repair for names that match nothing.
+- **A refreshed session Librus still rejects** now leads to a password login
+  on the next try instead of refreshing the token again and again.
+- **Synced calendar copies** (`sync_calendar` with a time) no longer get
+  00:00 from an Agenda entry with Librus's "no time".
+- **School day end** no longer leaves a timer running after a reload during
+  its first read of the other calendars.
+- **Subject colours** (and the unmatched-settings lists) are also there when
+  the school has no Schools data.
+- **Assist, whole message**: says when a message id is on several
+  students' lists, or when the student named matches nobody.
+
+### Changed
+- `count_lessons` (action and Assist) fetches real timetable weeks only up
+  to 3 weeks ahead, where a substitution or cancellation can be known, and
+  counts further weeks from the standing plan - an automation counting
+  "lessons until the end of the semester" every hour no longer makes a
+  dozen Librus requests.
+- The calendar link no longer reads the "Other calendars with activities"
+  (a round-trip to Google or CalDAV each) only to leave them out.
+
 ## 0.12.50
 
 ### Added

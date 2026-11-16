@@ -17,6 +17,7 @@ from librus_synergia import LibrusError
 
 from .const import (
     CONF_AI_CONTEXT,
+    CONF_CALENDAR_FEED_TOKEN,
     CONF_MESSAGES_ENABLED,
     CONF_STUDENT_NUMBER,
     DEFAULT_MESSAGES_ENABLED,
@@ -50,6 +51,10 @@ TO_REDACT = {
     # number (options and data).
     CONF_AI_CONTEXT,
     CONF_STUDENT_NUMBER,
+    # The calendar link's secret: with it anyone can read the child's
+    # timetable, Agenda and announcements without logging in, and
+    # diagnostics files end up attached to public GitHub issues.
+    CONF_CALENDAR_FEED_TOKEN,
     # Who the student is (Me) and the teachers' LIDs.
     "account_id",
     "teacher_lid",
