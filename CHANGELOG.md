@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Fixed
+- **A point-graded subject weighed far too much in the rank's average.** It was
+  added once per point grade, so a school with many tests per subject let a few
+  point subjects outweigh all the 1-6 grades: 17 subjects with a 5.06 report
+  average showed 4.77 and a Gold rank. A point-graded subject now counts as one
+  grade - its forecast grade - next to the 1-6 grades (5.16 in that case). The
+  Hero card's "Prodigy" uses the same average. Without point grades nothing
+  changes.
 - **The calendar link's secret is no longer in the diagnostics file.**
   Anyone who got a diagnostics download (it often ends up attached to a
   GitHub issue) could open the child's timetable, Agenda and announcements

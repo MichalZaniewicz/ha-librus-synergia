@@ -293,14 +293,15 @@ async def _streak_and_rank(hass, options: dict | None) -> tuple[str, str, float]
 
 async def test_point_grades_count_in_the_good_grade_streak_and_rank(hass) -> None:
     """With a scale, the point grades (85 % and 75 % - both a 4 on it) extend
-    the streak, and the point-graded subject (its 84.1 % forecast: a 4,
-    from 2 point grades) brings the rank's average down from the lone 6."""
+    the streak, and the point-graded subject (its 84.1 % forecast: a 4) joins
+    the rank's average as ONE grade next to the lone 6 - not once per point
+    grade (that would give (6 + 4 + 4) / 3)."""
     streak, rank, average = await _streak_and_rank(
         hass, {"point_grade_thresholds": "40, 55, 75, 90, 98"}
     )
     assert streak == "3"
-    assert average == round((6 * 1 + 4 * 2) / 3, 2)
-    assert rank == "gold"
+    assert average == round((6 + 4) / 2, 2)
+    assert rank == "diamond"
 
 
 async def test_point_grades_stay_out_of_the_streak_and_rank_without_a_scale(hass) -> None:
