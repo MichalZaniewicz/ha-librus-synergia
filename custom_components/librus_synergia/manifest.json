@@ -16,7 +16,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/MichalZaniewicz/ha-librus-synergia/issues",
   "requirements": [
-    "librus-synergia==0.3.31"
+    "librus-synergia==0.3.32"
   ],
-  "version": "0.12.50"
+  "version": "0.12.51-beta.1"
 }

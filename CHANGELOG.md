@@ -29,6 +29,28 @@
   students' lists, or when the student named matches nobody.
 
 ### Changed
+- **About 400 fewer Librus requests a day per student** (default options,
+  smart polling off):
+  - The session is refreshed before a refresh starts when Librus has
+    probably dropped it (8 minutes without a request), not after Librus
+    rejects the first request - nearly every 20-minute refresh used to start
+    with an HTTP 401 (librus-synergia 0.3.32).
+  - Parent-teacher meetings are asked 4 times a day (the Agenda carries them
+    too); the polled timetable week without the next school day hourly;
+    text grades hourly except for two days after a new one.
+  - What's asked hourly (lesson topics, trips, documents, justifications,
+    behaviour grades...) waits 6 hours at night (22-06) and on a day
+    without lessons. Messages and the lucky number don't.
+  - Read receipts of a sent message: hourly for two days, then every 6
+    hours, then daily.
+- The Connection status sensor shows `last_success` and `next_attempt` only
+  while something is wrong: they moved on every refresh and wrote the
+  entity 72 times a day for nothing. The Last update sensor has the time of
+  the last success.
+- At a new school year the "already seen" ids of last year's grades, notes
+  and absences are dropped (they only grew).
+- Diagnostics `session_renewals` also count how often the Wiadomości session
+  was set up and retried.
 - `count_lessons` (action and Assist) fetches real timetable weeks only up
   to 3 weeks ahead, where a substitution or cancellation can be known, and
   counts further weeks from the standing plan - an automation counting

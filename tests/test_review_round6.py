@@ -169,3 +169,108 @@ async def test_count_lessons_fetches_only_the_near_weeks(hass, freezer) -> None:
     )
     await hass.async_block_till_done()
     assert client.async_get_timetable.await_count == calls + 1
+
+
+# --- optimizations ---------------------------------------------------------
+
+
+def _bare_coordinator(hass, client):
+    from homeassistant.config_entries import ConfigEntryState as _State
+
+    from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+
+    from .conftest import make_config_entry
+
+    entry = make_config_entry()
+    entry.add_to_hass(hass)
+    entry.mock_state(hass, _State.SETUP_IN_PROGRESS)
+    return LibrusDataUpdateCoordinator(hass, entry, client, timedelta(minutes=20))
+
+
+async def test_hourly_endpoints_wait_longer_at_night(hass, freezer) -> None:
+    from .conftest import ORIGINAL_STRETCH
+
+    coordinator = _bare_coordinator(hass, build_mock_client())
+    hour = timedelta(hours=1)
+
+    freezer.move_to(_FROZEN)  # ~05:00 test time: night
+    assert ORIGINAL_STRETCH(coordinator, hour) == timedelta(hours=6)
+    assert ORIGINAL_STRETCH(coordinator, None) is None
+    assert ORIGINAL_STRETCH(coordinator, timedelta(days=1)) == timedelta(days=1)
+
+    freezer.move_to("2026-09-09T19:00:00+00:00")  # ~12:00, no timetable known
+    assert ORIGINAL_STRETCH(coordinator, hour) == hour
+
+
+def test_read_receipts_are_asked_less_often_as_a_message_ages() -> None:
+    from librus_synergia.models import MessageData
+
+    from custom_components.librus_synergia.coordinator import _receipt_interval
+
+    now = dt_util.utcnow()
+
+    def sent(days: float) -> MessageData:
+        when = dt_util.as_local(now - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        return MessageData(
+            id="m", sender_name="", topic="", content="", send_date=when, read_date=None,
+            has_attachment=False,
+        )
+
+    assert _receipt_interval(sent(1), now) == timedelta(hours=1)
+    assert _receipt_interval(sent(3), now) == timedelta(hours=6)
+    assert _receipt_interval(sent(10), now) == timedelta(days=1)
+
+
+async def test_conferences_and_the_far_polled_week_are_not_asked_every_cycle(
+    hass, freezer
+) -> None:
+    freezer.move_to(_FROZEN)  # a Wednesday
+    client = build_mock_client()
+    coordinator = _bare_coordinator(hass, client)
+    await coordinator._async_update_data()
+    conferences = client.async_get_parent_teacher_conferences.await_count
+    weeks = [call.args[0] for call in client.async_get_timetable.await_args_list]
+
+    freezer.tick(timedelta(minutes=20))
+    await coordinator._async_update_data()
+
+    assert client.async_get_parent_teacher_conferences.await_count == conferences
+    later = [call.args[0] for call in client.async_get_timetable.await_args_list][len(weeks):]
+    today = dt_util.now().date()
+    assert later == [today - timedelta(days=today.weekday())]  # this week only
+
+
+async def test_status_hides_the_poll_times_while_all_is_well(hass) -> None:
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.librus_synergia.const import DOMAIN
+
+    entry = await setup_integration(hass, build_mock_client())
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_status")
+    attributes = hass.states.get(entity_id).attributes
+
+    assert hass.states.get(entity_id).state == "ok"
+    assert attributes["last_success"] is None
+    assert attributes["next_attempt"] is None
+
+
+async def test_new_school_year_forgets_last_years_seen_ids(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    client = build_mock_client(
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 42005},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+            ]
+        }
+    )
+    coordinator = _bare_coordinator(hass, client)
+    data = await coordinator._async_update_data()
+    seen = coordinator._change_tracker.seen
+    seen.grades |= {"999"}
+    coordinator._known_items["late"] = {"old-1"}
+
+    coordinator._prune_seen_for_new_year(data)
+
+    assert coordinator._change_tracker.seen.grades == {"1"}
+    assert coordinator._known_items["late"] == set()

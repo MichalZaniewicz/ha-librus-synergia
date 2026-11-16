@@ -3230,16 +3230,22 @@ class LibrusStatusSensor(LibrusSensorBase):
         def iso(value: datetime | None) -> str | None:
             return value.isoformat() if value else None
 
+        # The last success and the next attempt only while something is
+        # wrong: when all is well they moved on every poll, which wrote this
+        # entity's state 72 times a day for nothing (the Last update sensor
+        # has the time of the last success; the cards read these only during
+        # an outage).
+        failing = coordinator.status != "ok"
         return {
             "data_source": coordinator.data_source,
-            "last_success": iso(coordinator.last_success_at),
+            "last_success": iso(coordinator.last_success_at) if failing else None,
             # The last FAILED attempt (None until one fails): a successful
             # cycle is `last_success` already, and a timestamp that moved
             # on every poll made each one a new state.
             "last_attempt": iso(coordinator.last_attempt_at),
             "last_error": coordinator.last_error,
             "failures": coordinator.failures,
-            "next_attempt": iso(coordinator.next_attempt_at),
+            "next_attempt": iso(coordinator.next_attempt_at) if failing else None,
             "fallback_sections": sorted(coordinator.fallback_sections),
             "degraded_endpoints": {
                 label: since.isoformat() for label, since in coordinator.degraded_endpoints.items()

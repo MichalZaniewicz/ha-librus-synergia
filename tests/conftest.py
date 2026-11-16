@@ -44,6 +44,23 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+# The night / day-off stretch of the hourly throttles (`_stretch`): most
+# tests run at ~05:00 test time (US/Pacific), which counts as night, and
+# check the hourly behaviour itself - so it's switched off for them.
+# tests/test_review_round6.py checks the real one through ORIGINAL_STRETCH.
+from custom_components.librus_synergia.coordinator import (  # noqa: E402
+    LibrusDataUpdateCoordinator as _Coordinator,
+)
+
+ORIGINAL_STRETCH = _Coordinator._stretch
+
+
+@pytest.fixture(autouse=True)
+def no_off_hours_stretch():
+    with patch.object(_Coordinator, "_stretch", lambda self, every: every):
+        yield
+
+
 ME_PAYLOAD = {
     "Me": {
         "Account": {"Id": 1234567, "FirstName": "Jan", "LastName": "Kowalski"},
