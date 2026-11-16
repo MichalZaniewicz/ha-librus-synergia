@@ -63,6 +63,8 @@ async def test_calendar_link_answers_try_later_while_the_entry_reloads(
 
     entry.mock_state(hass, ConfigEntryState.SETUP_RETRY)
     response = await http.get(feed_path(token))
+    # Back to loaded, so the test's teardown unloads it (and its timers).
+    entry.mock_state(hass, ConfigEntryState.LOADED)
 
     assert response.status == 503
     assert response.headers["Retry-After"]
