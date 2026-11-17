@@ -28,6 +28,11 @@
 - **Assist, whole message**: says when a message id is on several
   students' lists, or when the student named matches nobody.
 
+### Added
+- Subject average sensors have a `subject_librus` attribute: the subject's
+  name from Librus, also when Subject names under Configure renamed it. The
+  companion Hero cards use it, so a renamed subject still counts in its group.
+
 ### Changed
 - **About 400 fewer Librus requests a day per student** (default options,
   smart polling off):

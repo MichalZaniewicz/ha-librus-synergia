@@ -68,8 +68,11 @@ async def test_renamed_subject_shows_everywhere(hass) -> None:
 
     maths = hass.states.get(_entity_id(hass, entry, "subject_42005_average"))
     assert maths.attributes["subject"] == "Maths"
+    # Librus's own name stays readable (cards that know subjects by it).
+    assert maths.attributes["subject_librus"] == "Matematyka"
     physics = hass.states.get(_entity_id(hass, entry, "subject_42006_average"))
     assert physics.attributes["subject"] == "Fizyka"  # not renamed
+    assert physics.attributes["subject_librus"] == "Fizyka"
 
     school = hass.states.get(_entity_id(hass, entry, "school")).attributes
     assert school["subject_colors"] == {"Maths": "#2563eb"}

@@ -788,6 +788,12 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
             # translation string ("{subject} average" vs "Średnia -
             # {subject}"), which is fragile to parse back apart in JS.
             "subject": self._subject_name,
+            # The name from Librus, also when Subject names under Configure
+            # renamed it ("Matematyka" for "Maths") - for cards that know
+            # subjects by their Polish names (the Hero card's groups).
+            "subject_librus": self.coordinator.original_subjects.get(
+                self._subject_id, self._subject_name
+            ),
             "latest_grade": latest.value if latest else None,
             "latest_grade_date": latest.add_date if latest else None,
             "latest_grade_comments": latest.comments if latest else [],
