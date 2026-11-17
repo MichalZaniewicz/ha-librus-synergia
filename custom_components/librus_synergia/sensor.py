@@ -82,7 +82,11 @@ from .absence_days import is_late_type_name
 from .catch_up import catch_up
 from .semester_summary import semester_summary
 from .exam_prep import ExamPrep, exam_prep, topics_as_dicts, week_load
-from .average_history import points_statistic_id
+from .average_history import (
+    points_statistic_id,
+    statistic_id_prefix,
+    subject_statistic_id,
+)
 from .forecast import (
     HONOURS_AVERAGE,
     DataMemo,
@@ -628,6 +632,10 @@ class LibrusOverallAverageSensor(LibrusSensorBase):
                 grading=self._grading),
             # Both semesters in numbers, for the Semester in numbers card.
             "semester_summary": self._semester_summary(weighted),
+            # The daily average since the first grade in long-term statistics
+            # (average_history.py) - the Grade trend card charts it; the state
+            # history only goes back as far as the recorder keeps it.
+            "statistic_id": statistic_id_prefix(self._entry.entry_id),
         }
 
     def _semester_summary(self, weighted: bool) -> dict[str, Any] | None:
@@ -823,6 +831,11 @@ class LibrusSubjectAverageSensor(LibrusSensorBase):
         )
         if scales and (values := scales.for_subject(self._subject_id)) and has_points:
             attrs["point_thresholds"] = list(values)
+        if self.coordinator.config_entry is not None and not has_points:
+            # The daily 1-6 average series (see the overall sensor's).
+            attrs["statistic_id"] = subject_statistic_id(
+                self.coordinator.config_entry.entry_id, self._subject_id
+            )
         if has_points and self.coordinator.config_entry is not None:
             # The daily percentage series in long-term statistics (see
             # average_history.py) - the Grade trend card charts it.

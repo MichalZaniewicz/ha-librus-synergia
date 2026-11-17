@@ -303,3 +303,30 @@ def test_point_subject_weighs_like_a_typical_subject() -> None:
 
     assert overall_with_points(6.0, data, forecasts) == round((6 * 4 + 4 * 2) / 6, 2)
     assert overall_with_points(6.0, data, []) == 6.0
+
+
+async def test_average_sensors_name_their_daily_statistics(hass) -> None:
+    """The Grade trend card charts the integration's daily average series -
+    the recorder's state history only covers its retention window."""
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.librus_synergia.average_history import statistic_id_prefix
+    from custom_components.librus_synergia.const import DOMAIN
+
+    client = build_mock_client(
+        async_get_subjects={"Subjects": [{"Id": 42005, "Name": "Matematyka"}]},
+        async_get_grades={
+            "Grades": [
+                {"Id": 1, "Grade": "5", "Category": {"Id": 10}, "Subject": {"Id": 42005},
+                 "Semester": 1, "AddDate": "2026-09-01"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    registry = er.async_get(hass)
+    prefix = statistic_id_prefix(entry.entry_id)
+
+    overall = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_overall_average")
+    maths = registry.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_subject_42005_average")
+    assert hass.states.get(overall).attributes["statistic_id"] == prefix
+    assert hass.states.get(maths).attributes["statistic_id"] == f"{prefix}_42005"

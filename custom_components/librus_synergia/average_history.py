@@ -143,6 +143,11 @@ def statistic_id_prefix(entry_id: str) -> str:
     return f"{DOMAIN}:{slugify(entry_id)}_average"
 
 
+def subject_statistic_id(entry_id: str, subject_id: Any) -> str:
+    """A subject's daily 1-6 average series."""
+    return f"{statistic_id_prefix(entry_id)}_{slugify(str(subject_id))}"
+
+
 def points_statistic_id(entry_id: str, subject_id: Any) -> str:
     """A point-graded subject's daily percentage series (under the same
     prefix, so removing the entry removes it too)."""
