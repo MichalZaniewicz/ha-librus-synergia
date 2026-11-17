@@ -579,21 +579,19 @@ def overall_with_points(
     overall: float | None, data: LibrusData, forecasts: list[SubjectForecast]
 ) -> float | None:
     """The 1-6 grade average with the point-graded subjects added: each one
-    at its forecast grade, weighted by its number of point grades against the
-    number of 1-6 grades behind `overall` - what the Hero card shows since
-    point grades count there. `overall` unchanged without point-graded
-    forecasts (no `point_grade_thresholds`)."""
+    as ONE grade - its forecast grade - next to the number of 1-6 grades
+    behind `overall`. A point subject has many tests, but its forecast is a
+    single grade on the report card; weighting it by the number of tests let
+    a few of them outweigh all the 1-6 grades. `overall` unchanged without
+    point-graded forecasts (no `point_grade_thresholds`)."""
     total = count = 0.0
     for forecast in forecasts:
         if forecast.percentage is None:
             continue
-        grades = sum(
-            1
-            for g in data.point_grades
-            if g.subject_id == forecast.subject_id and g.percentage is not None
-        )
-        total += forecast.predicted * grades
-        count += grades
+        if not any(g.subject_id == forecast.subject_id and g.percentage is not None for g in data.point_grades):
+            continue
+        total += forecast.predicted
+        count += 1
     if not count:
         return overall
     graded = sum(
