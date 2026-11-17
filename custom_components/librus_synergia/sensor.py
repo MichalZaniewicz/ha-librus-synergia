@@ -1505,8 +1505,8 @@ class LibrusRankSensor(LibrusSensorBase):
     average sensor's own state - turns a raw number into
     something a bit more game-like on a dashboard. No extra API calls.
     Point-graded subjects count too once they have a scale
-    (`point_grade_thresholds`): each as one grade - its forecast grade - the
-    same average the Hero card shows."""
+    (`point_grade_thresholds`): each at its forecast grade, weighing as much
+    as a typical 1-6 subject - the same average the Hero card shows."""
 
     _attr_translation_key = "rank"
     _attr_device_class = SensorDeviceClass.ENUM

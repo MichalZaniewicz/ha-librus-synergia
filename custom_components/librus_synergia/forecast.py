@@ -578,31 +578,40 @@ def point_grade_value(grade: PointGradeData, scales: PointThresholdsArg) -> int 
 def overall_with_points(
     overall: float | None, data: LibrusData, forecasts: list[SubjectForecast]
 ) -> float | None:
-    """The 1-6 grade average with the point-graded subjects added: each one
-    as ONE grade - its forecast grade - next to the number of 1-6 grades
-    behind `overall`. A point subject has many tests, but its forecast is a
-    single grade on the report card; weighting it by the number of tests let
-    a few of them outweigh all the 1-6 grades. `overall` unchanged without
-    point-graded forecasts (no `point_grade_thresholds`)."""
-    total = count = 0.0
-    for forecast in forecasts:
-        if forecast.percentage is None:
-            continue
-        if not any(g.subject_id == forecast.subject_id and g.percentage is not None for g in data.point_grades):
-            continue
-        total += forecast.predicted
-        count += 1
-    if not count:
+    """The 1-6 grade average with the point-graded subjects added, each at
+    its forecast grade and weighing as much as a typical 1-6 subject: the
+    1-6 grades behind `overall` divided by the subjects they're in. Counted
+    once per point grade, a few subjects with many tests outweighed all the
+    1-6 grades (5.06 on the report card showed 4.77); counted as a single
+    grade, they hardly counted. `overall` unchanged without point-graded
+    forecasts (no `point_grade_thresholds`)."""
+    points = [
+        forecast.predicted
+        for forecast in forecasts
+        if forecast.percentage is not None
+        and any(
+            g.subject_id == forecast.subject_id and g.percentage is not None
+            for g in data.point_grades
+        )
+    ]
+    if not points:
         return overall
-    graded = sum(
-        1
-        for g in data.grades
-        if not g.is_semester_proposition
-        and not g.is_final_proposition
-        and not g.is_semester
-        and not g.is_final
-        and parse_grade_value(g.value, data.grading_system) is not None
-    )
+    graded_subjects: set[Any] = set()
+    graded = 0
+    for g in data.grades:
+        if (
+            g.is_semester_proposition
+            or g.is_final_proposition
+            or g.is_semester
+            or g.is_final
+            or parse_grade_value(g.value, data.grading_system) is None
+        ):
+            continue
+        graded += 1
+        graded_subjects.add(g.subject_id)
+    weight = graded / len(graded_subjects) if graded_subjects else 1.0
+    total = sum(points) * weight
+    count = len(points) * weight
     if overall is not None and graded:
         total += overall * graded
         count += graded

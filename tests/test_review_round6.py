@@ -274,3 +274,32 @@ async def test_new_school_year_forgets_last_years_seen_ids(hass, freezer) -> Non
 
     assert coordinator._change_tracker.seen.grades == {"1"}
     assert coordinator._known_items["late"] == set()
+
+
+def test_point_subject_weighs_like_a_typical_subject() -> None:
+    """Four 6s in two 1-6 subjects (two grades a subject) and one point
+    subject forecast at 4: it weighs two grades, not one per point grade
+    and not one in all."""
+    from types import SimpleNamespace
+
+    from custom_components.librus_synergia.forecast import overall_with_points
+
+    def grade(subject_id: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            value="6",
+            subject_id=subject_id,
+            is_semester_proposition=False,
+            is_final_proposition=False,
+            is_semester=False,
+            is_final=False,
+        )
+
+    data = SimpleNamespace(
+        grades=[grade(1), grade(1), grade(2), grade(2)],
+        point_grades=[SimpleNamespace(subject_id=9, percentage=p) for p in (80, 82, 84, 86, 88)],
+        grading_system=None,
+    )
+    forecasts = [SimpleNamespace(subject_id=9, percentage=84.0, predicted=4)]
+
+    assert overall_with_points(6.0, data, forecasts) == round((6 * 4 + 4 * 2) / 6, 2)
+    assert overall_with_points(6.0, data, []) == 6.0
