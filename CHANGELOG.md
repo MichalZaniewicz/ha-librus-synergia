@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The Homework to-do list kept every homework not ticked off.** Ticked-off
+  homework dropped off 14 days after its due date, but homework nobody ticked
+  stayed on the list as "to do" for the whole school year, so the list's count
+  only grew (6 on a real account, all of them past their due date, the oldest
+  a month old). It now stays a week after its due date - Home Assistant shows
+  it as overdue - and then drops off. Homework without a due date stays.
+  (Thanks @oat1 for reporting)
+
 ## 0.12.52
 
 ### Fixed

@@ -197,6 +197,39 @@ async def test_homework_todo_list_keeps_ticks(hass, freezer, hass_storage) -> No
     assert stored["data"] == {"done": ["7"]}
 
 
+async def test_homework_todo_list_drops_old_overdue_homework(hass, freezer) -> None:
+    freezer.move_to(_FROZEN)
+    today = dt_util.now().date()
+
+    def hw(hw_id: int, topic: str, days: int) -> dict:
+        return {"Id": hw_id, "Topic": topic, "Text": "", "Teacher": {"Id": 200},
+                "Date": "2026-09-08", "DueDate": (today + timedelta(days=days)).isoformat()}
+
+    client = build_mock_client(
+        async_get_homework_assignments={
+            "HomeWorkAssignments": [
+                hw(1, "Na jutro", 1),
+                hw(2, "Wczoraj", -1),
+                hw(3, "Tydzien temu", -7),
+                hw(4, "Osiem dni temu", -8),
+                hw(5, "Miesiac temu", -30),
+                {"Id": 6, "Topic": "Bez terminu", "Text": "", "Teacher": {"Id": 200}, "Date": "2026-09-08"},
+            ]
+        },
+    )
+    entry = await setup_integration(hass, client)
+    todo_id = _entity_id(hass, entry, "todo", "homework")
+
+    result = await hass.services.async_call(
+        "todo", "get_items", {}, target={"entity_id": todo_id}, blocking=True, return_response=True
+    )
+    # Unticked homework stays a week after its due date, then drops off.
+    assert {i["summary"] for i in result[todo_id]["items"]} == {
+        "Na jutro", "Wczoraj", "Tydzien temu", "Bez terminu"
+    }
+    assert hass.states.get(todo_id).state == "4"
+
+
 def test_daily_averages_step_with_new_grades() -> None:
     grades = parse_grades(
         {

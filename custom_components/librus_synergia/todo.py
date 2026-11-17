@@ -34,6 +34,10 @@ from .school_day import SkipUnchangedUpdates
 STORAGE_VERSION = 1
 # Ticked-off homework stays on the list this long after its due date.
 KEEP_DONE_DAYS = 14
+# Homework not ticked off stays this long after its due date (Home Assistant
+# shows it as overdue), then drops off. Without a limit the list kept every
+# unticked homework of the school year as "to do" (issue #36).
+KEEP_OVERDUE_DAYS = 7
 
 
 class LibrusHomeworkTodoList(
@@ -98,7 +102,8 @@ class LibrusHomeworkTodoList(
             uid = str(hw.id)
             done = uid in self._done
             due = _day(hw.due_date)
-            if done and due is not None and due < today - timedelta(days=KEEP_DONE_DAYS):
+            keep = KEEP_DONE_DAYS if done else KEEP_OVERDUE_DAYS
+            if due is not None and due < today - timedelta(days=keep):
                 continue
             subject_id = infer_subject_id(hw.teacher_id, by_teacher)
             subject = data.subjects.get(subject_id) if subject_id is not None else None
