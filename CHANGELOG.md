@@ -37,6 +37,11 @@
   students' lists, or when the student named matches nobody.
 
 ### Added
+- The Overall average and the subject average sensors have a `statistic_id`
+  attribute: the integration's daily average series in long-term statistics,
+  kept since the first grade. The companion Grade trend card charts it - the
+  sensor's own state history only goes back as far as the recorder keeps it
+  (10 days by default), so "the last 60 days" showed a day or two.
 - Subject average sensors have a `subject_librus` attribute: the subject's
   name from Librus, also when Subject names under Configure renamed it. The
   companion Hero cards use it, so a renamed subject still counts in its group.
