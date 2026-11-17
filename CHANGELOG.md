@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.52
 
 ### Fixed
 - **A point-graded subject weighed far too much in the rank's average.** It was
