@@ -52,6 +52,7 @@ from .coordinator import (
     COUNT_FETCH_WEEKS,
     LibrusDataUpdateCoordinator,
     calculate_average,
+    point_grade_comments,
     days_since_last_absence,
     days_since_last_negative_note,
     free_day_lessons,
@@ -340,6 +341,7 @@ def _point_grade_summary(data: Any, subject_ids: set[Any] | None, since: date | 
                     "category": g.category,
                     "weight": g.weight,
                     "counts_to_average": False if not g.counts_to_average else None,
+                    "comment": _cut("; ".join(point_grade_comments(g))),
                     "teacher": _teacher_name(data, g.teacher_id),
                 }
             )

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+- **Teachers' comments on point grades.** A point grade's comment ("Zadanie 3
+  bez wniosków") was never fetched - on a real account 21 of 39 point grades
+  had one, while every 1-6 grade's comment already came through. Point grades
+  now carry `comments` in the subject sensors' `point_grades` attribute, the
+  `get_grades` service, the new-grade event and the Assist grades tool. The
+  comments are asked from Librus (`PointGrades/Comments`) only when a point
+  grade points at one, then like the other comment lookups. Needs
+  librus-synergia with point grade comments; with an older library nothing
+  changes.
+
 ### Fixed
 - **The Homework to-do list kept every homework not ticked off.** Ticked-off
   homework dropped off 14 days after its due date, but homework nobody ticked
