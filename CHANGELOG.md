@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.54
 
 ### Added
 - **Teachers' comments on point grades.** A point grade's comment ("Zadanie 3
