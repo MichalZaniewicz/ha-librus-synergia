@@ -602,30 +602,9 @@ _RESTORABLE_REFERENCE_LABELS = tuple(
 )
 # Labels of the two point-grade requests (const.MISC_DEGRADABLE_ENDPOINT_LABELS).
 _POINT_GRADE_LABELS = ("PointGrades", "PointGrades/Categories")
-# Teachers' comments on point grades (const.MISC_DEGRADABLE_ENDPOINT_LABELS).
-# Asked like the other comment lookups, and only when the library has the
-# request (librus-synergia with `async_get_point_grade_comments`).
+# Teachers' comments on point grades (const.MISC_DEGRADABLE_ENDPOINT_LABELS),
+# asked like the other comment lookups.
 _POINT_GRADE_COMMENTS_LABEL = "PointGrades/Comments"
-
-
-def point_grade_comments(grade: PointGradeData) -> list[str]:
-    """A point grade's comments - empty with a library whose point grades
-    don't carry them yet."""
-    return list(getattr(grade, "comments", None) or ())
-
-
-def _parse_point_grades_with_comments(
-    grades_payload: dict[str, Any],
-    categories: dict[int, Any],
-    comments_payload: dict[str, Any] | None,
-) -> list[PointGradeData]:
-    """`parse_point_grades` with each grade's comment ids resolved against
-    `PointGrades/Comments`, when the library's point grades have `comments`."""
-    if "comments" in getattr(PointGradeData, "__dataclass_fields__", {}):
-        return parse_point_grades(
-            grades_payload, categories, parse_comment_text_map(comments_payload or {})
-        )
-    return parse_point_grades(grades_payload, categories)
 # `_async_get_messages`' result when nothing was fetched.
 _NO_MESSAGES: tuple[Any, ...] = (0, {}, [], [], [], [], [], [])
 
@@ -4747,12 +4726,15 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
         # The comments only once a point grade points at one (most point
         # grades have none), then like the other comment lookups.
         comments_payload: dict[str, Any] = {}
-        fetch_comments = getattr(self._client, "async_get_point_grade_comments", None)
-        if fetch_comments is not None and _referenced_comment_ids(grades_payload):
+        if _referenced_comment_ids(grades_payload):
             comments_payload = await self._async_get_comments(
-                _POINT_GRADE_COMMENTS_LABEL, fetch_comments, grades_payload
+                _POINT_GRADE_COMMENTS_LABEL,
+                self._client.async_get_point_grade_comments,
+                grades_payload,
             )
-        return _parse_point_grades_with_comments(grades_payload, categories, comments_payload)
+        return parse_point_grades(
+            grades_payload, categories, parse_comment_text_map(comments_payload)
+        )
 
     async def _async_get_descriptive_grade_lookups(
         self, core_payloads: tuple[dict[str, Any], ...]
@@ -5076,10 +5058,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
 
     def _saved_point_grades(self) -> list[PointGradeData]:
         grades_label, categories_label = _POINT_GRADE_LABELS
-        return _parse_point_grades_with_comments(
+        return parse_point_grades(
             self._last_good.get(grades_label) or {},
             parse_point_grade_categories(self._last_good.get(categories_label) or {}),
-            self._last_good.get(_POINT_GRADE_COMMENTS_LABEL),
+            parse_comment_text_map(self._last_good.get(_POINT_GRADE_COMMENTS_LABEL) or {}),
         )
 
     async def _async_refresh_student_number(self) -> None:
@@ -5891,7 +5873,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator[LibrusData]):
                 "category": grade.category,
                 "weight": grade.weight,
                 "counts_to_average": grade.counts_to_average,
-                "comments": point_grade_comments(grade),
+                "comments": list(grade.comments),
                 "date": grade.add_date,
                 "semester": grade.semester,
                 "kind": "point",

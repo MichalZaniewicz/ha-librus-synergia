@@ -61,7 +61,6 @@ from .coordinator import (
     COUNT_FETCH_WEEKS,
     LibrusDataUpdateCoordinator,
     decode_message_content,
-    point_grade_comments,
     grade_improvements,
     on_demand_week_starts,
     resolve_sender_name,
@@ -399,7 +398,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                     "category": g.category,
                     "date": g.add_date,
                     "semester": g.semester,
-                    "comments": point_grade_comments(g),
+                    "comments": list(g.comments),
                     "teacher": data.teachers.get(g.teacher_id) if g.teacher_id is not None else None,
                     **(coordinator.grade_edit("point_grades", g.id) or {}),
                 }

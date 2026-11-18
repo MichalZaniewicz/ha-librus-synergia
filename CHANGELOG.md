@@ -9,9 +9,8 @@
   now carry `comments` in the subject sensors' `point_grades` attribute, the
   `get_grades` service, the new-grade event and the Assist grades tool. The
   comments are asked from Librus (`PointGrades/Comments`) only when a point
-  grade points at one, then like the other comment lookups. Needs
-  librus-synergia with point grade comments; with an older library nothing
-  changes.
+  grade points at one, then like the other comment lookups. Requires
+  librus-synergia 0.3.33.
 
 ### Fixed
 - **The Homework to-do list kept every homework not ticked off.** Ticked-off
