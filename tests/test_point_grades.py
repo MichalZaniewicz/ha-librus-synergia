@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.librus_synergia.const import EVENT_NEW_GRADE
-from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator
+from custom_components.librus_synergia.coordinator import LibrusDataUpdateCoordinator, point_grade_comments
 from librus_synergia import LibrusConnectionError
+from librus_synergia.models import PointGradeData
 
 from .conftest import build_mock_client, make_config_entry, setup_integration
 
@@ -84,6 +87,67 @@ async def test_point_grades_sensor_and_subject_attributes(hass) -> None:
     subject = hass.states.get(subject_id)
     assert subject.attributes["points_percentage"] == round(100 * 185 / 220, 1)
     assert len(subject.attributes["point_grades"]) == 2
+
+
+# Point grade comments need librus-synergia whose point grades carry them.
+_needs_point_grade_comments = pytest.mark.skipif(
+    "comments" not in getattr(PointGradeData, "__dataclass_fields__", {}),
+    reason="librus-synergia without point grade comments",
+)
+
+
+@_needs_point_grade_comments
+async def test_point_grade_comments_in_attributes_and_new_grade_event(hass) -> None:
+    """A point grade's `Comments` ids ({"Id", "Url"}, seen live 2026-11-18)
+    resolve against PointGrades/Comments - asked only once a grade has one."""
+    events = async_capture_events(hass, EVENT_NEW_GRADE)
+    client = build_mock_client(
+        async_get_subjects=SUBJECTS,
+        async_get_point_grades=POINT_GRADES,
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_point_grade_comments={
+            "Comments": [{"Id": 900, "Text": "Brak wniosków w zadaniu 3", "Grade": {"Id": 3}}]
+        },
+    )
+    coordinator = _coordinator(hass, client)
+    data = await coordinator._async_update_data()
+    client.async_get_point_grade_comments.assert_not_called()
+    assert all(point_grade_comments(g) == [] for g in data.point_grades)
+
+    commented = {**POINT_GRADE_NEW, "Comments": [{"Id": 900, "Url": "https://api.librus.pl/2.0/PointGrades/Comments/900"}]}
+    client.async_get_point_grades.return_value = {"Grades": [*POINT_GRADES["Grades"], commented]}
+    coordinator._fetched_at.clear()
+    data = await coordinator._async_update_data()
+    await hass.async_block_till_done()
+
+    client.async_get_point_grade_comments.assert_called_once()
+    (grade,) = [g for g in data.point_grades if g.id == 3]
+    assert point_grade_comments(grade) == ["Brak wniosków w zadaniu 3"]
+    assert events[0].data["comments"] == ["Brak wniosków w zadaniu 3"]
+
+
+@_needs_point_grade_comments
+async def test_point_grade_comments_in_subject_attributes(hass) -> None:
+    commented = {**POINT_GRADES["Grades"][0], "Comments": [{"Id": 901, "Url": "x"}]}
+    client = build_mock_client(
+        async_get_point_grades={"Grades": [commented, *POINT_GRADES["Grades"][1:]]},
+        async_get_point_grade_categories=POINT_CATEGORIES,
+        async_get_point_grade_comments={"Comments": [{"Id": 901, "Text": "Poprawa do piątku"}]},
+        async_get_subjects=SUBJECTS,
+    )
+    entry = await setup_integration(hass, client)
+    subject = hass.states.get(
+        er.async_get(hass).async_get_entity_id(
+            "sensor", "librus_synergia", f"{entry.entry_id}_subject_100_average"
+        )
+    )
+    comments = sorted(c for g in subject.attributes["point_grades"] for c in g["comments"])
+    assert comments == ["Poprawa do piątku"]
+
+
+def test_point_grade_comments_with_an_older_library() -> None:
+    """A library whose point grades have no `comments` yet: just none."""
+    assert point_grade_comments(SimpleNamespace(id=1)) == []
 
 
 async def test_no_point_grades_sensor_without_them(hass) -> None:

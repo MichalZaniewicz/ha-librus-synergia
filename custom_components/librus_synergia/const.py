@@ -389,6 +389,7 @@ MISC_DEGRADABLE_ENDPOINT_LABELS = (
     # only where Units doesn't say the school has them off.
     "PointGrades",
     "PointGrades/Categories",
+    "PointGrades/Comments",
     # Absence justifications the parent submitted.
     "Justifications",
     # Text grades, lesson topics, school trips and documents.
